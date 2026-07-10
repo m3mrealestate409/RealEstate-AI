@@ -15,6 +15,7 @@ import time
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.tenancy import org_scope_id
 from app.models import QueryLog
 from app.services import database_service as dbsvc
 from app.services import intent as intent_svc
@@ -45,19 +46,24 @@ def _confidence_for_rag(chunks) -> float:
     return round(min(0.95, max(c.similarity for c in chunks)), 2)
 
 
-def handle_query(db: Session, query: str, session_id: str | None) -> dict:
+def handle_query(db: Session, query: str, session_id: str | None, user=None) -> dict:
     t0 = time.time()
     session_id = session_id or "anonymous"
+    org_id = org_scope_id(user) if user is not None else None
+    user_id = getattr(user, "id", None)
     prior_projects = session_store.last_project_ids(session_id)
 
-    ir = intent_svc.detect(db, query, session_project_ids=prior_projects)
+    ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
 
     # A project was named but doesn't exist in our data — never guess or reuse
     # the previous project's data (Constitution §8). Tell the user + suggest.
     if ir.unknown_project:
         from app.models import Project
 
-        names = [p.name for p in db.query(Project).order_by(Project.name).all()]
+        pq = db.query(Project).order_by(Project.name)
+        if org_id is not None:
+            pq = pq.filter(Project.organization_id == org_id)
+        names = [p.name for p in pq.all()]
         block = renderer.paragraph_block(
             "Result",
             "Information not available in the current knowledge base. "
@@ -68,7 +74,7 @@ def handle_query(db: Session, query: str, session_id: str | None) -> dict:
             not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
         )
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                   latency_ms=int((time.time() - t0) * 1000))
+                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
         return env
 
     blocks: list[dict] = []
@@ -119,7 +125,7 @@ def handle_query(db: Session, query: str, session_id: str | None) -> dict:
     if wants_reco:
         config_type = nlparse.parse_config(query)
         budget = nlparse.parse_budget(query)
-        matches = recommend.recommend(db, config_type=config_type, max_budget=budget)
+        matches = recommend.recommend(db, config_type=config_type, max_budget=budget, org_id=org_id)
         if matches:
             crit = []
             if config_type:
@@ -134,7 +140,7 @@ def handle_query(db: Session, query: str, session_id: str | None) -> dict:
     # ---- 2) RAG (documents only) -----------------------------------------
     if ir.rag_intents or ir.needs_llm:
         chunks = rag_retrieve.retrieve(
-            db, query, project_ids=ir.project_ids or None
+            db, query, project_ids=ir.project_ids or None, org_id=org_id
         )
         if chunks:
             title = "Documents"
@@ -196,7 +202,7 @@ def handle_query(db: Session, query: str, session_id: str | None) -> dict:
         )
 
     _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-               latency_ms=int((time.time() - t0) * 1000))
+               latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
     return env
 
 
@@ -242,10 +248,12 @@ def _suggestions(ir: intent_svc.IntentResult) -> list[str]:
     return [label for key, label in pool if key not in asked][:4]
 
 
-def _log_query(db: Session, *, session_id, query, ir, envelope, latency_ms) -> None:
+def _log_query(db: Session, *, session_id, query, ir, envelope, latency_ms, org_id=None, user_id=None) -> None:
     try:
         db.add(
             QueryLog(
+                user_id=user_id,
+                organization_id=org_id,
                 session_id=session_id,
                 query=query,
                 intents=ir.intents,

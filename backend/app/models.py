@@ -28,6 +28,39 @@ from app.database import Base
 
 
 # --------------------------------------------------------------------------
+# Multi-tenancy: plans + organizations (the SaaS foundation)
+# --------------------------------------------------------------------------
+class Plan(Base):
+    """A subscription tier. Limits are data-driven so plans can change without code."""
+
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)  # Basic | Advanced | …
+    max_employees: Mapped[int] = mapped_column(Integer, default=5)
+    daily_llm_quota: Mapped[int] = mapped_column(Integer, default=25)       # expensive queries / user / day
+    price_monthly: Mapped[float] = mapped_column(Numeric, default=0)        # informational for now
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    organizations: Mapped[list["Organization"]] = relationship(back_populates="plan")
+
+
+class Organization(Base):
+    """A tenant — one real-estate company. All its users and projects are isolated."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("plans.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    plan: Mapped["Plan"] = relationship(back_populates="organizations")
+
+
+# --------------------------------------------------------------------------
 # People / org
 # --------------------------------------------------------------------------
 class Builder(Base):
@@ -53,6 +86,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False, default="sales")  # admin|manager|sales
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Multi-tenancy: org-scoped users; super-admins (SaaS owner) have no org.
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -65,6 +101,7 @@ class Project(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     builder_id: Mapped[int | None] = mapped_column(ForeignKey("builders.id"))
     city: Mapped[str | None] = mapped_column(String)
     locality: Mapped[str | None] = mapped_column(String)
@@ -267,6 +304,7 @@ class QueryLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     session_id: Mapped[str | None] = mapped_column(String)
     query: Mapped[str] = mapped_column(Text)
     intents: Mapped[dict | None] = mapped_column(JSONB)

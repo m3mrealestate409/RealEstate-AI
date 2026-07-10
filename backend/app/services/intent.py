@@ -50,7 +50,8 @@ RAG_INTENTS = {"amenities", "specifications", "floor_plan", "legal"}
 CALC_INTENTS = {"calculation"}
 LLM_INTENTS = {"comparison", "summary", "recommendation"}
 
-FUZZY_THRESHOLD = 0.72  # min similarity to accept a typo'd project name
+FUZZY_THRESHOLD = 0.72       # min similarity to accept a typo'd project name
+LLM_ASSIST_FLOOR = 0.45      # only spend an LLM call when fuzzy is a near-miss
 
 # Words that are NOT part of a project name — stripped to isolate the
 # "candidate project phrase" from the rest of the query.
@@ -149,9 +150,13 @@ def _llm_resolve(query: str, projects: list[Project]) -> Project | None:
     return None
 
 
-def link_projects(db: Session, query: str) -> tuple[list[Project], str]:
-    """Return (matched_projects, how). `how` ∈ exact | fuzzy | llm | followup | unknown."""
-    projects = db.query(Project).all()
+def link_projects(db: Session, query: str, org_id: int | None = None) -> tuple[list[Project], str]:
+    """Return (matched_projects, how). `how` ∈ exact | fuzzy | llm | followup | unknown.
+    Scoped to `org_id` (None = super-admin, all orgs)."""
+    pq = db.query(Project)
+    if org_id is not None:
+        pq = pq.filter(Project.organization_id == org_id)
+    projects = pq.all()
     q = query.lower()
     query_words = set(re.findall(r"[a-z0-9]+", q))
 
@@ -178,17 +183,20 @@ def link_projects(db: Session, query: str) -> tuple[list[Project], str]:
     if best and best_score >= FUZZY_THRESHOLD:
         return [best], "fuzzy"
 
-    # Layer 3 — LLM disambiguation (only with a real provider).
-    llm_match = _llm_resolve(query, projects)
-    if llm_match:
-        return [llm_match], "llm"
+    # Layer 3 — LLM disambiguation, but ONLY when fuzzy was a near-miss (a
+    # plausible typo). Clearly-unrelated queries skip the LLM entirely so we
+    # don't waste an API call (cost) or block on a slow/rate-limited response.
+    if best_score >= LLM_ASSIST_FLOOR:
+        llm_match = _llm_resolve(query, projects)
+        if llm_match:
+            return [llm_match], "llm"
 
     return [], "unknown"   # named something, but it's not a known project
 
 
-def detect(db: Session, query: str, *, session_project_ids: list[int] | None = None) -> IntentResult:
+def detect(db: Session, query: str, *, org_id: int | None = None, session_project_ids: list[int] | None = None) -> IntentResult:
     intents = _detect_intents(query)
-    matched, how = link_projects(db, query)
+    matched, how = link_projects(db, query, org_id)
 
     result = IntentResult(intents=intents, raw_query=query, candidate_phrase=_candidate_phrase(query))
 

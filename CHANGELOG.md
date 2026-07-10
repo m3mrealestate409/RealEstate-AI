@@ -6,6 +6,26 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-10
+
+### Added — Multi-tenant SaaS foundation
+- **Organizations (tenants) + Plans** — every user and project belongs to an
+  organization; plans (Basic/Advanced/Enterprise) are data-driven and carry
+  limits (`max_employees`, `daily_llm_quota`).
+- **Tenant isolation** — all reads (projects, query engine, RAG, knowledge,
+  analytics, documents) are scoped to the caller's organization. One tenant can
+  never see another's data; cross-tenant access returns 404.
+- **Super-admin** role (the SaaS owner) — no organization, can operate across all
+  tenants; seeded as `owner@engine.local`.
+- **Employee cap enforcement** — creating a user beyond the plan's
+  `max_employees` is rejected with an upgrade prompt.
+- Query log now records `organization_id` for per-tenant usage analytics.
+
+### Changed
+- LLM project-disambiguation now only fires on a fuzzy near-miss, saving an API
+  call (and avoiding latency) on clearly-unrelated queries.
+- Existing data migrates into a default "Chaahat Homes" organization on upgrade.
+
 ## [1.3.0] — 2026-07-10
 
 ### Added

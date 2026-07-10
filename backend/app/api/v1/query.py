@@ -18,4 +18,4 @@ def query(
     user: User = Depends(get_current_user),
 ):
     """Run a query through the hybrid pipeline (Intent → DB → RAG → LLM → Render)."""
-    return handle_query(db, payload.query, payload.session_id)
+    return handle_query(db, payload.query, payload.session_id, user)

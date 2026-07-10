@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import require_role
+from app.core.tenancy import get_scoped_project
 from app.database import get_db
 from app.models import Document, Project, User
 from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
@@ -29,7 +30,7 @@ def create_project(
 ):
     if db.query(Project).filter(Project.slug == payload.slug).first():
         raise HTTPException(409, "slug already exists")
-    project = Project(**payload.model_dump())
+    project = Project(**payload.model_dump(), organization_id=admin.organization_id)
     db.add(project)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="projects",
@@ -46,9 +47,7 @@ def update_project(
     db: Session = Depends(get_db),
     admin: User = Depends(require_role("admin")),
 ):
-    project = db.get(Project, project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = get_scoped_project(db, project_id, admin)
 
     before = {c.name: getattr(project, c.name) for c in project.__table__.columns}
     changes = payload.model_dump(exclude_unset=True)
@@ -75,9 +74,7 @@ def upload_document(
     admin: User = Depends(require_role("admin")),
 ):
     """Upload a brochure/legal PDF and index it into the RAG store."""
-    project = db.get(Project, project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = get_scoped_project(db, project_id, admin)
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     safe_name = f"{project_id}_{datetime.now(timezone.utc).timestamp()}_{file.filename}"

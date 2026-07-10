@@ -31,6 +31,7 @@ def retrieve(
     query: str,
     *,
     project_ids: list[int] | None = None,
+    org_id: int | None = None,
     top_k: int | None = None,
     threshold: float | None = None,
 ) -> list[RetrievedChunk]:
@@ -53,6 +54,13 @@ def retrieve(
     )
     if project_ids:
         stmt = stmt.filter(RagChunk.project_id.in_(project_ids))
+    elif org_id is not None:
+        # No specific project → still scope to the caller's org (tenant isolation).
+        from app.models import Project
+
+        stmt = stmt.join(Project, Project.id == RagChunk.project_id).filter(
+            Project.organization_id == org_id
+        )
 
     rows = stmt.order_by(distance).limit(top_k).all()
 

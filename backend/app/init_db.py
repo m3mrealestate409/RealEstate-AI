@@ -36,6 +36,11 @@ def init_db() -> None:
         conn.execute(
             text("UPDATE documents SET status='completed' WHERE indexed_at IS NOT NULL AND status IS NULL")
         )
+        # Multi-tenancy columns on pre-existing tables.
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id BIGINT"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN DEFAULT false"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS organization_id BIGINT"))
+        conn.execute(text("ALTER TABLE query_log ADD COLUMN IF NOT EXISTS organization_id BIGINT"))
     logger.info("Database initialised.")
 
 

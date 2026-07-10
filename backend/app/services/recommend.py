@@ -39,9 +39,12 @@ def _total_price(price: Price, cfg: Configuration) -> float | None:
 
 
 def recommend(
-    db: Session, *, config_type: str | None = None, max_budget: float | None = None, limit: int = 5
+    db: Session, *, config_type: str | None = None, max_budget: float | None = None,
+    limit: int = 5, org_id: int | None = None
 ) -> list[dict]:
     q = db.query(Configuration).join(Project)
+    if org_id is not None:
+        q = q.filter(Project.organization_id == org_id)
     if config_type:
         q = q.filter(Configuration.type.ilike(config_type))
 

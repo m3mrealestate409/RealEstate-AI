@@ -6,6 +6,8 @@ without a real key (LLM stays in mock mode until you add one).
 import logging
 from datetime import date
 
+from sqlalchemy import text
+
 from app.config import settings
 from app.core.security import hash_password
 from app.database import SessionLocal
@@ -14,8 +16,10 @@ from app.models import (
     Configuration,
     Inventory,
     Offer,
+    Organization,
     PaymentPlan,
     PaymentPlanMilestone,
+    Plan,
     Price,
     Project,
     User,
@@ -24,22 +28,56 @@ from app.models import (
 logger = logging.getLogger(__name__)
 
 
-def _seed_admin(db) -> None:
-    if db.query(User).filter(User.email == settings.seed_admin_email).first():
+def _seed_plans(db) -> None:
+    defaults = [
+        {"name": "Basic", "max_employees": 5, "daily_llm_quota": 25, "price_monthly": 0},
+        {"name": "Advanced", "max_employees": 25, "daily_llm_quota": 100, "price_monthly": 2999},
+        {"name": "Enterprise", "max_employees": 1000, "daily_llm_quota": 1000, "price_monthly": 9999},
+    ]
+    for p in defaults:
+        if not db.query(Plan).filter(Plan.name == p["name"]).first():
+            db.add(Plan(**p))
+    db.flush()
+
+
+def _default_org(db) -> Organization:
+    org = db.query(Organization).filter(Organization.slug == "chaahat-homes").first()
+    if not org:
+        advanced = db.query(Plan).filter(Plan.name == "Advanced").first()
+        org = Organization(name="Chaahat Homes", slug="chaahat-homes", plan_id=advanced.id)
+        db.add(org)
+        db.flush()
+        logger.info("Seeded default organization: Chaahat Homes")
+    return org
+
+
+def _seed_super_admin(db) -> None:
+    if db.query(User).filter(User.email == settings.seed_super_admin_email).first():
         return
-    db.add(
-        User(
-            email=settings.seed_admin_email,
-            name="Administrator",
-            role="admin",
-            password_hash=hash_password(settings.seed_admin_password),
-        )
-    )
-    logger.info("Seeded admin user: %s", settings.seed_admin_email)
+    db.add(User(
+        email=settings.seed_super_admin_email, name="Platform Owner", role="admin",
+        password_hash=hash_password(settings.seed_super_admin_password),
+        is_super_admin=True, organization_id=None,
+    ))
+    logger.info("Seeded super-admin: %s", settings.seed_super_admin_email)
+
+
+def _seed_admin(db, org: Organization) -> None:
+    existing = db.query(User).filter(User.email == settings.seed_admin_email).first()
+    if existing:
+        if existing.organization_id is None:
+            existing.organization_id = org.id  # migrate pre-multitenancy admin
+        return
+    db.add(User(
+        email=settings.seed_admin_email, name="Administrator", role="admin",
+        password_hash=hash_password(settings.seed_admin_password),
+        organization_id=org.id,
+    ))
+    logger.info("Seeded org-admin: %s", settings.seed_admin_email)
 
 
 def _seed_project(
-    db, *, name, slug, builder, city, locality, status, possession, configs, plan, offer_title
+    db, *, org, name, slug, builder, city, locality, status, possession, configs, plan, offer_title
 ):
     if db.query(Project).filter(Project.slug == slug).first():
         return
@@ -50,7 +88,7 @@ def _seed_project(
         db.flush()
 
     project = Project(
-        name=name, slug=slug, builder_id=b.id, city=city, locality=locality,
+        name=name, slug=slug, organization_id=org.id, builder_id=b.id, city=city, locality=locality,
         rera_number=f"RERA-{slug[:4].upper()}-2026", project_status=status,
         launch_date=date(2025, 1, 15), possession_date=possession,
     )
@@ -89,9 +127,22 @@ def _seed_project(
 def seed() -> None:
     db = SessionLocal()
     try:
-        _seed_admin(db)
+        _seed_plans(db)
+        org = _default_org(db)
+        _seed_super_admin(db)
+        _seed_admin(db, org)
+        # Migrate any pre-existing rows (created before multi-tenancy) into the
+        # default org so nothing is left orphaned.
+        db.execute(text(
+            "UPDATE users SET organization_id=:oid WHERE organization_id IS NULL AND is_super_admin = false"
+        ), {"oid": org.id})
+        db.execute(text(
+            "UPDATE projects SET organization_id=:oid WHERE organization_id IS NULL"
+        ), {"oid": org.id})
+        db.commit()
+
         _seed_project(
-            db, name="Golf Hills", slug="golf-hills", builder="Chaahat Developers",
+            db, org=org, name="Golf Hills", slug="golf-hills", builder="Chaahat Developers",
             city="Gurugram", locality="Sector 79", status="Under Construction",
             possession=date(2027, 12, 31),
             configs=[
@@ -103,7 +154,7 @@ def seed() -> None:
             offer_title="No Floor Rise Charges",
         )
         _seed_project(
-            db, name="Palm Greens", slug="palm-greens", builder="Chaahat Developers",
+            db, org=org, name="Palm Greens", slug="palm-greens", builder="Chaahat Developers",
             city="Gurugram", locality="Sector 88", status="Ready to Move",
             possession=date(2026, 6, 30),
             configs=[

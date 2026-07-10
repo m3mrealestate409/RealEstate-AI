@@ -47,9 +47,13 @@ class Settings(BaseSettings):
     rag_top_k: int = 5
     rag_similarity_threshold: float = 0.35
 
-    # --- Seed admin ---
+    # --- Seed admin (org-admin of the default org) ---
     seed_admin_email: str = "admin@chaahat.local"
     seed_admin_password: str = "admin123"
+
+    # --- Seed super-admin (the SaaS owner; no org, manages all tenants) ---
+    seed_super_admin_email: str = "owner@engine.local"
+    seed_super_admin_password: str = "owner123"
 
     @property
     def gemini_ready(self) -> bool:

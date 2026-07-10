@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import require_role
+from app.core.tenancy import get_scoped_project, org_scope_id
 from app.database import get_db
 from app.models import Document, Project, RagChunk, User
 from app.services.rag.ingest import ingest_document
@@ -26,19 +27,34 @@ router = APIRouter(prefix="/v1/admin/knowledge", tags=["knowledge"])
 
 @router.get("/overview")
 def overview(db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
-    total_docs = db.query(func.count(Document.id)).scalar() or 0
-    processed = db.query(func.count(Document.id)).filter(Document.status == "completed").scalar() or 0
-    pending = db.query(func.count(Document.id)).filter(Document.status.in_(["pending", "processing"])).scalar() or 0
-    failed = db.query(func.count(Document.id)).filter(Document.status == "failed").scalar() or 0
-    total_chunks = db.query(func.count(RagChunk.id)).scalar() or 0
-    active_chunks = db.query(func.count(RagChunk.id)).filter(RagChunk.is_active.is_(True)).scalar() or 0
+    org_id = org_scope_id(user)
 
-    recent = (
+    def doc_q():
+        q = db.query(func.count(Document.id)).join(Project, Project.id == Document.project_id)
+        return q.filter(Project.organization_id == org_id) if org_id is not None else q
+
+    def chunk_q():
+        q = db.query(func.count(RagChunk.id)).join(Project, Project.id == RagChunk.project_id)
+        return q.filter(Project.organization_id == org_id) if org_id is not None else q
+
+    proj_q = db.query(func.count(Project.id))
+    if org_id is not None:
+        proj_q = proj_q.filter(Project.organization_id == org_id)
+
+    total_docs = doc_q().scalar() or 0
+    processed = doc_q().filter(Document.status == "completed").scalar() or 0
+    pending = doc_q().filter(Document.status.in_(["pending", "processing"])).scalar() or 0
+    failed = doc_q().filter(Document.status == "failed").scalar() or 0
+    total_chunks = chunk_q().scalar() or 0
+    active_chunks = chunk_q().filter(RagChunk.is_active.is_(True)).scalar() or 0
+
+    recent_q = (
         db.query(Document, Project.name)
         .join(Project, Project.id == Document.project_id)
-        .order_by(Document.uploaded_at.desc())
-        .limit(6).all()
     )
+    if org_id is not None:
+        recent_q = recent_q.filter(Project.organization_id == org_id)
+    recent = recent_q.order_by(Document.uploaded_at.desc()).limit(6).all()
     recent_uploads = [
         {
             "title": doc.title, "project": pname, "status": doc.status,
@@ -48,7 +64,7 @@ def overview(db: Session = Depends(get_db), user: User = Depends(require_role("m
     ]
 
     return {
-        "projects": db.query(func.count(Project.id)).scalar() or 0,
+        "projects": proj_q.scalar() or 0,
         "documents": total_docs,
         "chunks": total_chunks,
         "embeddings": active_chunks,
@@ -66,11 +82,11 @@ def overview(db: Session = Depends(get_db), user: User = Depends(require_role("m
 
 @router.get("/documents")
 def list_documents(db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
-    rows = (
-        db.query(Document, Project.name)
-        .join(Project, Project.id == Document.project_id)
-        .order_by(Document.uploaded_at.desc()).all()
-    )
+    org_id = org_scope_id(user)
+    rows_q = db.query(Document, Project.name).join(Project, Project.id == Document.project_id)
+    if org_id is not None:
+        rows_q = rows_q.filter(Project.organization_id == org_id)
+    rows = rows_q.order_by(Document.uploaded_at.desc()).all()
     out = []
     for doc, pname in rows:
         chunks = db.query(func.count(RagChunk.id)).filter(
@@ -92,6 +108,7 @@ def reindex_document(
     doc = db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    get_scoped_project(db, doc.project_id, admin)
     if not doc.file_path:
         raise HTTPException(422, "Document has no stored file to re-index")
     doc.version = (doc.version or 1) + 1
@@ -113,7 +130,11 @@ def reindex_document(
 def reindex_all(db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
     """Re-embed every document with the CURRENT embedding provider. Run this
     after switching embeddings (e.g. mock → Gemini) so all chunks match."""
-    docs = db.query(Document).filter(Document.file_path.isnot(None)).all()
+    org_id = org_scope_id(admin)
+    dq = db.query(Document).join(Project, Project.id == Document.project_id).filter(Document.file_path.isnot(None))
+    if org_id is not None:
+        dq = dq.filter(Project.organization_id == org_id)
+    docs = dq.all()
     done, failed, total_chunks = 0, [], 0
     for doc in docs:
         try:
@@ -145,6 +166,7 @@ def replace_document(
     doc = db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    get_scoped_project(db, doc.project_id, admin)
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     safe_name = f"{doc.project_id}_v{(doc.version or 1) + 1}_{datetime.now(timezone.utc).timestamp()}_{file.filename}"
@@ -182,6 +204,7 @@ def delete_document(
     doc = db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    get_scoped_project(db, doc.project_id, admin)
     record_audit(db, user_id=admin.id, action="DELETE", entity="documents",
                  entity_id=doc.id, before={"title": doc.title})
     db.delete(doc)  # cascade removes its rag_chunks

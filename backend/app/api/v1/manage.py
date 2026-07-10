@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import require_role
+from app.core.tenancy import get_scoped_project
 from app.database import get_db
 from app.models import (
     Builder,
@@ -62,8 +63,7 @@ def add_configuration(
     project_id: int, payload: ConfigurationIn,
     db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
 ):
-    if not db.get(Project, project_id):
-        raise HTTPException(404, "Project not found")
+    get_scoped_project(db, project_id, admin)
 
     cfg = Configuration(
         project_id=project_id, type=payload.type,
@@ -92,6 +92,7 @@ def list_configurations(
     project_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))
 ):
     """List a project's configurations with their CURRENT price + inventory (for editing)."""
+    get_scoped_project(db, project_id, admin)
     configs = db.query(Configuration).filter(Configuration.project_id == project_id).all()
     out = []
     for cfg in configs:
@@ -141,6 +142,7 @@ def update_price(
     cfg = db.get(Configuration, config_id)
     if not cfg:
         raise HTTPException(404, "Configuration not found")
+    get_scoped_project(db, cfg.project_id, admin)
 
     # Close any still-open price rows so the new one becomes current.
     open_prices = db.query(Price).filter(
@@ -178,6 +180,7 @@ def update_inventory(
     cfg = db.get(Configuration, config_id)
     if not cfg:
         raise HTTPException(404, "Configuration not found")
+    get_scoped_project(db, cfg.project_id, admin)
     inv = db.query(Inventory).filter(Inventory.configuration_id == config_id).first()
     before = {"total": inv.total_units, "available": inv.available_units} if inv else None
     if not inv:
@@ -199,8 +202,7 @@ def add_payment_plan(
     project_id: int, payload: PaymentPlanIn,
     db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
 ):
-    if not db.get(Project, project_id):
-        raise HTTPException(404, "Project not found")
+    get_scoped_project(db, project_id, admin)
     total = sum(m.percent for m in payload.milestones)
     if round(total, 2) != 100.0:
         raise HTTPException(422, f"Milestone percents must sum to 100 (got {total}).")
@@ -223,6 +225,7 @@ def delete_configuration(
     cfg = db.get(Configuration, config_id)
     if not cfg:
         raise HTTPException(404, "Configuration not found")
+    get_scoped_project(db, cfg.project_id, admin)
     record_audit(db, user_id=admin.id, action="DELETE", entity="configurations",
                  entity_id=config_id, before={"type": cfg.type, "project_id": cfg.project_id})
     db.delete(cfg)
@@ -308,7 +311,8 @@ def import_projects_csv(
                 continue
             poss = (row.get("possession_date") or "").strip()
             db.add(Project(
-                name=name, slug=slug, city=row.get("city"), locality=row.get("locality"),
+                name=name, slug=slug, organization_id=admin.organization_id,
+                city=row.get("city"), locality=row.get("locality"),
                 project_status=row.get("project_status") or None,
                 possession_date=date.fromisoformat(poss) if poss else None,
             ))

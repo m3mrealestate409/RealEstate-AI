@@ -10,6 +10,7 @@ import Admin from "./pages/Admin.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Knowledge from "./pages/Knowledge.jsx";
 import SystemHealth from "./pages/SystemHealth.jsx";
+import Platform from "./pages/Platform.jsx";
 
 function Protected({ children }) {
   const { user } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="system" element={<SystemHealth />} />
+        <Route path="platform" element={<Platform />} />
         <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

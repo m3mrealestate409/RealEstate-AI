@@ -6,6 +6,18 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-07-10
+
+### Added — Super-admin console (Phase 3)
+- **Platform console** (super-admin only, new "🏛️ Platform" nav) to run the SaaS:
+  - **Organizations** — list all tenants with plan, employees (used/max), queries
+    today (used/quota), and active status; change a company's plan from a dropdown;
+    suspend/reactivate; create a new company together with its first admin.
+  - **Plans** — create plans and inline-edit their limits (max employees, daily
+    query quota, monthly price).
+- `is_super_admin` is now returned on login so the UI shows the right console.
+- `require_super_admin` guard on all `/v1/superadmin/*` endpoints (org-admins get 403).
+
 ## [1.4.0] — 2026-07-10
 
 ### Added — Multi-tenant SaaS foundation

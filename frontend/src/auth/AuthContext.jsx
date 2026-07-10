@@ -8,7 +8,10 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const res = await api.login(email, password);
-    const u = { email, name: res.name, role: res.role };
+    const u = {
+      email, name: res.name, role: res.role,
+      is_super_admin: res.is_super_admin, organization_id: res.organization_id,
+    };
     setSession(res.access_token, u);
     setUser(u);
     return u;

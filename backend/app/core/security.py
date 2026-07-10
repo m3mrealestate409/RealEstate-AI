@@ -75,3 +75,10 @@ def require_role(minimum: str):
         return user
 
     return checker
+
+
+def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """Only the platform owner (SaaS super-admin) may manage tenants and plans."""
+    if not user.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super-admin only")
+    return user

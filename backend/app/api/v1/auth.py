@@ -20,7 +20,10 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password"
         )
     token = create_access_token(subject=user.email, role=user.role)
-    return TokenResponse(access_token=token, role=user.role, name=user.name)
+    return TokenResponse(
+        access_token=token, role=user.role, name=user.name,
+        is_super_admin=user.is_super_admin, organization_id=user.organization_id,
+    )
 
 
 @router.get("/me", response_model=UserOut)

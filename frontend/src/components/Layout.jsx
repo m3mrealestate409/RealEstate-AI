@@ -10,6 +10,7 @@ export default function Layout() {
     navigate("/login");
   }
 
+  const isSuperAdmin = user?.is_super_admin === true;
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "admin" || user?.role === "manager";
 
@@ -47,6 +48,11 @@ export default function Layout() {
           {isManager && (
             <NavLink to="/system" className="nav-link">
               <span className="nav-ic">🩺</span> System Health
+            </NavLink>
+          )}
+          {isSuperAdmin && (
+            <NavLink to="/platform" className="nav-link">
+              <span className="nav-ic">🏛️</span> Platform
             </NavLink>
           )}
           {isAdmin && (

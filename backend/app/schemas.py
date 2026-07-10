@@ -13,6 +13,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     role: str
     name: str | None = None
+    is_super_admin: bool = False
+    organization_id: int | None = None
 
 
 class UserOut(BaseModel):

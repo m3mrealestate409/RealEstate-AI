@@ -20,6 +20,7 @@ from app.api.v1 import (
     projects,
     query,
     settings as settings_router,
+    superadmin,
     system,
     users,
 )
@@ -54,6 +55,7 @@ app.include_router(manage.router)
 app.include_router(users.router)
 app.include_router(knowledge.router)
 app.include_router(system.router)
+app.include_router(superadmin.router)
 
 
 @app.get("/health", tags=["system"])

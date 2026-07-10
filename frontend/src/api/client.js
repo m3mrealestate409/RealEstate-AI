@@ -119,6 +119,14 @@ export const api = {
   // System health
   systemHealth: () => request("/v1/admin/system/health"),
 
+  // Super-admin (platform owner)
+  saPlans: () => request("/v1/superadmin/plans"),
+  saCreatePlan: (data) => request("/v1/superadmin/plans", { method: "POST", body: data }),
+  saUpdatePlan: (id, data) => request(`/v1/superadmin/plans/${id}`, { method: "PUT", body: data }),
+  saOrgs: () => request("/v1/superadmin/organizations"),
+  saCreateOrg: (data) => request("/v1/superadmin/organizations", { method: "POST", body: data }),
+  saUpdateOrg: (id, data) => request(`/v1/superadmin/organizations/${id}`, { method: "PUT", body: data }),
+
   // Builders & document types
   listBuilders: () => request("/v1/admin/builders"),
   createBuilder: (data) => request("/v1/admin/builders", { method: "POST", body: data }),

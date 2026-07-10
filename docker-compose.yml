@@ -1,0 +1,58 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: chaahat_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chaahat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chaahat_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-chaahat_engine}
+    ports:
+      - "5433:5432"   # host 5433 (5432 used by another local stack); internal stays 5432
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chaahat}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: chaahat_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"   # host 6380 (6379 used by another local stack); internal stays 6379
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: chaahat_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Inside the compose network, services are reachable by name.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-chaahat}:${POSTGRES_PASSWORD:-chaahat_pass}@db:5432/${POSTGRES_DB:-chaahat_engine}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8001:8000"   # host 8001 (8000 used by another local stack); internal stays 8000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+
+volumes:
+  db_data:
+  redis_data:
+  uploads:

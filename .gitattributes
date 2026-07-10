@@ -1,0 +1,11 @@
+# Normalize line endings — this project runs in Linux containers, so force LF.
+* text=auto eol=lf
+
+# Shell scripts MUST be LF (CRLF breaks them inside the Docker container).
+*.sh text eol=lf
+
+# Treat these as binary (no line-ending conversion).
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary

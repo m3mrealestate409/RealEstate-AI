@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import BlockRenderer from "../components/BlockRenderer.jsx";
 import Citations, { ConfidenceBadge } from "../components/Citations.jsx";
+import Icon from "../components/Icons.jsx";
 
 // One stable session id per browser session so follow-ups keep context (§10).
 function useSessionId() {
@@ -79,7 +80,7 @@ export default function Query() {
   return (
     <div className="query-page">
       <div className="page-head">
-        <h2>Ask the Knowledge Engine</h2>
+        <h2>Ask the Knowledge Guru</h2>
         <p className="muted">Prices &amp; plans come from the database. Amenities from brochures. Always cited.</p>
       </div>
 
@@ -165,7 +166,7 @@ export default function Query() {
             onClick={toggleVoice}
             title="Voice input"
           >
-            {listening ? "⏺" : "🎤"}
+            <Icon name="mic" size={17} />
           </button>
         )}
         <button className="btn btn-primary" disabled={loading || !input.trim()}>Ask</button>

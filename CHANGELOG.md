@@ -6,6 +6,15 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-07-10
+
+### Changed — Branding: PropX Estate
+- App rebranded to **PropX Estate** with a gold SVG wordmark + "PX" monogram
+  (logo, sidebar, login, favicon, browser title).
+- Product tagline is now **Knowledge Guru**; the main heading reads
+  "Ask the Knowledge Guru".
+- Replaced all emoji nav/action icons with professional line SVG icons.
+
 ## [1.7.0] — 2026-07-10
 
 ### Added

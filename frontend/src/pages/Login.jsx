@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { Wordmark } from "../components/Logo.jsx";
 
 export default function Login() {
   const { login } = useAuth();
@@ -28,9 +29,8 @@ export default function Login() {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">
-          <div className="brand-mark lg">CH</div>
-          <h1>Chaahat Homes</h1>
-          <p className="muted">AI Knowledge Engine</p>
+          <Wordmark height={54} />
+          <p className="muted" style={{ marginTop: 10, letterSpacing: "0.02em" }}>Knowledge Guru</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}

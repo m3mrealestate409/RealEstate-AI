@@ -16,6 +16,7 @@ from app.core.audit import record_audit
 from app.core.security import require_role
 from app.core.tenancy import get_scoped_project
 from app.database import get_db
+from app.services import cache
 from app.models import (
     Builder,
     Configuration,
@@ -84,6 +85,7 @@ def add_configuration(
     record_audit(db, user_id=admin.id, action="CREATE", entity="configurations",
                  entity_id=cfg.id, after=payload.model_dump(mode="json"))
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"configuration_id": cfg.id, "message": f"Added {payload.type} with price + inventory."}
 
 
@@ -163,6 +165,7 @@ def update_price(
                  before={"previous_open_prices": old_snapshot},
                  after=payload.model_dump(mode="json"))
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"configuration_id": config_id, "new_price": payload.base_price,
             "message": f"Price updated to {payload.base_price} (previous price kept in history)."}
 
@@ -194,6 +197,7 @@ def update_inventory(
     record_audit(db, user_id=admin.id, action="UPDATE", entity="inventory", entity_id=inv.id,
                  before=before, after=payload.model_dump(mode="json"))
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"configuration_id": config_id, "message": "Inventory updated."}
 
 
@@ -215,6 +219,7 @@ def add_payment_plan(
     record_audit(db, user_id=admin.id, action="CREATE", entity="payment_plans",
                  entity_id=pp.id, after=payload.model_dump(mode="json"))
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"payment_plan_id": pp.id, "message": f"Added payment plan '{payload.name}'."}
 
 
@@ -230,6 +235,7 @@ def delete_configuration(
                  entity_id=config_id, before={"type": cfg.type, "project_id": cfg.project_id})
     db.delete(cfg)
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"deleted": config_id}
 
 
@@ -322,4 +328,5 @@ def import_projects_csv(
     record_audit(db, user_id=admin.id, action="CREATE", entity="projects",
                  entity_id=None, after={"import_created": created, "skipped": skipped})
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"created": created, "skipped_existing": skipped, "errors": errors}

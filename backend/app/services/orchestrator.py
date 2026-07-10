@@ -20,7 +20,7 @@ from app.core.tenancy import org_scope_id
 from app.models import QueryLog
 from app.services import database_service as dbsvc
 from app.services import intent as intent_svc
-from app.services import nlparse, quota, recommend, renderer
+from app.services import cache, nlparse, quota, recommend, renderer
 from app.services.llm import get_llm_provider
 from app.services.llm.base import Message
 from app.services.rag import retrieve as rag_retrieve
@@ -78,27 +78,45 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
         return env
 
-    # ---- QUOTA: only EXPENSIVE (LLM/RAG) queries count; SQL look-ups are free.
+    # ---- CACHE + QUOTA: only EXPENSIVE (LLM/RAG) queries; SQL look-ups are free.
     today = date.today().isoformat()
     is_expensive = bool(ir.rag_intents or ir.needs_llm)
-    if is_expensive and user is not None:
-        allowed, used, limit = quota.check_quota(db, user, today)
-        if not allowed:
-            block = renderer.paragraph_block(
-                "Daily limit reached",
-                f"You've used all {limit} of your AI queries for today (your tier: {user.tier}). "
-                "Price, payment-plan and inventory look-ups still work. "
-                "Ask your admin to raise your limit or upgrade your tier.",
-            )
-            env = _envelope(
-                blocks=[block], citations=[], handlers=["quota"], session_id=session_id,
-                not_available=True, confidence=0.0, intent=ir, suggestions=[],
-            )
-            env["limit_reached"] = True
-            _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                       latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
-            return env
-        quota.consume_quota(user, today)  # count this expensive query
+    cacheable = is_expensive and not ir.resolved_from_memory  # follow-ups depend on context
+
+    if is_expensive:
+        # 1) Serve a cached answer if we have one — no LLM call, no quota spent.
+        if cacheable:
+            hit = cache.get(org_id, query)
+            if hit is not None:
+                hit = dict(hit)
+                hit["cached"] = True
+                hit["session_id"] = session_id
+                session_store.remember_turn(session_id, query=query, intents=ir.intents, project_ids=ir.project_ids)
+                _log_query(db, session_id=session_id, query=query, ir=ir, envelope=hit,
+                           latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                return hit
+
+        # 2) Enforce per-employee tier limit AND company-wide plan quota.
+        if user is not None:
+            u_ok, _, u_limit = quota.check_quota(db, user, today)
+            o_ok, _, o_limit = quota.check_org_quota(db, org_id, today)
+            if not u_ok or not o_ok:
+                if not o_ok:
+                    text = (f"Your company's daily AI quota ({o_limit}) is used up for today. "
+                            "Price/inventory look-ups still work. Ask your admin to upgrade the plan.")
+                else:
+                    text = (f"You've used all {u_limit} of your AI queries for today (your tier: {user.tier}). "
+                            "Price/inventory look-ups still work. Ask your admin to raise your limit.")
+                env = _envelope(
+                    blocks=[renderer.paragraph_block("Daily limit reached", text)],
+                    citations=[], handlers=["quota"], session_id=session_id,
+                    not_available=True, confidence=0.0, intent=ir, suggestions=[],
+                )
+                env["limit_reached"] = True
+                _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
+                           latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                return env
+            quota.consume_quota(user, today, org_id)  # count this expensive query
 
     blocks: list[dict] = []
     citations: list[dict] = []
@@ -223,6 +241,9 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
             intent=ir,
             suggestions=_suggestions(ir),
         )
+        # Cache a fresh, self-contained expensive answer for repeat queries.
+        if cacheable:
+            cache.set(org_id, query, env)
 
     _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
@@ -326,4 +347,5 @@ def _envelope(*, blocks, citations, handlers, session_id, not_available, confide
         "resolution_note": note,
         "llm_provider": get_llm_config()["provider"],
         "suggestions": suggestions or [],
+        "cached": False,
     }

@@ -58,6 +58,7 @@ class QueryResponse(BaseModel):
     llm_provider: str
     suggestions: list[str] = []
     limit_reached: bool = False
+    cached: bool = False
 
 
 # --- Calculation ---

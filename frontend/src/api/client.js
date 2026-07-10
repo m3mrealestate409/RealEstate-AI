@@ -88,6 +88,7 @@ export const api = {
 
   // Analytics (manager+)
   dashboard: () => request("/v1/analytics/dashboard"),
+  usage: () => request("/v1/analytics/usage"),
 
   // Data management (admin)
   addConfiguration: (projectId, data) =>

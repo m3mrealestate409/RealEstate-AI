@@ -3,10 +3,12 @@ import { api } from "../api/client.js";
 
 export default function Dashboard() {
   const [d, setD] = useState(null);
+  const [usage, setUsage] = useState(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     api.dashboard().then(setD).catch((e) => setErr(e.message));
+    api.usage().then(setUsage).catch(() => {});
   }, []);
 
   if (err) return <div className="page"><div className="alert alert-error">{err}</div></div>;
@@ -76,6 +78,34 @@ export default function Dashboard() {
           ))}
         </section>
       </div>
+
+      {usage && (
+        <section className="dash-card" style={{ marginTop: 14 }}>
+          <div className="row-between">
+            <div className="block-title">AI usage today (per employee)</div>
+            {usage.company && (
+              <span className="muted small">
+                Company: {usage.company.used}/{usage.company.limit} ({usage.company.plan} plan)
+              </span>
+            )}
+          </div>
+          {usage.employees.length === 0 && <div className="muted">No employees.</div>}
+          {usage.employees.map((e, i) => {
+            const pct = e.limit ? Math.min(100, Math.round((e.used / e.limit) * 100)) : 0;
+            return (
+              <div className="usage-row" key={i}>
+                <div className="usage-name">{e.name}
+                  <span className={`tier-badge tier-${e.tier}`}>{e.tier}</span>
+                </div>
+                <div className="hbar-track">
+                  <div className="hbar-fill" style={{ width: `${pct}%`, background: e.over ? "var(--red)" : undefined }} />
+                </div>
+                <div className={`usage-count ${e.over ? "usage-over" : ""}`}>{e.used}/{e.limit ?? "∞"}</div>
+              </div>
+            );
+          })}
+        </section>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ from app.core.security import require_role
 from app.core.tenancy import get_scoped_project, org_scope_id
 from app.database import get_db
 from app.models import Document, Project, RagChunk, User
+from app.services import cache
 from app.services.rag.ingest import ingest_document
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "uploads")
@@ -123,6 +124,7 @@ def reindex_document(
     record_audit(db, user_id=admin.id, action="UPDATE", entity="documents",
                  entity_id=doc.id, after={"reindexed": True, "version": doc.version})
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"document_id": doc.id, "chunks_indexed": chunks, "version": doc.version}
 
 
@@ -149,6 +151,7 @@ def reindex_all(db: Session = Depends(get_db), admin: User = Depends(require_rol
     record_audit(db, user_id=admin.id, action="UPDATE", entity="documents",
                  entity_id=None, after={"reindexed_all": done, "failed": len(failed)})
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"reindexed": done, "chunks": total_chunks, "failed": failed}
 
 
@@ -193,6 +196,7 @@ def replace_document(
     record_audit(db, user_id=admin.id, action="UPDATE", entity="documents", entity_id=doc.id,
                  before={"old_file": old_file}, after={"new_file": dest, "version": doc.version})
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"document_id": doc.id, "version": doc.version, "chunks_indexed": chunks,
             "message": "Brochure replaced; old content deactivated."}
 
@@ -209,4 +213,5 @@ def delete_document(
                  entity_id=doc.id, before={"title": doc.title})
     db.delete(doc)  # cascade removes its rag_chunks
     db.commit()
+    cache.bump_org(admin.organization_id)
     return {"deleted": doc_id}

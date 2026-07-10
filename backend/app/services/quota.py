@@ -48,8 +48,24 @@ def user_daily_limit(db: Session, user: User) -> int | None:
     return org.advanced_daily_limit if user.tier == "advanced" else org.basic_daily_limit
 
 
+def org_daily_limit(db: Session, org_id: int | None) -> int | None:
+    """The whole company's daily expensive-query cap (from its plan). None = unlimited."""
+    if not org_id:
+        return None
+    org = db.get(Organization, org_id)
+    return org.plan.daily_llm_quota if org and org.plan else None
+
+
 def _key(user_id: int, day: str) -> str:
     return f"quota:{user_id}:{day}"
+
+
+def _org_key(org_id: int, day: str) -> str:
+    return f"quota:org:{org_id}:{day}"
+
+
+def _used(r, key: str) -> int:
+    return int(r.get(key) or 0)
 
 
 def check_quota(db: Session, user: User, day: str) -> tuple[bool, int, int | None]:
@@ -60,17 +76,45 @@ def check_quota(db: Session, user: User, day: str) -> tuple[bool, int, int | Non
     r = _get_redis()
     if r is None:
         return True, 0, limit  # fail open
-    used = int(r.get(_key(user.id, day)) or 0)
+    used = _used(r, _key(user.id, day))
     return used < limit, used, limit
 
 
-def consume_quota(user: User, day: str) -> None:
-    """Increment the user's counter for an expensive query (24h expiry)."""
+def check_org_quota(db: Session, org_id: int | None, day: str) -> tuple[bool, int, int | None]:
+    """Company-wide quota check (all employees combined)."""
+    limit = org_daily_limit(db, org_id)
+    if limit is None:
+        return True, 0, None
     r = _get_redis()
-    if r is None or user is None:
-        return
-    key = _key(user.id, day)
+    if r is None:
+        return True, 0, limit
+    used = _used(r, _org_key(org_id, day))
+    return used < limit, used, limit
+
+
+def _incr(r, key: str) -> None:
     pipe = r.pipeline()
     pipe.incr(key)
     pipe.expire(key, 60 * 60 * 24)
     pipe.execute()
+
+
+def used_today(user_id: int, day: str) -> int:
+    r = _get_redis()
+    return _used(r, _key(user_id, day)) if r else 0
+
+
+def org_used_today(org_id: int, day: str) -> int:
+    r = _get_redis()
+    return _used(r, _org_key(org_id, day)) if r else 0
+
+
+def consume_quota(user: User, day: str, org_id: int | None = None) -> None:
+    """Increment the user's (and company's) counter for an expensive query."""
+    r = _get_redis()
+    if r is None:
+        return
+    if user is not None:
+        _incr(r, _key(user.id, day))
+    if org_id:
+        _incr(r, _org_key(org_id, day))

@@ -119,6 +119,9 @@ export default function Query() {
                   {turn.response.limit_reached && (
                     <span className="handler-chip handler-limit">daily limit reached</span>
                   )}
+                  {turn.response.cached && (
+                    <span className="handler-chip handler-cached">⚡ cached</span>
+                  )}
                   {!turn.response.not_available && <ConfidenceBadge value={turn.response.confidence} />}
                 </div>
 

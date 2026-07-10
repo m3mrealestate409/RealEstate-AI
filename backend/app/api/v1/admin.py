@@ -15,6 +15,7 @@ from app.core.tenancy import get_scoped_project
 from app.database import get_db
 from app.models import Document, Project, User
 from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
+from app.services import cache
 from app.services.rag.ingest import ingest_document
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -36,6 +37,7 @@ def create_project(
     record_audit(db, user_id=admin.id, action="CREATE", entity="projects",
                  entity_id=project.id, after=payload.model_dump(mode="json"))
     db.commit()
+    cache.bump_org(admin.organization_id)
     db.refresh(project)
     return project
 
@@ -60,6 +62,7 @@ def update_project(
         after={k: str(v) for k, v in changes.items()},
     )
     db.commit()
+    cache.bump_org(admin.organization_id)
     db.refresh(project)
     return project
 
@@ -99,6 +102,7 @@ def upload_document(
         db.commit()
         raise HTTPException(500, f"Indexing failed: {exc}")
 
+    cache.bump_org(admin.organization_id)
     return {"document_id": document.id, "chunks_indexed": chunks, "title": title}
 
 

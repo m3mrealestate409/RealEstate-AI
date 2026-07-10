@@ -6,6 +6,19 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-07-10
+
+### Added
+- **Response caching** — repeated expensive queries are served from a per-org
+  Redis cache (≈17× faster, no LLM cost). A "⚡ cached" chip marks cached
+  answers; cache hits don't consume quota. Freshness via a 10-min TTL plus a
+  per-org cache version that is bumped on any data change (price/document/
+  project edits). Follow-ups (context-dependent) are never cached.
+- **Company-wide quota** — a plan's `daily_llm_quota` now caps the whole
+  organization's daily AI queries (in addition to per-employee tier limits).
+- **Usage dashboard** — Analytics now shows AI usage today per employee
+  (used/limit bar, tier, over-limit in red) and the company total vs plan quota.
+
 ## [1.6.0] — 2026-07-10
 
 ### Added — Employee tiers + daily query quota (Phase 2)

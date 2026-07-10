@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.security import require_role
 from app.core.tenancy import org_scope_id
 from app.database import get_db
-from app.models import Document, Project, QueryLog, RagChunk, User
+from app.models import Document, Organization, Project, QueryLog, RagChunk, User
+from app.services import quota
 
 router = APIRouter(prefix="/v1/analytics", tags=["analytics"])
 
@@ -24,6 +25,40 @@ def overview(db: Session = Depends(get_db), user: User = Depends(require_role("m
         dq = dq.filter(Project.organization_id == org_id)
         cq = cq.filter(Project.organization_id == org_id)
     return {"projects": pq.scalar(), "documents": dq.scalar(), "active_chunks": cq.scalar()}
+
+
+@router.get("/usage")
+def usage(db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
+    """Per-employee AI-query usage today vs their tier limit, + company total."""
+    today = date.today().isoformat()
+    org_id = user.organization_id
+    org = db.get(Organization, org_id) if org_id else None
+    basic = org.basic_daily_limit if org else None
+    advanced = org.advanced_daily_limit if org else None
+
+    uq = db.query(User).filter(User.is_active.is_(True))
+    if not user.is_super_admin and org_id:
+        uq = uq.filter(User.organization_id == org_id)
+
+    rows = []
+    for u in uq.order_by(User.name).all():
+        limit = (advanced if u.tier == "advanced" else basic)
+        used = quota.used_today(u.id, today)
+        rows.append({
+            "name": u.name or u.email, "email": u.email, "tier": u.tier,
+            "used": used, "limit": limit,
+            "over": limit is not None and used >= limit,
+        })
+    rows.sort(key=lambda r: -(r["used"]))
+
+    company = None
+    if org and org.plan:
+        company = {
+            "used": quota.org_used_today(org_id, today),
+            "limit": org.plan.daily_llm_quota,
+            "plan": org.plan.name,
+        }
+    return {"employees": rows, "company": company}
 
 
 @router.get("/dashboard")

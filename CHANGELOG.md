@@ -6,6 +6,24 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-07-10
+
+### Fixed
+- **Wrong-project answers via session memory** — asking about an unknown project
+  (e.g. "gic price") no longer silently returns the *previous* project's data.
+  The engine now says "Information not available — did you mean: …?" and lists
+  the known projects (Constitution §8, no guessing).
+- **Substring over-matching** — a "Palm Greens" query no longer also matches
+  "Green Valley" ("green" inside "greens"). Project linking now uses whole-word
+  matching.
+
+### Added
+- **Typo-tolerant project matching** — layered linking (exact → fuzzy → LLM).
+  Misspellings like "gold hils" resolve to "Golf Hills"; the answer shows a
+  "Showing results for Golf Hills" note and a "corrected spelling" chip. Fuzzy
+  works offline; LLM disambiguation kicks in only with a real provider.
+- Regression tests for entity linking (`tests/test_intent.py`).
+
 ## [1.1.0] — 2026-07-10
 
 ### Added

@@ -113,8 +113,15 @@ export default function Query() {
                   {turn.response.resolved_from_memory && (
                     <span className="handler-chip handler-memory">from context</span>
                   )}
+                  {turn.response.resolved_via === "fuzzy" && (
+                    <span className="handler-chip handler-fuzzy">corrected spelling</span>
+                  )}
                   {!turn.response.not_available && <ConfidenceBadge value={turn.response.confidence} />}
                 </div>
+
+                {turn.response.resolution_note && (
+                  <div className="resolution-note">🔎 {turn.response.resolution_note}</div>
+                )}
 
                 {turn.response.content?.blocks?.map((b, j) => <BlockRenderer key={j} block={b} />)}
                 <Citations citations={turn.response.citations} />

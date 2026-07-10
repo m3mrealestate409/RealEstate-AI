@@ -1,22 +1,27 @@
 """
 Intent detection & entity linking (Constitution §4, §9 pipeline step 1).
 
-Strategy: cheap deterministic rules first (keywords/regex) — no LLM cost for
-the common case. Entities (project names) are fuzzy-matched against SQL. When
-the query names no project, we fall back to session memory (§10) so follow-ups
-resolve. Multi-intent is supported (e.g. price + amenities).
+Project linking is LAYERED (Golden Rule: cheap deterministic first, LLM last):
+  1. Exact whole-word match     — correct spelling, instant, no false positives.
+  2. Fuzzy match                — typo tolerance (works offline, no key needed).
+  3. LLM disambiguation         — hard cases/abbreviations, only when a real
+                                  provider is configured and 1 & 2 failed.
+
+Crucially, we distinguish a *bare follow-up* ("possession?" → use session memory)
+from an *unknown project reference* ("gic price" → say "not available", never
+silently answer for the previous project). Multi-intent is supported.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 from sqlalchemy.orm import Session
 
 from app.models import Project
 
 # Intent -> which handler answers it (drives the Golden-Rule router).
-# Order matters: DB/calc intents are cheapest and checked first.
 INTENT_KEYWORDS: dict[str, list[str]] = {
     # --- Database (SQL-first) ---
     "price": ["price", "cost", "rate", "kitne ka", "kitna", "daam", "keemat"],
@@ -45,6 +50,19 @@ RAG_INTENTS = {"amenities", "specifications", "floor_plan", "legal"}
 CALC_INTENTS = {"calculation"}
 LLM_INTENTS = {"comparison", "summary", "recommendation"}
 
+FUZZY_THRESHOLD = 0.72  # min similarity to accept a typo'd project name
+
+# Words that are NOT part of a project name — stripped to isolate the
+# "candidate project phrase" from the rest of the query.
+_INTENT_TOKENS = {w for kws in INTENT_KEYWORDS.values() for kw in kws for w in kw.split()}
+_STOPWORDS = {
+    "the", "of", "is", "a", "an", "what", "whats", "does", "do", "did", "have", "has",
+    "for", "in", "on", "at", "and", "or", "me", "my", "to", "with", "about", "tell",
+    "give", "want", "need", "please", "show", "get", "current", "latest", "this",
+    "ka", "ke", "ki", "kya", "hai", "ha", "batao", "bata", "kaunsa", "konsa", "mujhe",
+    "cr", "crore", "lakh", "lac", "rupees", "rs", "under", "villa", "plot",
+}
+
 
 @dataclass
 class IntentResult:
@@ -53,6 +71,9 @@ class IntentResult:
     matched_projects: list[dict] = field(default_factory=list)
     raw_query: str = ""
     resolved_from_memory: bool = False
+    resolved_via: str = ""          # exact | fuzzy | llm | memory | ""
+    unknown_project: bool = False   # a project was named but couldn't be resolved
+    candidate_phrase: str = ""
 
     @property
     def needs_llm(self) -> bool:
@@ -76,35 +97,115 @@ def _detect_intents(query: str) -> list[str]:
     return found
 
 
-def _link_projects(db: Session, query: str) -> list[Project]:
-    """Fuzzy-ish project linking. Uses trigram similarity when available,
-    else a simple case-insensitive contains match."""
+def _candidate_phrase(query: str) -> str:
+    """Whatever remains after removing intent keywords, stopwords, configs and
+    numbers — i.e. the part that could be a project name."""
     q = query.lower()
+    q = re.sub(r"\b\d+\s*bhk\b", " ", q)   # drop "3bhk"
+    words = re.findall(r"[a-z0-9]+", q)
+    keep = [w for w in words if w not in _INTENT_TOKENS and w not in _STOPWORDS and not w.isdigit()]
+    return " ".join(keep).strip()
+
+
+def _fuzzy_score(candidate: str, name: str) -> float:
+    """Similarity between the candidate phrase and a project name (typo-tolerant)."""
+    full = SequenceMatcher(None, candidate, name).ratio()
+    tok_best = 0.0
+    for ct in candidate.split():
+        for nt in name.split():
+            tok_best = max(tok_best, SequenceMatcher(None, ct, nt).ratio())
+    return max(full, tok_best * 0.95)
+
+
+def _llm_resolve(query: str, projects: list[Project]) -> Project | None:
+    """Layer 3: ask the LLM to map the query to a known project. Skipped in mock
+    mode (no key) so it costs nothing until a real provider is configured."""
+    from app.services.runtime_config import get_llm_config
+
+    if get_llm_config().get("provider") == "mock":
+        return None
+    from app.services.llm import get_llm_provider
+    from app.services.llm.base import Message
+
+    names = [p.name for p in projects]
+    prompt = (
+        f"User asked: \"{query}\".\nAvailable projects: {names}.\n"
+        "Which ONE project name from the list does the user most likely mean "
+        "(handle typos and abbreviations)? Reply with the EXACT project name from "
+        "the list, or the word NONE if you cannot tell. Never invent a name."
+    )
+    try:
+        resp = get_llm_provider().complete(
+            system="You map a user's query to a fixed list of real-estate project names. If unsure, reply NONE.",
+            messages=[Message(role="user", content="CONTEXT: " + prompt)],
+            max_tokens=30,
+        )
+        ans = (resp.text or "").strip().lower()
+        for p in projects:
+            if p.name.lower() in ans:
+                return p
+    except Exception:
+        pass
+    return None
+
+
+def link_projects(db: Session, query: str) -> tuple[list[Project], str]:
+    """Return (matched_projects, how). `how` ∈ exact | fuzzy | llm | followup | unknown."""
     projects = db.query(Project).all()
-    matches = []
+    q = query.lower()
+    query_words = set(re.findall(r"[a-z0-9]+", q))
+
+    # Layer 1 — exact whole-word (full name present, or all name-words present).
+    exact = []
     for p in projects:
         name = p.name.lower()
-        # token overlap: any significant word of the project name in the query
-        name_tokens = [t for t in re.split(r"\W+", name) if len(t) > 2]
-        if name.lower() in q or any(tok in q for tok in name_tokens):
-            matches.append(p)
-    return matches
+        name_words = set(re.findall(r"[a-z0-9]+", name))
+        if name in q or (name_words and name_words <= query_words):
+            exact.append(p)
+    if exact:
+        return exact, "exact"
+
+    candidate = _candidate_phrase(query)
+    if not candidate:
+        return [], "followup"   # bare follow-up — caller may use session memory
+
+    # Layer 2 — fuzzy (typo tolerance, offline).
+    best, best_score = None, 0.0
+    for p in projects:
+        score = _fuzzy_score(candidate, p.name.lower())
+        if score > best_score:
+            best_score, best = score, p
+    if best and best_score >= FUZZY_THRESHOLD:
+        return [best], "fuzzy"
+
+    # Layer 3 — LLM disambiguation (only with a real provider).
+    llm_match = _llm_resolve(query, projects)
+    if llm_match:
+        return [llm_match], "llm"
+
+    return [], "unknown"   # named something, but it's not a known project
 
 
 def detect(db: Session, query: str, *, session_project_ids: list[int] | None = None) -> IntentResult:
     intents = _detect_intents(query)
-    projects = _link_projects(db, query)
+    matched, how = link_projects(db, query)
 
-    result = IntentResult(intents=intents, raw_query=query)
-    if projects:
-        result.project_ids = [p.id for p in projects]
-        result.matched_projects = [{"id": p.id, "name": p.name} for p in projects]
+    result = IntentResult(intents=intents, raw_query=query, candidate_phrase=_candidate_phrase(query))
+
+    if matched:
+        result.project_ids = [p.id for p in matched]
+        result.matched_projects = [{"id": p.id, "name": p.name} for p in matched]
+        result.resolved_via = how
+    elif how == "unknown":
+        # A project was named but is not in our data — do NOT reuse memory (§8).
+        result.unknown_project = True
     elif session_project_ids:
-        # Follow-up question: reuse the project from conversation context (§10).
+        # Bare follow-up: reuse the project from conversation context (§10).
         result.project_ids = session_project_ids
         result.resolved_from_memory = True
+        result.resolved_via = "memory"
 
-    # If we detected a project but no clear intent, default to a summary.
+    # If we resolved a project but no clear intent, default to a summary.
     if result.project_ids and not intents:
         result.intents = ["summary"]
 

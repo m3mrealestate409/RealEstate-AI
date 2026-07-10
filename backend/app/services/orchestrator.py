@@ -50,6 +50,25 @@ def handle_query(db: Session, query: str, session_id: str | None) -> dict:
 
     ir = intent_svc.detect(db, query, session_project_ids=prior_projects)
 
+    # A project was named but doesn't exist in our data — never guess or reuse
+    # the previous project's data (Constitution §8). Tell the user + suggest.
+    if ir.unknown_project:
+        from app.models import Project
+
+        names = [p.name for p in db.query(Project).order_by(Project.name).all()]
+        block = renderer.paragraph_block(
+            "Result",
+            "Information not available in the current knowledge base. "
+            + (f"Did you mean: {', '.join(names)}?" if names else ""),
+        )
+        env = _envelope(
+            blocks=[block], citations=[], handlers=["none"], session_id=session_id,
+            not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
+        )
+        _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
+                   latency_ms=int((time.time() - t0) * 1000))
+        return env
+
     blocks: list[dict] = []
     citations: list[dict] = []
     context_for_llm: list[str] = []
@@ -255,6 +274,11 @@ def _envelope(*, blocks, citations, handlers, session_id, not_available, confide
     answer_type = blocks[0]["type"] if len(blocks) == 1 else "composite"
     from app.services.runtime_config import get_llm_config
 
+    # When a project was resolved from a misspelling, tell the user which one.
+    note = None
+    if intent.resolved_via in ("fuzzy", "llm") and intent.matched_projects:
+        note = f"Showing results for {intent.matched_projects[0]['name']} (closest match to “{intent.candidate_phrase or intent.raw_query}”)."
+
     return {
         "answer_type": answer_type,
         "content": {"blocks": blocks},
@@ -265,6 +289,8 @@ def _envelope(*, blocks, citations, handlers, session_id, not_available, confide
         "confidence": confidence,
         "detected_intents": intent.intents,
         "resolved_from_memory": intent.resolved_from_memory,
+        "resolved_via": intent.resolved_via,
+        "resolution_note": note,
         "llm_provider": get_llm_config()["provider"],
         "suggestions": suggestions or [],
     }

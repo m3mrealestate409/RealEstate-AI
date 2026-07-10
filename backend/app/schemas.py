@@ -50,6 +50,8 @@ class QueryResponse(BaseModel):
     confidence: float
     detected_intents: list[str]
     resolved_from_memory: bool
+    resolved_via: str = ""
+    resolution_note: str | None = None
     llm_provider: str
     suggestions: list[str] = []
 

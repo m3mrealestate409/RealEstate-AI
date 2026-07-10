@@ -43,6 +43,14 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
   }
 
   const res = await fetch(`${BASE}${path}`, opts);
+
+  // Expired/invalid token on an authenticated call → clear session and send
+  // the user back to login instead of hanging on a failed request.
+  if (res.status === 401 && auth) {
+    clearSession();
+    if (!location.pathname.endsWith("/login")) location.href = "/login";
+  }
+
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -76,6 +84,7 @@ export const api = {
   getLlmSettings: () => request("/v1/admin/settings/llm"),
   updateLlmSettings: (data) => request("/v1/admin/settings/llm", { method: "PUT", body: data }),
   testLlm: () => request("/v1/admin/settings/llm/test", { method: "POST" }),
+  listModels: () => request("/v1/admin/settings/models"),
 
   // Analytics (manager+)
   dashboard: () => request("/v1/analytics/dashboard"),

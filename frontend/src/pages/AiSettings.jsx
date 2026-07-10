@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 
-// Admin-only. Lets the admin pick the LLM provider and paste a key.
+// Admin-only. Lets the admin pick the LLM provider/model and paste a key.
 // The key is sent to the backend over HTTPS and stored SERVER-SIDE only —
 // it is never kept in the browser and only ever shown masked (§19).
 export default function AiSettings() {
   const [data, setData] = useState(null);
+  const [models, setModels] = useState({ llm_models: [], embedding_models: [] });
   const [provider, setProvider] = useState("mock");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [embedding, setEmbedding] = useState("mock");
+  const [embeddingModel, setEmbeddingModel] = useState("");
   const [msg, setMsg] = useState(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -20,6 +22,8 @@ export default function AiSettings() {
     setProvider(res.current.provider);
     setModel(res.current.model);
     setEmbedding(res.current.embedding_provider);
+    setEmbeddingModel(res.current.embedding_model || "");
+    api.listModels().then(setModels).catch(() => {});
   }
   useEffect(() => { load(); }, []);
 
@@ -28,12 +32,16 @@ export default function AiSettings() {
     setMsg(null);
     setTestResult(null);
     try {
-      const body = { provider, model, embedding_provider: embedding };
+      const body = {
+        provider, model,
+        embedding_provider: embedding,
+        embedding_model: embeddingModel,
+      };
       if (apiKey.trim()) body.api_key = apiKey.trim();
       await api.updateLlmSettings(body);
       setApiKey("");
       await load();
-      setMsg({ ok: true, text: "Saved. New provider is now active." });
+      setMsg({ ok: true, text: "Saved. New settings are now active. (If you changed embeddings, re-index documents.)" });
     } catch (err) {
       setMsg({ ok: false, text: err.message });
     }
@@ -60,10 +68,11 @@ export default function AiSettings() {
 
       <div className="settings-status">
         <div>
-          <div className="muted small">Active provider</div>
+          <div className="muted small">Active configuration</div>
           <div className="status-line">
             <span className={`handler-chip handler-${cur.provider === "mock" ? "" : "llm"}`}>{cur.provider}</span>
             <span className="muted">{cur.model}</span>
+            <span className="muted">· emb: {cur.embedding_provider}</span>
             {cur.key_set ? (
               <span className="status-chip chip-green">Key set · {cur.key_masked}</span>
             ) : (
@@ -87,15 +96,15 @@ export default function AiSettings() {
       <form onSubmit={save}>
         <div className="calc-fields">
           <label className="field">
-            <span>Provider</span>
+            <span>LLM Provider</span>
             <select value={provider} onChange={(e) => setProvider(e.target.value)}>
               {data.supported_providers.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </label>
-          <label className="field">
-            <span>Model</span>
-            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="gemini-1.5-flash" />
-          </label>
+
+          <ModelSelect label="LLM Model" value={model} onChange={setModel}
+            options={models.llm_models} disabled={provider === "mock"} />
+
           <label className="field">
             <span>Embeddings (for RAG)</span>
             <select value={embedding} onChange={(e) => setEmbedding(e.target.value)}>
@@ -103,6 +112,10 @@ export default function AiSettings() {
               <option value="gemini">gemini</option>
             </select>
           </label>
+
+          <ModelSelect label="Embedding Model" value={embeddingModel} onChange={setEmbeddingModel}
+            options={models.embedding_models} disabled={embedding === "mock"} />
+
           <label className="field">
             <span>API Key {cur.key_set && <em className="muted">(leave blank to keep current)</em>}</span>
             <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
@@ -112,11 +125,45 @@ export default function AiSettings() {
 
         <div className="settings-note">
           🔒 The key is stored on the server only — never saved in your browser and shown only masked.
-          Get a free Gemini key at <span className="mono">aistudio.google.com/apikey</span>.
+          {models.source === "live" && " Model list is live from your account."}
+          {" "}Get a free Gemini key at <span className="mono">aistudio.google.com/apikey</span>.
         </div>
 
         <button className="btn btn-primary">Save settings</button>
       </form>
     </div>
+  );
+}
+
+// A dropdown of known model names with an escape hatch to type a custom one.
+function ModelSelect({ label, value, onChange, options, disabled }) {
+  const CUSTOM = "__custom__";
+  const [forceCustom, setForceCustom] = useState(false);
+  // Custom mode when the user picked "Custom…", or when the value genuinely
+  // isn't in the (loaded) options list. While options are still loading we
+  // don't force custom, so a valid value stays selected in the dropdown.
+  const custom = forceCustom || (value !== "" && options.length > 0 && !options.includes(value));
+  const selectValue = custom ? CUSTOM : value;
+
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select
+        value={selectValue}
+        disabled={disabled}
+        onChange={(e) => {
+          if (e.target.value === CUSTOM) { setForceCustom(true); }
+          else { setForceCustom(false); onChange(e.target.value); }
+        }}
+      >
+        {value && !options.includes(value) && <option value={value}>{value}</option>}
+        {options.map((m) => <option key={m} value={m}>{m}</option>)}
+        <option value={CUSTOM}>Custom…</option>
+      </select>
+      {custom && (
+        <input style={{ marginTop: 6 }} value={value} disabled={disabled}
+          placeholder="type a model name" onChange={(e) => onChange(e.target.value)} />
+      )}
+    </label>
   );
 }

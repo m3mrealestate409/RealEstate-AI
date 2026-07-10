@@ -16,8 +16,9 @@ def get_embedding_provider() -> EmbeddingProvider:
     cfg = get_llm_config()
     provider = (cfg.get("embedding_provider") or "mock").lower()
     key = cfg.get("api_key") or ""
+    model = cfg.get("embedding_model") or settings.embedding_model
     dim = settings.embedding_dim
-    sig = (provider, key[:8], dim)
+    sig = (provider, key[:8], model, dim)
 
     if sig in _cache:
         return _cache[sig]
@@ -28,7 +29,7 @@ def get_embedding_provider() -> EmbeddingProvider:
         try:
             from app.services.embeddings.gemini_provider import GeminiEmbeddingProvider
 
-            built = GeminiEmbeddingProvider(api_key=key, dim=dim)
+            built = GeminiEmbeddingProvider(api_key=key, model=model, dim=dim)
         except Exception as exc:
             logger.warning("Gemini embeddings unavailable (%s); using mock.", exc)
             built = MockEmbeddingProvider(dim=dim)

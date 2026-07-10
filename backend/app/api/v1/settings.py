@@ -23,6 +23,7 @@ class LLMSettingsIn(BaseModel):
     model: str | None = None
     api_key: str | None = None            # write-only; never returned
     embedding_provider: str | None = None
+    embedding_model: str | None = None
 
 
 @router.get("/llm")
@@ -47,6 +48,42 @@ def update_llm_settings(
                  entity_id=None, after=safe)
     db.commit()
     return updated
+
+
+STATIC_LLM_MODELS = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-pro-latest"]
+STATIC_EMBED_MODELS = ["gemini-embedding-001"]
+
+
+@router.get("/models")
+def list_models(admin: User = Depends(require_role("admin"))):
+    """Available model names. Queried live from Gemini when a key is set,
+    else a curated fallback list."""
+    from app.services.runtime_config import get_llm_config
+
+    cfg = get_llm_config()
+    key = cfg.get("api_key") or ""
+    if not key or key == "PASTE_YOUR_KEY_HERE":
+        return {"llm_models": STATIC_LLM_MODELS, "embedding_models": STATIC_EMBED_MODELS, "source": "static"}
+    try:
+        import google.generativeai as genai
+
+        genai.configure(api_key=key)
+        llm, emb = [], []
+        for m in genai.list_models():
+            name = m.name.replace("models/", "")
+            methods = m.supported_generation_methods
+            if "generateContent" in methods and "gemini" in name and "preview" not in name:
+                llm.append(name)
+            if "embedContent" in methods:
+                emb.append(name)
+        return {
+            "llm_models": llm or STATIC_LLM_MODELS,
+            "embedding_models": emb or STATIC_EMBED_MODELS,
+            "source": "live",
+        }
+    except Exception as exc:
+        return {"llm_models": STATIC_LLM_MODELS, "embedding_models": STATIC_EMBED_MODELS,
+                "source": "static", "error": str(exc)[:120]}
 
 
 @router.post("/llm/test")

@@ -23,6 +23,7 @@ def _defaults() -> dict:
         "model": env.llm_model,
         "api_key": env.gemini_api_key if env.gemini_ready else "",
         "embedding_provider": env.embedding_provider,
+        "embedding_model": env.embedding_model,
     }
 
 
@@ -49,6 +50,7 @@ def public_llm_config() -> dict:
         "provider": cfg["provider"],
         "model": cfg["model"],
         "embedding_provider": cfg.get("embedding_provider", "mock"),
+        "embedding_model": cfg.get("embedding_model", ""),
         "key_set": bool(key) and key != "PASTE_YOUR_KEY_HERE",
         "key_masked": (key[:4] + "…" + key[-4:]) if len(key) > 8 else "",
     }
@@ -60,7 +62,7 @@ def set_llm_config(new: dict) -> dict:
     try:
         row = db.get(Setting, _LLM_KEY)
         data = dict(row.value) if row and row.value else {}
-        for k in ("provider", "model", "api_key", "embedding_provider"):
+        for k in ("provider", "model", "api_key", "embedding_provider", "embedding_model"):
             if k in new and new[k] is not None and new[k] != "":
                 data[k] = new[k]
         if row:

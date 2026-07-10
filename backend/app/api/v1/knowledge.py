@@ -109,6 +109,28 @@ def reindex_document(
     return {"document_id": doc.id, "chunks_indexed": chunks, "version": doc.version}
 
 
+@router.post("/reindex-all")
+def reindex_all(db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    """Re-embed every document with the CURRENT embedding provider. Run this
+    after switching embeddings (e.g. mock → Gemini) so all chunks match."""
+    docs = db.query(Document).filter(Document.file_path.isnot(None)).all()
+    done, failed, total_chunks = 0, [], 0
+    for doc in docs:
+        try:
+            doc.status = "processing"
+            db.commit()
+            total_chunks += ingest_document(db, doc)
+            done += 1
+        except Exception as exc:
+            doc.status = "failed"
+            db.commit()
+            failed.append({"id": doc.id, "title": doc.title, "error": str(exc)[:120]})
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="documents",
+                 entity_id=None, after={"reindexed_all": done, "failed": len(failed)})
+    db.commit()
+    return {"reindexed": done, "chunks": total_chunks, "failed": failed}
+
+
 @router.post("/documents/{doc_id}/replace")
 def replace_document(
     doc_id: int,

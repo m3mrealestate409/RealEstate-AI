@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # --- Embeddings ---
     embedding_provider: str = "mock"    # mock | gemini
-    embedding_model: str = "text-embedding-004"
+    embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
 
     # --- RAG ---

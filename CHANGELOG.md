@@ -6,6 +6,23 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-10
+
+### Added
+- **Real Gemini embeddings for RAG** — `gemini-embedding-001` at 768-dim (via
+  `output_dimensionality`) so brochure search is truly semantic (e.g. "walk my
+  dog" finds the pet zone). Embedding model is configurable and merged through
+  runtime config.
+- **Re-index all** — `POST /v1/admin/knowledge/reindex-all` re-embeds every
+  document with the current provider (run after switching embeddings).
+- **Model dropdowns in AI Settings** — LLM and embedding model pickers populated
+  live from your Gemini account (`GET /v1/admin/settings/models`), with a
+  "Custom…" escape hatch.
+
+### Fixed
+- **Expired-token handling** — an authenticated request that returns 401 now
+  clears the session and redirects to login instead of hanging on "Loading…".
+
 ## [1.2.0] — 2026-07-10
 
 ### Added

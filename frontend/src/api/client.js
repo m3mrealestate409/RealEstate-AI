@@ -107,6 +107,9 @@ export const api = {
   listUsers: () => request("/v1/admin/users"),
   createUser: (data) => request("/v1/admin/users", { method: "POST", body: data }),
   toggleUser: (id) => request(`/v1/admin/users/${id}/toggle`, { method: "POST" }),
+  setUserTier: (id, tier) => request(`/v1/admin/users/${id}/tier`, { method: "POST", body: { tier } }),
+  getTierLimits: () => request("/v1/admin/users/tier-limits"),
+  setTierLimits: (data) => request("/v1/admin/users/tier-limits", { method: "PUT", body: data }),
 
   // Knowledge / RAG monitoring
   knowledgeOverview: () => request("/v1/admin/knowledge/overview"),

@@ -41,6 +41,10 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN DEFAULT false"))
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS organization_id BIGINT"))
         conn.execute(text("ALTER TABLE query_log ADD COLUMN IF NOT EXISTS organization_id BIGINT"))
+        # Employee tiers + per-tier daily limits.
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'basic'"))
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS basic_daily_limit INTEGER DEFAULT 25"))
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS advanced_daily_limit INTEGER DEFAULT 100"))
     logger.info("Database initialised.")
 
 

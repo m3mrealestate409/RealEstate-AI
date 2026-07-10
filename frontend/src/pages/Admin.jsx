@@ -481,10 +481,11 @@ function ImportCsv() {
 
 function Users() {
   const [users, setUsers] = useState([]);
-  const [f, setF] = useState({ email: "", name: "", role: "sales", password: "" });
+  const [limits, setLimits] = useState({ basic_daily_limit: "", advanced_daily_limit: "" });
+  const [f, setF] = useState({ email: "", name: "", role: "sales", tier: "basic", password: "" });
   const [msg, setMsg] = useState(null);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const load = () => api.listUsers().then(setUsers);
+  const load = () => { api.listUsers().then(setUsers); api.getTierLimits().then(setLimits); };
   useEffect(() => { load(); }, []);
 
   async function create(e) {
@@ -492,17 +493,48 @@ function Users() {
     setMsg(null);
     try {
       await api.createUser(f);
-      setF({ email: "", name: "", role: "sales", password: "" });
+      setF({ email: "", name: "", role: "sales", tier: "basic", password: "" });
       await load();
       setMsg({ ok: true, text: "User created." });
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
 
   async function toggle(id) { await api.toggleUser(id); load(); }
+  async function changeTier(id, tier) { await api.setUserTier(id, tier); load(); }
+  async function saveLimits() {
+    setMsg(null);
+    try {
+      const r = await api.setTierLimits({
+        basic_daily_limit: Number(limits.basic_daily_limit),
+        advanced_daily_limit: Number(limits.advanced_daily_limit),
+      });
+      setLimits(r);
+      setMsg({ ok: true, text: "Tier limits saved." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
 
   return (
     <div className="admin-form">
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      <div className="tier-limits-box">
+        <div className="block-title">Daily AI-query limit per tier</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          Only AI queries (comparison, summary, amenities) count. Price / inventory look-ups are always free.
+        </div>
+        <div className="ecr-fields">
+          <div className="ecr-field">
+            <label>Basic tier</label>
+            <input type="number" value={limits.basic_daily_limit ?? ""} onChange={(e) => setLimits({ ...limits, basic_daily_limit: e.target.value })} />
+          </div>
+          <div className="ecr-field">
+            <label>Advanced tier</label>
+            <input type="number" value={limits.advanced_daily_limit ?? ""} onChange={(e) => setLimits({ ...limits, advanced_daily_limit: e.target.value })} />
+          </div>
+          <button type="button" className="btn btn-primary" onClick={saveLimits} style={{ alignSelf: "flex-end" }}>Save limits</button>
+        </div>
+      </div>
+
       <form onSubmit={create}>
         <div className="calc-fields">
           <label className="field"><span>Email</span><input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} required /></label>
@@ -512,6 +544,11 @@ function Users() {
               <option value="sales">sales</option><option value="manager">manager</option><option value="admin">admin</option>
             </select>
           </label>
+          <label className="field"><span>Tier (query limit)</span>
+            <select value={f.tier} onChange={(e) => set("tier", e.target.value)}>
+              <option value="basic">basic</option><option value="advanced">advanced</option>
+            </select>
+          </label>
           <label className="field"><span>Password</span><input type="password" value={f.password} onChange={(e) => set("password", e.target.value)} required /></label>
         </div>
         <button className="btn btn-primary">Create user</button>
@@ -519,12 +556,17 @@ function Users() {
 
       <div className="table-wrap" style={{ marginTop: 18 }}>
         <table className="data-table">
-          <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Tier</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.email}</td><td>{u.name || "—"}</td>
                 <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
+                <td>
+                  <select value={u.tier || "basic"} onChange={(e) => changeTier(u.id, e.target.value)}>
+                    <option value="basic">basic</option><option value="advanced">advanced</option>
+                  </select>
+                </td>
                 <td>{u.is_active === false ? <span className="status-chip chip-gray">inactive</span> : <span className="status-chip chip-green">active</span>}</td>
                 <td><button className="btn btn-ghost" onClick={() => toggle(u.id)}>Toggle</button></td>
               </tr>

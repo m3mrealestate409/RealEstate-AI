@@ -11,6 +11,7 @@ Every factual block carries a citation (§9).
 from __future__ import annotations
 
 import time
+from datetime import date
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,7 @@ from app.core.tenancy import org_scope_id
 from app.models import QueryLog
 from app.services import database_service as dbsvc
 from app.services import intent as intent_svc
-from app.services import nlparse, recommend, renderer
+from app.services import nlparse, quota, recommend, renderer
 from app.services.llm import get_llm_provider
 from app.services.llm.base import Message
 from app.services.rag import retrieve as rag_retrieve
@@ -76,6 +77,28 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
         return env
+
+    # ---- QUOTA: only EXPENSIVE (LLM/RAG) queries count; SQL look-ups are free.
+    today = date.today().isoformat()
+    is_expensive = bool(ir.rag_intents or ir.needs_llm)
+    if is_expensive and user is not None:
+        allowed, used, limit = quota.check_quota(db, user, today)
+        if not allowed:
+            block = renderer.paragraph_block(
+                "Daily limit reached",
+                f"You've used all {limit} of your AI queries for today (your tier: {user.tier}). "
+                "Price, payment-plan and inventory look-ups still work. "
+                "Ask your admin to raise your limit or upgrade your tier.",
+            )
+            env = _envelope(
+                blocks=[block], citations=[], handlers=["quota"], session_id=session_id,
+                not_available=True, confidence=0.0, intent=ir, suggestions=[],
+            )
+            env["limit_reached"] = True
+            _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
+                       latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+            return env
+        quota.consume_quota(user, today)  # count this expensive query
 
     blocks: list[dict] = []
     citations: list[dict] = []

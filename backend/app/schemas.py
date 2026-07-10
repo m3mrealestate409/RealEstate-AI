@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     email: str
     name: str | None
     role: str
+    tier: str = "basic"
     is_active: bool = True
 
     class Config:
@@ -56,6 +57,7 @@ class QueryResponse(BaseModel):
     resolution_note: str | None = None
     llm_provider: str
     suggestions: list[str] = []
+    limit_reached: bool = False
 
 
 # --- Calculation ---

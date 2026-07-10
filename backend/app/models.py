@@ -55,6 +55,9 @@ class Organization(Base):
     slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     plan_id: Mapped[int | None] = mapped_column(ForeignKey("plans.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Per-employee daily query limits for each tier (org-admin configurable).
+    basic_daily_limit: Mapped[int] = mapped_column(Integer, default=25)
+    advanced_daily_limit: Mapped[int] = mapped_column(Integer, default=100)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="organizations")
@@ -84,6 +87,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     name: Mapped[str | None] = mapped_column(String)
     role: Mapped[str] = mapped_column(String, nullable=False, default="sales")  # admin|manager|sales
+    tier: Mapped[str] = mapped_column(String, default="basic")  # basic | advanced (query limit)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Multi-tenancy: org-scoped users; super-admins (SaaS owner) have no org.

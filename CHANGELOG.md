@@ -6,6 +6,19 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-07-10
+
+### Added — Employee tiers + daily query quota (Phase 2)
+- **Per-employee tiers** — org-admins assign each employee a **basic** or
+  **advanced** tier from the Users panel (create-form field + per-row dropdown).
+- **Per-tier daily limits** — org-admins set the daily AI-query limit for each
+  tier for their company (`GET/PUT /v1/admin/users/tier-limits`).
+- **Quota enforcement** — only expensive queries (LLM/RAG) count against the
+  limit; cheap SQL look-ups (price, inventory…) are always free. When an
+  employee hits their daily cap they get a clear "daily limit reached" message
+  and a chip; counters live in Redis (24h TTL) and fail open if Redis is down.
+- Super-admins are unlimited.
+
 ## [1.5.0] — 2026-07-10
 
 ### Added — Super-admin console (Phase 3)

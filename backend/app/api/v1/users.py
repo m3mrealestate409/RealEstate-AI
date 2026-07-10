@@ -20,7 +20,11 @@ class UserCreate(BaseModel):
     email: str
     name: str | None = None
     role: str = "sales"
+    tier: str = "basic"           # basic | advanced (daily query limit)
     password: str
+
+
+TIERS = ["basic", "advanced"]
 
 
 @router.get("", response_model=list[UserOut])
@@ -51,8 +55,9 @@ def create_user(
                 "Upgrade the plan to add more employees.",
             )
 
+    tier = payload.tier if payload.tier in TIERS else "basic"
     user = User(
-        email=payload.email, name=payload.name, role=payload.role,
+        email=payload.email, name=payload.name, role=payload.role, tier=tier,
         password_hash=hash_password(payload.password),
         organization_id=admin.organization_id,
     )
@@ -80,3 +85,53 @@ def toggle_active(
     db.commit()
     db.refresh(user)
     return user
+
+
+class TierUpdate(BaseModel):
+    tier: str
+
+
+@router.post("/{user_id}/tier", response_model=UserOut)
+def set_tier(user_id: int, payload: TierUpdate, db: Session = Depends(get_db),
+             admin: User = Depends(require_role("admin"))):
+    if payload.tier not in TIERS:
+        raise HTTPException(422, f"tier must be one of {TIERS}")
+    user = db.get(User, user_id)
+    if not user or (not admin.is_super_admin and user.organization_id != admin.organization_id):
+        raise HTTPException(404, "User not found")
+    user.tier = payload.tier
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="users",
+                 entity_id=user.id, after={"tier": payload.tier})
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+# ---- Per-tier daily query limits (org-admin configures for their company) ----
+class TierLimitsIn(BaseModel):
+    basic_daily_limit: int | None = None
+    advanced_daily_limit: int | None = None
+
+
+@router.get("/tier-limits")
+def get_tier_limits(db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    if not admin.organization_id:
+        return {"basic_daily_limit": None, "advanced_daily_limit": None}
+    org = db.get(Organization, admin.organization_id)
+    return {"basic_daily_limit": org.basic_daily_limit, "advanced_daily_limit": org.advanced_daily_limit}
+
+
+@router.put("/tier-limits")
+def set_tier_limits(payload: TierLimitsIn, db: Session = Depends(get_db),
+                    admin: User = Depends(require_role("admin"))):
+    if not admin.organization_id:
+        raise HTTPException(400, "No organization")
+    org = db.get(Organization, admin.organization_id)
+    if payload.basic_daily_limit is not None:
+        org.basic_daily_limit = payload.basic_daily_limit
+    if payload.advanced_daily_limit is not None:
+        org.advanced_daily_limit = payload.advanced_daily_limit
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="organizations",
+                 entity_id=org.id, after=payload.model_dump(exclude_none=True))
+    db.commit()
+    return {"basic_daily_limit": org.basic_daily_limit, "advanced_daily_limit": org.advanced_daily_limit}

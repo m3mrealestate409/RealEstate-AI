@@ -116,6 +116,9 @@ export default function Query() {
                   {turn.response.resolved_via === "fuzzy" && (
                     <span className="handler-chip handler-fuzzy">corrected spelling</span>
                   )}
+                  {turn.response.limit_reached && (
+                    <span className="handler-chip handler-limit">daily limit reached</span>
+                  )}
                   {!turn.response.not_available && <ConfidenceBadge value={turn.response.confidence} />}
                 </div>
 

@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-07-10
+
+### Added
+- **View Brochure** — the project detail page now shows a "View Brochure" button
+  when a project has an uploaded brochure. It opens the latest brochure PDF in an
+  inline viewer (modal iframe) with a Download option. Streamed via
+  `GET /v1/projects/{id}/brochure` (+ `/brochure/info`), org-scoped so a tenant
+  can only view its own project's brochure (cross-tenant access → 404). The PDF
+  is fetched with the auth token as a blob, so the file stays access-controlled.
+
 ## [1.8.0] — 2026-07-10
 
 ### Changed — Branding: PropX Estate

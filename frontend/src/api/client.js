@@ -63,6 +63,21 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
   return res.json();
 }
 
+// Fetch a protected binary file (e.g. a PDF) with auth and return an object URL.
+export async function fetchBlobUrl(path) {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401) {
+    clearSession();
+    if (!location.pathname.endsWith("/login")) location.href = "/login";
+    throw new Error("Session expired");
+  }
+  if (!res.ok) throw new Error("Could not load file");
+  return URL.createObjectURL(await res.blob());
+}
+
 export const api = {
   login: (email, password) =>
     request("/v1/auth/login", { method: "POST", form: { username: email, password }, auth: false }),
@@ -73,6 +88,7 @@ export const api = {
   projectPrice: (id) => request(`/v1/projects/${id}/price`),
   projectPaymentPlan: (id) => request(`/v1/projects/${id}/payment-plan`),
   projectInventory: (id) => request(`/v1/projects/${id}/inventory`),
+  brochureInfo: (id) => request(`/v1/projects/${id}/brochure/info`),
   calcTypes: () => request("/v1/calculate/types"),
   calculate: (type, params) => request(`/v1/calculate/${type}`, { method: "POST", body: { params } }),
   createProject: (data) => request("/v1/admin/projects", { method: "POST", body: data }),

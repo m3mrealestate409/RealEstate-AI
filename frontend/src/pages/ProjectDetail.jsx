@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api/client.js";
+import { api, fetchBlobUrl } from "../api/client.js";
 import { StatusChip } from "./Projects.jsx";
 
 function money(n) {
@@ -13,13 +13,32 @@ export default function ProjectDetail() {
   const [price, setPrice] = useState(null);
   const [plan, setPlan] = useState(null);
   const [inv, setInv] = useState(null);
+  const [brochure, setBrochure] = useState(null);   // {available, title, version}
+  const [pdfUrl, setPdfUrl] = useState(null);        // object URL when viewing
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   useEffect(() => {
     api.project(id).then(setProject);
     api.projectPrice(id).then(setPrice);
     api.projectPaymentPlan(id).then(setPlan);
     api.projectInventory(id).then(setInv);
+    api.brochureInfo(id).then(setBrochure).catch(() => setBrochure({ available: false }));
   }, [id]);
+
+  async function openBrochure() {
+    setLoadingPdf(true);
+    try {
+      setPdfUrl(await fetchBlobUrl(`/v1/projects/${id}/brochure`));
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoadingPdf(false);
+    }
+  }
+  function closeBrochure() {
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    setPdfUrl(null);
+  }
 
   if (!project) return <div className="page muted">Loading…</div>;
 
@@ -28,9 +47,31 @@ export default function ProjectDetail() {
       <Link to="/projects" className="back-link">← Projects</Link>
       <div className="page-head row-between">
         <h2>{project.name}</h2>
-        <StatusChip status={project.project_status} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {brochure?.available && (
+            <button className="btn btn-primary" onClick={openBrochure} disabled={loadingPdf}>
+              {loadingPdf ? "Loading…" : "📄 View Brochure"}
+            </button>
+          )}
+          <StatusChip status={project.project_status} />
+        </div>
       </div>
       <div className="muted">📍 {project.locality}, {project.city} · Possession {project.possession_date || "—"}</div>
+
+      {pdfUrl && (
+        <div className="pdf-overlay" onClick={closeBrochure}>
+          <div className="pdf-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pdf-modal-head">
+              <span>{brochure?.title || "Brochure"} {brochure?.version ? `(v${brochure.version})` : ""}</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <a className="btn btn-ghost" href={pdfUrl} download={`${project.name}-brochure.pdf`}>Download</a>
+                <button className="btn btn-ghost" onClick={closeBrochure}>✕ Close</button>
+              </div>
+            </div>
+            <iframe className="pdf-frame" src={pdfUrl} title="Brochure" />
+          </div>
+        </div>
+      )}
 
       <section className="detail-section">
         <h3>Price <SourceTag>SQL</SourceTag></h3>

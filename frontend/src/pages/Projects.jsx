@@ -61,7 +61,7 @@ export default function Projects() {
 
 export function StatusChip({ status }) {
   const cls =
-    status === "Ready to Move" ? "chip-green" :
+    status === "Ready to Move" || status === "Delivered" ? "chip-green" :
     status === "Under Construction" ? "chip-amber" : "chip-gray";
   return <span className={`status-chip ${cls}`}>{status || "Unknown"}</span>;
 }

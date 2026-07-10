@@ -45,6 +45,10 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'basic'"))
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS basic_daily_limit INTEGER DEFAULT 25"))
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS advanced_daily_limit INTEGER DEFAULT 100"))
+        # Richer project attributes.
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS land_parcel TEXT"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS green_area TEXT"))
     logger.info("Database initialised.")
 
 

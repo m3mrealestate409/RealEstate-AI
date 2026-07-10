@@ -6,6 +6,20 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-07-10
+
+### Added — Richer project details
+- New project fields: **Type** (Residential/Commercial/Industrial), **Land parcel**,
+  **Green/open area**, and a **Delivered** status option.
+- **Per-tower details** — a new towers table; each tower has a name, floors,
+  height and units/floor. Managed under Admin → Manage Data → Towers.
+- **Project Details** editor (Manage Data) to edit these attributes on existing
+  projects; the New Project form includes them too.
+- Project page now shows an **Overview** section (type, land, green area, total
+  towers) and a **Towers** table.
+- Query engine understands project overview questions ("land parcel", "how many
+  towers", "project type") and answers from SQL.
+
 ## [1.9.1] — 2026-07-10
 
 ### Fixed

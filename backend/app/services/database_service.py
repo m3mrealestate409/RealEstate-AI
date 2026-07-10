@@ -141,6 +141,31 @@ def status(db: Session, project_id: int) -> dict:
     }
 
 
+def overview(db: Session, project_id: int) -> dict:
+    """Project-level attributes: type, land parcel, green area, towers, status."""
+    from app.models import Tower
+
+    p = db.get(Project, project_id)
+    if not p:
+        return {"found": False}
+    towers = db.query(Tower).filter(Tower.project_id == project_id).order_by(Tower.name).all()
+    return {
+        "found": True,
+        "project_type": p.project_type,
+        "land_parcel": p.land_parcel,
+        "green_area": p.green_area,
+        "project_status": p.project_status,
+        "possession_date": _iso(p.possession_date),
+        "total_towers": len(towers),
+        "towers": [
+            {"name": t.name, "floors": t.floors, "height": t.height,
+             "units_per_floor": t.units_per_floor}
+            for t in towers
+        ],
+        "last_updated": _iso(p.updated_at),
+    }
+
+
 def offers(db: Session, project_id: int) -> dict:
     today = date.today()
     active = (
@@ -168,4 +193,5 @@ DB_RESOLVERS = {
     "builder": builder,
     "status": status,
     "offer": offers,
+    "overview": overview,
 }

@@ -26,8 +26,10 @@ from app.models import (
     Price,
     Project,
     Setting,
+    Tower,
     User,
 )
+from app.schemas import TowerIn, TowerOut
 
 router = APIRouter(prefix="/v1/admin", tags=["data-management"])
 
@@ -237,6 +239,41 @@ def delete_configuration(
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"deleted": config_id}
+
+
+@router.get("/projects/{project_id}/towers", response_model=list[TowerOut])
+def list_towers(project_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    get_scoped_project(db, project_id, admin)
+    return db.query(Tower).filter(Tower.project_id == project_id).order_by(Tower.name).all()
+
+
+@router.post("/projects/{project_id}/towers", response_model=TowerOut, status_code=201)
+def add_tower(project_id: int, payload: TowerIn, db: Session = Depends(get_db),
+              admin: User = Depends(require_role("admin"))):
+    get_scoped_project(db, project_id, admin)
+    tower = Tower(project_id=project_id, **payload.model_dump())
+    db.add(tower)
+    db.flush()
+    record_audit(db, user_id=admin.id, action="CREATE", entity="towers",
+                 entity_id=tower.id, after=payload.model_dump())
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    db.refresh(tower)
+    return tower
+
+
+@router.delete("/towers/{tower_id}")
+def delete_tower(tower_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    tower = db.get(Tower, tower_id)
+    if not tower:
+        raise HTTPException(404, "Tower not found")
+    get_scoped_project(db, tower.project_id, admin)
+    record_audit(db, user_id=admin.id, action="DELETE", entity="towers",
+                 entity_id=tower_id, before={"name": tower.name})
+    db.delete(tower)
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"deleted": tower_id}
 
 
 class BuilderIn(BaseModel):

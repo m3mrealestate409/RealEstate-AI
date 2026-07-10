@@ -80,6 +80,9 @@ class ProjectCreate(BaseModel):
     locality: str | None = None
     rera_number: str | None = None
     project_status: str | None = None
+    project_type: str | None = None
+    land_parcel: str | None = None
+    green_area: str | None = None
     launch_date: date | None = None
     possession_date: date | None = None
 
@@ -90,6 +93,9 @@ class ProjectUpdate(BaseModel):
     locality: str | None = None
     rera_number: str | None = None
     project_status: str | None = None
+    project_type: str | None = None
+    land_parcel: str | None = None
+    green_area: str | None = None
     launch_date: date | None = None
     possession_date: date | None = None
 
@@ -101,7 +107,24 @@ class ProjectOut(BaseModel):
     city: str | None
     locality: str | None
     project_status: str | None
+    project_type: str | None = None
+    land_parcel: str | None = None
+    green_area: str | None = None
     possession_date: date | None
+
+    class Config:
+        from_attributes = True
+
+
+class TowerIn(BaseModel):
+    name: str
+    floors: int | None = None
+    height: str | None = None
+    units_per_floor: int | None = None
+
+
+class TowerOut(TowerIn):
+    id: int
 
     class Config:
         from_attributes = True

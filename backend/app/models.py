@@ -110,7 +110,10 @@ class Project(Base):
     city: Mapped[str | None] = mapped_column(String)
     locality: Mapped[str | None] = mapped_column(String)
     rera_number: Mapped[str | None] = mapped_column(String)
-    project_status: Mapped[str | None] = mapped_column(String)  # Launched|Under Construction|Ready to Move
+    project_status: Mapped[str | None] = mapped_column(String)  # Under Construction|Ready to Move|Delivered
+    project_type: Mapped[str | None] = mapped_column(String)    # Residential|Commercial|Industrial
+    land_parcel: Mapped[str | None] = mapped_column(String)     # e.g. "12 acres"
+    green_area: Mapped[str | None] = mapped_column(String)      # e.g. "70%" or "8 acres"
     launch_date: Mapped[date | None] = mapped_column(Date)
     possession_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -131,6 +134,24 @@ class Project(Base):
     documents: Mapped[list["Document"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    towers: Mapped[list["Tower"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="Tower.name"
+    )
+
+
+class Tower(Base):
+    """A tower/block within a project (per-tower height + floors)."""
+
+    __tablename__ = "towers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String)              # "Tower A", "Block 1"
+    floors: Mapped[int | None] = mapped_column(Integer)    # number of floors
+    height: Mapped[str | None] = mapped_column(String)     # e.g. "150 m" / "G+40"
+    units_per_floor: Mapped[int | None] = mapped_column(Integer)
+
+    project: Mapped["Project"] = relationship(back_populates="towers")
 
 
 class Configuration(Base):

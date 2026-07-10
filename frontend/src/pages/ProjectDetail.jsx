@@ -13,6 +13,7 @@ export default function ProjectDetail() {
   const [price, setPrice] = useState(null);
   const [plan, setPlan] = useState(null);
   const [inv, setInv] = useState(null);
+  const [towers, setTowers] = useState([]);
   const [brochure, setBrochure] = useState(null);   // {available, title, version}
   const [pdfUrl, setPdfUrl] = useState(null);        // object URL when viewing
   const [loadingPdf, setLoadingPdf] = useState(false);
@@ -23,6 +24,7 @@ export default function ProjectDetail() {
     api.projectPaymentPlan(id).then(setPlan);
     api.projectInventory(id).then(setInv);
     api.brochureInfo(id).then(setBrochure).catch(() => setBrochure({ available: false }));
+    api.projectTowers(id).then(setTowers).catch(() => setTowers([]));
   }, [id]);
 
   async function openBrochure() {
@@ -57,6 +59,34 @@ export default function ProjectDetail() {
         </div>
       </div>
       <div className="muted">📍 {project.locality}, {project.city} · Possession {project.possession_date || "—"}</div>
+
+      {(project.project_type || project.land_parcel || project.green_area || towers.length > 0) && (
+        <section className="detail-section">
+          <h3>Overview</h3>
+          <div className="card-grid">
+            {project.project_type && <div className="stat-card"><div className="stat-label">Type</div><div className="stat-value" style={{ fontSize: 18 }}>{project.project_type}</div></div>}
+            {project.land_parcel && <div className="stat-card"><div className="stat-label">Land parcel</div><div className="stat-value" style={{ fontSize: 18 }}>{project.land_parcel}</div></div>}
+            {project.green_area && <div className="stat-card"><div className="stat-label">Green / open area</div><div className="stat-value" style={{ fontSize: 18 }}>{project.green_area}</div></div>}
+            <div className="stat-card"><div className="stat-label">Total towers</div><div className="stat-value">{towers.length}</div></div>
+          </div>
+        </section>
+      )}
+
+      {towers.length > 0 && (
+        <section className="detail-section">
+          <h3>Towers</h3>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Tower</th><th>Floors</th><th>Height</th><th>Units / floor</th></tr></thead>
+              <tbody>
+                {towers.map((t) => (
+                  <tr key={t.id}><td>{t.name}</td><td>{t.floors ?? "—"}</td><td>{t.height || "—"}</td><td>{t.units_per_floor ?? "—"}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {pdfUrl && (
         <div className="pdf-overlay" onClick={closeBrochure}>

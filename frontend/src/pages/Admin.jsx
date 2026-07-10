@@ -37,8 +37,38 @@ export default function Admin() {
   );
 }
 
+const STATUS_OPTIONS = ["Launched", "Under Construction", "Ready to Move", "Delivered"];
+const TYPE_OPTIONS = ["Residential", "Commercial", "Industrial"];
+const BLANK_PROJECT = {
+  name: "", slug: "", city: "", locality: "", project_status: "Under Construction",
+  project_type: "Residential", land_parcel: "", green_area: "",
+};
+
+function ProjectFields({ f, set }) {
+  return (
+    <div className="calc-fields">
+      <label className="field"><span>Name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
+      {"slug" in f && <label className="field"><span>Slug (unique)</span><input value={f.slug} onChange={(e) => set("slug", e.target.value)} required /></label>}
+      <label className="field"><span>City</span><input value={f.city || ""} onChange={(e) => set("city", e.target.value)} /></label>
+      <label className="field"><span>Locality</span><input value={f.locality || ""} onChange={(e) => set("locality", e.target.value)} /></label>
+      <label className="field"><span>Status</span>
+        <select value={f.project_status || ""} onChange={(e) => set("project_status", e.target.value)}>
+          {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </label>
+      <label className="field"><span>Type</span>
+        <select value={f.project_type || "Residential"} onChange={(e) => set("project_type", e.target.value)}>
+          {TYPE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
+        </select>
+      </label>
+      <label className="field"><span>Land parcel</span><input placeholder="e.g. 18 acres" value={f.land_parcel || ""} onChange={(e) => set("land_parcel", e.target.value)} /></label>
+      <label className="field"><span>Green / open area</span><input placeholder="e.g. 72%" value={f.green_area || ""} onChange={(e) => set("green_area", e.target.value)} /></label>
+    </div>
+  );
+}
+
 function NewProject() {
-  const [f, setF] = useState({ name: "", slug: "", city: "", locality: "", project_status: "Under Construction" });
+  const [f, setF] = useState(BLANK_PROJECT);
   const [msg, setMsg] = useState(null);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -48,7 +78,7 @@ function NewProject() {
     try {
       const p = await api.createProject(f);
       setMsg({ ok: true, text: `Created "${p.name}" (id ${p.id}).` });
-      setF({ name: "", slug: "", city: "", locality: "", project_status: "Under Construction" });
+      setF(BLANK_PROJECT);
     } catch (err) {
       setMsg({ ok: false, text: err.message });
     }
@@ -57,17 +87,7 @@ function NewProject() {
   return (
     <form className="admin-form" onSubmit={submit}>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
-      <div className="calc-fields">
-        <label className="field"><span>Name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
-        <label className="field"><span>Slug (unique)</span><input value={f.slug} onChange={(e) => set("slug", e.target.value)} required /></label>
-        <label className="field"><span>City</span><input value={f.city} onChange={(e) => set("city", e.target.value)} /></label>
-        <label className="field"><span>Locality</span><input value={f.locality} onChange={(e) => set("locality", e.target.value)} /></label>
-        <label className="field"><span>Status</span>
-          <select value={f.project_status} onChange={(e) => set("project_status", e.target.value)}>
-            <option>Launched</option><option>Under Construction</option><option>Ready to Move</option>
-          </select>
-        </label>
-      </div>
+      <ProjectFields f={f} set={set} />
       <button className="btn btn-primary">Create Project</button>
     </form>
   );
@@ -265,7 +285,7 @@ function DocTypes() {
 function ManageData() {
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState("");
-  const [sub, setSub] = useState("edit");
+  const [sub, setSub] = useState("details");
   useEffect(() => { api.projects().then(setProjects); }, []);
 
   return (
@@ -281,15 +301,103 @@ function ManageData() {
       {projectId && (
         <>
           <div className="calc-tabs">
+            <button className={`tab ${sub === "details" ? "tab-active" : ""}`} onClick={() => setSub("details")}>Project Details</button>
+            <button className={`tab ${sub === "towers" ? "tab-active" : ""}`} onClick={() => setSub("towers")}>Towers</button>
             <button className={`tab ${sub === "edit" ? "tab-active" : ""}`} onClick={() => setSub("edit")}>Update Price / Stock</button>
             <button className={`tab ${sub === "config" ? "tab-active" : ""}`} onClick={() => setSub("config")}>Add Configuration</button>
             <button className={`tab ${sub === "plan" ? "tab-active" : ""}`} onClick={() => setSub("plan")}>Add Payment Plan</button>
           </div>
+          {sub === "details" && <EditProjectDetails projectId={projectId} />}
+          {sub === "towers" && <Towers projectId={projectId} />}
           {sub === "edit" && <EditConfigs projectId={projectId} />}
           {sub === "config" && <AddConfig projectId={projectId} />}
           {sub === "plan" && <AddPlan projectId={projectId} />}
         </>
       )}
+    </div>
+  );
+}
+
+function EditProjectDetails({ projectId }) {
+  const [f, setF] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  useEffect(() => { api.project(projectId).then((p) => setF({
+    name: p.name, city: p.city || "", locality: p.locality || "",
+    project_status: p.project_status || "Under Construction",
+    project_type: p.project_type || "Residential",
+    land_parcel: p.land_parcel || "", green_area: p.green_area || "",
+  })); }, [projectId]);
+
+  if (!f) return <div className="muted">Loading…</div>;
+
+  async function save(e) {
+    e.preventDefault();
+    setMsg(null);
+    try {
+      await api.updateProject(projectId, f);
+      setMsg({ ok: true, text: "Project details saved." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+
+  return (
+    <form className="admin-form" onSubmit={save}>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+      <ProjectFields f={f} set={set} />
+      <button className="btn btn-primary">Save details</button>
+    </form>
+  );
+}
+
+function Towers({ projectId }) {
+  const [towers, setTowers] = useState([]);
+  const [f, setF] = useState({ name: "", floors: "", height: "", units_per_floor: "" });
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const load = () => api.listTowers(projectId).then(setTowers);
+  useEffect(() => { load(); }, [projectId]);
+
+  async function add(e) {
+    e.preventDefault();
+    setMsg(null);
+    const body = { name: f.name };
+    for (const k of ["floors", "units_per_floor"]) if (f[k] !== "") body[k] = Number(f[k]);
+    if (f.height) body.height = f.height;
+    try {
+      await api.addTower(projectId, body);
+      setF({ name: "", floors: "", height: "", units_per_floor: "" });
+      await load();
+      setMsg({ ok: true, text: "Tower added." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function remove(id) { if (confirm("Delete this tower?")) { await api.deleteTower(id); load(); } }
+
+  return (
+    <div className="admin-form">
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+      <form onSubmit={add}>
+        <div className="calc-fields">
+          <label className="field"><span>Tower name</span><input placeholder="Tower A" value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
+          <label className="field"><span>Floors</span><input type="number" value={f.floors} onChange={(e) => set("floors", e.target.value)} /></label>
+          <label className="field"><span>Height</span><input placeholder="140 m / G+40" value={f.height} onChange={(e) => set("height", e.target.value)} /></label>
+          <label className="field"><span>Units / floor</span><input type="number" value={f.units_per_floor} onChange={(e) => set("units_per_floor", e.target.value)} /></label>
+        </div>
+        <button className="btn btn-primary">Add tower</button>
+      </form>
+      <div className="table-wrap" style={{ marginTop: 16 }}>
+        <table className="data-table">
+          <thead><tr><th>Tower</th><th>Floors</th><th>Height</th><th>Units/floor</th><th></th></tr></thead>
+          <tbody>
+            {towers.map((t) => (
+              <tr key={t.id}>
+                <td>{t.name}</td><td>{t.floors ?? "—"}</td><td>{t.height || "—"}</td><td>{t.units_per_floor ?? "—"}</td>
+                <td><button className="btn btn-ghost" onClick={() => remove(t.id)}>Delete</button></td>
+              </tr>
+            ))}
+            {towers.length === 0 && <tr><td colSpan="5" className="muted">No towers yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

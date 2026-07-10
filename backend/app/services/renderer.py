@@ -99,6 +99,31 @@ def offer_block(project_name: str, data: dict) -> dict:
     }
 
 
+def overview_block(project_name: str, data: dict) -> dict:
+    items = []
+    if data.get("project_type"):
+        items.append(f"Type: {data['project_type']}")
+    if data.get("land_parcel"):
+        items.append(f"Land parcel: {data['land_parcel']}")
+    if data.get("green_area"):
+        items.append(f"Green/open area: {data['green_area']}")
+    if data.get("project_status"):
+        items.append(f"Status: {data['project_status']}")
+    items.append(f"Total towers: {data.get('total_towers', 0)}")
+    cards = [{"heading": f"{project_name} - Overview", "items": items}]
+    towers = data.get("towers") or []
+    if towers:
+        cards.append({
+            "heading": "Towers",
+            "items": [
+                f"{t['name']}: {t.get('floors') or '—'} floors"
+                + (f", {t['height']}" if t.get("height") else "")
+                for t in towers
+            ],
+        })
+    return {"type": "card", "title": f"{project_name} - Overview", "cards": cards}
+
+
 def rag_block(title: str, chunks: list) -> dict:
     return {
         "type": "checklist",
@@ -153,4 +178,5 @@ DB_BLOCK_BUILDERS = {
     "builder": builder_block,
     "status": status_block,
     "offer": offer_block,
+    "overview": overview_block,
 }

@@ -9,6 +9,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
@@ -84,6 +85,113 @@ def add_configuration(
                  entity_id=cfg.id, after=payload.model_dump(mode="json"))
     db.commit()
     return {"configuration_id": cfg.id, "message": f"Added {payload.type} with price + inventory."}
+
+
+@router.get("/projects/{project_id}/configurations")
+def list_configurations(
+    project_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))
+):
+    """List a project's configurations with their CURRENT price + inventory (for editing)."""
+    configs = db.query(Configuration).filter(Configuration.project_id == project_id).all()
+    out = []
+    for cfg in configs:
+        price = (
+            db.query(Price)
+            .filter(
+                Price.configuration_id == cfg.id,
+                or_(Price.effective_to.is_(None), Price.effective_to >= date.today()),
+            )
+            .order_by(Price.effective_from.desc())
+            .first()
+        )
+        inv = db.query(Inventory).filter(Inventory.configuration_id == cfg.id).first()
+        out.append({
+            "id": cfg.id, "type": cfg.type,
+            "carpet_area": float(cfg.carpet_area) if cfg.carpet_area else None,
+            "super_area": float(cfg.super_area) if cfg.super_area else None,
+            "current_price": {
+                "base_price": float(price.base_price), "price_unit": price.price_unit,
+                "plc": float(price.plc) if price.plc else None,
+                "gst_percent": float(price.gst_percent) if price.gst_percent else None,
+                "effective_from": price.effective_from.isoformat() if price.effective_from else None,
+                "source": price.source,
+            } if price else None,
+            "inventory": {
+                "total_units": inv.total_units, "available_units": inv.available_units,
+            } if inv else None,
+        })
+    return out
+
+
+class PriceUpdateIn(BaseModel):
+    base_price: float
+    price_unit: str = "per_sqft"
+    plc: float | None = None
+    gst_percent: float | None = None
+    source: str | None = None
+
+
+@router.put("/configurations/{config_id}/price")
+def update_price(
+    config_id: int, payload: PriceUpdateIn,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Update a configuration's price WITHOUT losing history.
+    Closes the currently-open price(s) as of today and inserts a new current row."""
+    cfg = db.get(Configuration, config_id)
+    if not cfg:
+        raise HTTPException(404, "Configuration not found")
+
+    # Close any still-open price rows so the new one becomes current.
+    open_prices = db.query(Price).filter(
+        Price.configuration_id == config_id, Price.effective_to.is_(None)
+    ).all()
+    old_snapshot = [{"base_price": float(p.base_price), "from": p.effective_from.isoformat()} for p in open_prices]
+    for p in open_prices:
+        p.effective_to = date.today()
+
+    new = Price(
+        configuration_id=config_id, base_price=payload.base_price, price_unit=payload.price_unit,
+        plc=payload.plc, gst_percent=payload.gst_percent, effective_from=date.today(),
+        effective_to=None, source=payload.source or "Price update", created_by=admin.id,
+    )
+    db.add(new)
+    db.flush()
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="prices", entity_id=new.id,
+                 before={"previous_open_prices": old_snapshot},
+                 after=payload.model_dump(mode="json"))
+    db.commit()
+    return {"configuration_id": config_id, "new_price": payload.base_price,
+            "message": f"Price updated to {payload.base_price} (previous price kept in history)."}
+
+
+class InventoryUpdateIn(BaseModel):
+    total_units: int | None = None
+    available_units: int | None = None
+
+
+@router.put("/configurations/{config_id}/inventory")
+def update_inventory(
+    config_id: int, payload: InventoryUpdateIn,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    cfg = db.get(Configuration, config_id)
+    if not cfg:
+        raise HTTPException(404, "Configuration not found")
+    inv = db.query(Inventory).filter(Inventory.configuration_id == config_id).first()
+    before = {"total": inv.total_units, "available": inv.available_units} if inv else None
+    if not inv:
+        inv = Inventory(configuration_id=config_id)
+        db.add(inv)
+    if payload.total_units is not None:
+        inv.total_units = payload.total_units
+    if payload.available_units is not None:
+        inv.available_units = payload.available_units
+    db.flush()
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="inventory", entity_id=inv.id,
+                 before=before, after=payload.model_dump(mode="json"))
+    db.commit()
+    return {"configuration_id": config_id, "message": "Inventory updated."}
 
 
 @router.post("/projects/{project_id}/payment-plans", status_code=201)

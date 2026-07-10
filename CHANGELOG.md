@@ -6,6 +6,22 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-10
+
+### Added
+- **Price updates** — update an existing configuration's price from the admin
+  panel. The old price is kept in history (versioned `effective_from`/`effective_to`)
+  and the new one becomes current immediately (`PUT /v1/admin/configurations/{id}/price`).
+- **Inventory updates** — change available/total units for a configuration
+  (`PUT /v1/admin/configurations/{id}/inventory`).
+- **Config editor UI** — Admin → Manage Data → "Update Price / Stock" lists every
+  configuration with its current price and stock for inline editing.
+- **Brochure replace** — upload a new PDF for an existing document; the old
+  brochure's chunks are deactivated so RAG only serves the latest
+  (`POST /v1/admin/knowledge/documents/{id}/replace`). Added "Replace" action to
+  the Documents tab.
+- `GET /v1/admin/projects/{id}/configurations` — list configs with current price + inventory.
+
 ## [1.0.0] — 2026-07-10
 
 First complete version — the full hybrid engine, web client, and admin suite.

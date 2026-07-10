@@ -213,6 +213,15 @@ a { color: inherit; text-decoration: none; }
 .health-name { font-weight: 600; min-width: 140px; }
 .health-detail { flex: 1; font-size: 13px; }
 
+/* ---------- Edit configs (price/stock update) ---------- */
+.edit-config-list { display: flex; flex-direction: column; gap: 12px; }
+.edit-config-row { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--surface); }
+.ecr-title { font-weight: 700; margin-bottom: 10px; }
+.ecr-fields { display: flex; flex-wrap: wrap; gap: 20px; }
+.ecr-field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.ecr-inline { display: flex; gap: 6px; }
+.ecr-inline input { width: 130px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+
 /* ---------- Chip editor (doc types) ---------- */
 .chip-editor { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
 .chip-x { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 0 0 4px; }

@@ -5,7 +5,11 @@ Gives visibility into the ingestion pipeline: how many chunks/embeddings exist,
 which documents are processed / pending / failed, and coverage — so an admin can
 confirm a brochure actually got indexed (or re-index / delete it).
 """
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import shutil
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,6 +18,8 @@ from app.core.security import require_role
 from app.database import get_db
 from app.models import Document, Project, RagChunk, User
 from app.services.rag.ingest import ingest_document
+
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "uploads")
 
 router = APIRouter(prefix="/v1/admin/knowledge", tags=["knowledge"])
 
@@ -101,6 +107,50 @@ def reindex_document(
                  entity_id=doc.id, after={"reindexed": True, "version": doc.version})
     db.commit()
     return {"document_id": doc.id, "chunks_indexed": chunks, "version": doc.version}
+
+
+@router.post("/documents/{doc_id}/replace")
+def replace_document(
+    doc_id: int,
+    title: str | None = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role("admin")),
+):
+    """Replace a document with a NEW file. The old brochure's chunks are
+    deactivated during re-index, so RAG never serves the outdated version
+    (Constitution §6 — frequently-changing info must not stay in RAG)."""
+    doc = db.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    safe_name = f"{doc.project_id}_v{(doc.version or 1) + 1}_{datetime.now(timezone.utc).timestamp()}_{file.filename}"
+    dest = os.path.join(UPLOAD_DIR, safe_name)
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    old_file = doc.file_path
+    doc.file_path = dest
+    doc.version = (doc.version or 1) + 1
+    doc.status = "processing"
+    if title:
+        doc.title = title
+    db.commit()
+
+    try:
+        # ingest_document deactivates the old chunks, then indexes the new file.
+        chunks = ingest_document(db, doc)
+    except Exception as exc:
+        doc.status = "failed"
+        db.commit()
+        raise HTTPException(500, f"Re-index of new file failed: {exc}")
+
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="documents", entity_id=doc.id,
+                 before={"old_file": old_file}, after={"new_file": dest, "version": doc.version})
+    db.commit()
+    return {"document_id": doc.id, "version": doc.version, "chunks_indexed": chunks,
+            "message": "Brochure replaced; old content deactivated."}
 
 
 @router.delete("/documents/{doc_id}")

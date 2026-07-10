@@ -83,6 +83,12 @@ export const api = {
   // Data management (admin)
   addConfiguration: (projectId, data) =>
     request(`/v1/admin/projects/${projectId}/configurations`, { method: "POST", body: data }),
+  listConfigurations: (projectId) =>
+    request(`/v1/admin/projects/${projectId}/configurations`),
+  updatePrice: (configId, data) =>
+    request(`/v1/admin/configurations/${configId}/price`, { method: "PUT", body: data }),
+  updateInventory: (configId, data) =>
+    request(`/v1/admin/configurations/${configId}/inventory`, { method: "PUT", body: data }),
   addPaymentPlan: (projectId, data) =>
     request(`/v1/admin/projects/${projectId}/payment-plans`, { method: "POST", body: data }),
   importProjectsCsv: (formData) =>
@@ -97,6 +103,8 @@ export const api = {
   knowledgeOverview: () => request("/v1/admin/knowledge/overview"),
   listDocuments: () => request("/v1/admin/knowledge/documents"),
   reindexDocument: (id) => request(`/v1/admin/knowledge/documents/${id}/reindex`, { method: "POST" }),
+  replaceDocument: (id, formData) =>
+    request(`/v1/admin/knowledge/documents/${id}/replace`, { method: "POST", body: formData }),
   deleteDocument: (id) => request(`/v1/admin/knowledge/documents/${id}`, { method: "DELETE" }),
 
   // System health

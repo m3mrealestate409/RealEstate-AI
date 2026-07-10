@@ -132,6 +132,7 @@ function DocumentsList() {
   const [docs, setDocs] = useState([]);
   const [busy, setBusy] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [replacing, setReplacing] = useState(null); // doc id being replaced
   const load = () => api.listDocuments().then(setDocs);
   useEffect(() => { load(); }, []);
 
@@ -144,6 +145,18 @@ function DocumentsList() {
     if (!confirm("Delete this document and its chunks?")) return;
     setBusy(id);
     try { await api.deleteDocument(id); await load(); } finally { setBusy(null); }
+  }
+  async function replaceFile(id, file) {
+    if (!file) return;
+    setBusy(id); setMsg(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await api.replaceDocument(id, fd);
+      setMsg({ ok: true, text: `Replaced with new file — ${r.chunks_indexed} chunks (v${r.version}). Old content deactivated.` });
+      setReplacing(null);
+      await load();
+    } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(null); }
   }
 
   return (
@@ -158,6 +171,15 @@ function DocumentsList() {
                 <td>{d.title}</td><td>{d.project}</td><td>{d.doc_type}</td>
                 <td><StatusPill status={d.status} /></td><td>{d.chunks}</td><td>{d.version}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
+                  {replacing === d.id ? (
+                    <label className="btn btn-primary" style={{ cursor: "pointer" }}>
+                      Choose new PDF
+                      <input type="file" accept="application/pdf" hidden
+                        onChange={(e) => replaceFile(d.id, e.target.files[0])} />
+                    </label>
+                  ) : (
+                    <button className="btn btn-ghost" disabled={busy === d.id} onClick={() => setReplacing(d.id)}>Replace</button>
+                  )}
                   <button className="btn btn-ghost" disabled={busy === d.id} onClick={() => reindex(d.id)}>Re-index</button>
                   <button className="btn btn-ghost" disabled={busy === d.id} onClick={() => remove(d.id)}>Delete</button>
                 </td>
@@ -167,6 +189,10 @@ function DocumentsList() {
           </tbody>
         </table>
       </div>
+      <p className="muted small" style={{ marginTop: 10 }}>
+        <b>Replace</b> = upload a new PDF for this document; the old brochure's chunks are deactivated so RAG only uses the latest.
+        <b> Re-index</b> = rebuild chunks from the same file (e.g. after switching embeddings).
+      </p>
     </div>
   );
 }
@@ -239,7 +265,7 @@ function DocTypes() {
 function ManageData() {
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState("");
-  const [sub, setSub] = useState("config");
+  const [sub, setSub] = useState("edit");
   useEffect(() => { api.projects().then(setProjects); }, []);
 
   return (
@@ -255,12 +281,90 @@ function ManageData() {
       {projectId && (
         <>
           <div className="calc-tabs">
+            <button className={`tab ${sub === "edit" ? "tab-active" : ""}`} onClick={() => setSub("edit")}>Update Price / Stock</button>
             <button className={`tab ${sub === "config" ? "tab-active" : ""}`} onClick={() => setSub("config")}>Add Configuration</button>
             <button className={`tab ${sub === "plan" ? "tab-active" : ""}`} onClick={() => setSub("plan")}>Add Payment Plan</button>
           </div>
-          {sub === "config" ? <AddConfig projectId={projectId} /> : <AddPlan projectId={projectId} />}
+          {sub === "edit" && <EditConfigs projectId={projectId} />}
+          {sub === "config" && <AddConfig projectId={projectId} />}
+          {sub === "plan" && <AddPlan projectId={projectId} />}
         </>
       )}
+    </div>
+  );
+}
+
+function EditConfigs({ projectId }) {
+  const [configs, setConfigs] = useState([]);
+  const [msg, setMsg] = useState(null);
+  const load = () => api.listConfigurations(projectId).then(setConfigs);
+  useEffect(() => { load(); }, [projectId]);
+
+  if (configs.length === 0)
+    return <div className="muted">No configurations yet. Use "Add Configuration" first.</div>;
+
+  return (
+    <div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+      <div className="edit-config-list">
+        {configs.map((c) => (
+          <EditConfigRow key={c.id} config={c} onDone={(m) => { setMsg(m); load(); }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EditConfigRow({ config, onDone }) {
+  const [price, setPrice] = useState(config.current_price?.base_price ?? "");
+  const [avail, setAvail] = useState(config.inventory?.available_units ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function savePrice() {
+    setSaving(true);
+    try {
+      const cp = config.current_price || {};
+      await api.updatePrice(config.id, {
+        base_price: Number(price), price_unit: cp.price_unit || "per_sqft",
+        plc: cp.plc ?? null, gst_percent: cp.gst_percent ?? null,
+      });
+      onDone({ ok: true, text: `${config.type}: price updated to ${Number(price).toLocaleString("en-IN")} (old price kept in history).` });
+    } catch (e) { onDone({ ok: false, text: e.message }); }
+    finally { setSaving(false); }
+  }
+  async function saveStock() {
+    setSaving(true);
+    try {
+      await api.updateInventory(config.id, { available_units: Number(avail) });
+      onDone({ ok: true, text: `${config.type}: available units updated to ${avail}.` });
+    } catch (e) { onDone({ ok: false, text: e.message }); }
+    finally { setSaving(false); }
+  }
+
+  const priceChanged = String(price) !== String(config.current_price?.base_price ?? "");
+  const stockChanged = String(avail) !== String(config.inventory?.available_units ?? "");
+
+  return (
+    <div className="edit-config-row">
+      <div className="ecr-title">{config.type}
+        <span className="muted small"> · from {config.current_price?.effective_from || "—"}</span>
+      </div>
+      <div className="ecr-fields">
+        <div className="ecr-field">
+          <label>Price ({config.current_price?.price_unit || "per_sqft"})</label>
+          <div className="ecr-inline">
+            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+            <button className="btn btn-primary" disabled={!priceChanged || saving} onClick={savePrice}>Update</button>
+          </div>
+        </div>
+        <div className="ecr-field">
+          <label>Available units</label>
+          <div className="ecr-inline">
+            <input type="number" value={avail} onChange={(e) => setAvail(e.target.value)} />
+            <button className="btn" disabled={!stockChanged || saving} onClick={saveStock}>Update</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

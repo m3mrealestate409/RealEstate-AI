@@ -59,7 +59,7 @@ def test_llm(admin: User = Depends(require_role("admin"))):
         resp = provider.complete(
             system="You are a connection test. Reply with the single word: OK.",
             messages=[Message(role="user", content="CONTEXT: ping\nReply OK.")],
-            max_tokens=16,
+            max_tokens=256,
         )
         return {
             "ok": True,

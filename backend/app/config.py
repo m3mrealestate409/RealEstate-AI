@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # --- LLM provider layer ---
     llm_provider: str = "mock"          # mock | gemini | claude | openai | openrouter | ollama
-    llm_model: str = "gemini-1.5-flash"
+    llm_model: str = "gemini-flash-latest"
     gemini_api_key: str = ""
     openai_api_key: str = ""
     claude_api_key: str = ""

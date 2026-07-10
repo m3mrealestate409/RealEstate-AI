@@ -6,6 +6,20 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-10
+
+### Added
+- **Real Gemini support hardened** — the engine now works with current Gemini
+  "thinking" models. Response parsing safely handles empty visible parts
+  (falls back to candidate parts), and the default model is `gemini-flash-latest`
+  (the old `gemini-1.5-flash` is retired).
+
+### Changed
+- **Smarter grounding prompt** — the LLM now presents whatever facts the context
+  contains and marks only the specific missing detail as unavailable, instead of
+  refusing the whole answer. It still never invents figures (Constitution §8).
+- Connection-test token budget raised so thinking models can respond.
+
 ## [1.1.1] — 2026-07-10
 
 ### Fixed

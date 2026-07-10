@@ -27,7 +27,7 @@ class GeminiLLMProvider(LLMProvider):
         system: str,
         messages: list[Message],
         temperature: float = 0.2,
-        max_tokens: int = 1024,
+        max_tokens: int = 2048,
     ) -> LLMResponse:
         model = self._genai.GenerativeModel(
             self._model_name, system_instruction=system
@@ -45,5 +45,22 @@ class GeminiLLMProvider(LLMProvider):
                 "max_output_tokens": max_tokens,
             },
         )
-        text = getattr(resp, "text", "") or ""
-        return LLMResponse(text=text, provider=self.name, model=self._model_name)
+        return LLMResponse(text=_extract_text(resp), provider=self.name, model=self._model_name)
+
+
+def _extract_text(resp) -> str:
+    """Safely pull text out of a Gemini response. Newer 'thinking' models can
+    return a response whose `.text` accessor raises when the visible part is
+    empty (e.g. finish_reason=MAX_TOKENS after using budget on reasoning), so
+    we fall back to reading candidate parts directly."""
+    try:
+        t = resp.text
+        if t:
+            return t
+    except Exception:
+        pass
+    try:
+        parts = resp.candidates[0].content.parts
+        return "".join(getattr(p, "text", "") for p in parts).strip()
+    except Exception:
+        return ""

@@ -16,11 +16,13 @@ router = APIRouter(prefix="/v1/projects", tags=["projects"])
 
 
 def _latest_brochure(db: Session, project_id: int) -> Document | None:
-    """Most recent brochure document for a project (newest version first)."""
+    """The most recently uploaded/replaced brochure for a project.
+    `uploaded_at` is refreshed on every upload AND replace, so the newest file
+    always wins — even across multiple separate brochure uploads."""
     return (
         db.query(Document)
         .filter(Document.project_id == project_id, Document.doc_type == "brochure")
-        .order_by(Document.version.desc(), Document.uploaded_at.desc())
+        .order_by(Document.uploaded_at.desc(), Document.version.desc())
         .first()
     )
 

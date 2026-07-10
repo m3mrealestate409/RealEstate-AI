@@ -6,6 +6,14 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.9.1] — 2026-07-10
+
+### Fixed
+- **"View Brochure" always shows the newest** — the latest brochure is now chosen
+  by most-recent upload time, and a Replace refreshes that timestamp. Previously,
+  ordering by version could surface an older (higher-version) document over a
+  newer separate upload.
+
 ## [1.9.0] — 2026-07-10
 
 ### Added

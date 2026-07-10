@@ -181,6 +181,7 @@ def replace_document(
     doc.file_path = dest
     doc.version = (doc.version or 1) + 1
     doc.status = "processing"
+    doc.uploaded_at = datetime.now(timezone.utc)  # a replaced file is a new upload
     if title:
         doc.title = title
     db.commit()

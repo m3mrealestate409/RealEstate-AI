@@ -6,7 +6,6 @@ which documents are processed / pending / failed, and coverage — so an admin c
 confirm a brochure actually got indexed (or re-index / delete it).
 """
 import os
-import shutil
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_audit
 from app.core.security import require_role
 from app.core.tenancy import get_scoped_project, org_scope_id
+from app.core.uploads import save_pdf_upload
 from app.database import get_db
 from app.models import Document, Project, RagChunk, User
 from app.services import cache
@@ -171,11 +171,7 @@ def replace_document(
         raise HTTPException(404, "Document not found")
     get_scoped_project(db, doc.project_id, admin)
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    safe_name = f"{doc.project_id}_v{(doc.version or 1) + 1}_{datetime.now(timezone.utc).timestamp()}_{file.filename}"
-    dest = os.path.join(UPLOAD_DIR, safe_name)
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    dest = save_pdf_upload(file, UPLOAD_DIR, f"{doc.project_id}_v{(doc.version or 1) + 1}")
 
     old_file = doc.file_path
     doc.file_path = dest

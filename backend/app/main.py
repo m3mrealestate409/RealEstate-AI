@@ -35,11 +35,20 @@ app = FastAPI(
     version=__version__,
 )
 
-# CORS — tighten origins in production.
+# CORS — allow all origins only in debug/dev; in production use an explicit
+# allow-list from CORS_ORIGINS (comma-separated). Wildcard origins are never
+# combined with credentials in production.
+if settings.app_debug:
+    _cors_origins = ["*"]
+    _allow_credentials = False  # "*" + credentials is invalid / unsafe
+else:
+    _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    _allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.app_debug else [],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

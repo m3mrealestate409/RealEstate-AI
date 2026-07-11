@@ -6,8 +6,8 @@ import { Wordmark } from "../components/Logo.jsx";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@chaahat.local");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +47,6 @@ export default function Login() {
         <button className="btn btn-primary btn-block" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </button>
-        <p className="muted small center">Demo: admin@chaahat.local / admin123</p>
       </form>
     </div>
   );

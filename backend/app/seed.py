@@ -124,7 +124,28 @@ def _seed_project(
     logger.info("Seeded project: %s", name)
 
 
+_DEFAULT_PASSWORDS = {"admin123", "owner123", "", None}
+
+
+def _guard_seed_passwords() -> None:
+    """H2 — never create the well-known default admin/super-admin accounts in a
+    production deployment. Force the operator to set strong seed passwords."""
+    if not settings.is_production:
+        return
+    weak = []
+    if settings.seed_admin_password in _DEFAULT_PASSWORDS:
+        weak.append("SEED_ADMIN_PASSWORD")
+    if settings.seed_super_admin_password in _DEFAULT_PASSWORDS:
+        weak.append("SEED_SUPER_ADMIN_PASSWORD")
+    if weak:
+        raise RuntimeError(
+            "Refusing to seed default credentials in production. Set strong values for: "
+            + ", ".join(weak)
+        )
+
+
 def seed() -> None:
+    _guard_seed_passwords()
     db = SessionLocal()
     try:
         _seed_plans(db)

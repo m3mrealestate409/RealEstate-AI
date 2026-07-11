@@ -53,9 +53,29 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     org_id = org_scope_id(user) if user is not None else None
     user_id = getattr(user, "id", None)
     today = date.today().isoformat()
-    prior_projects = session_store.last_project_ids(session_id)
+
+    # H1 — session memory is keyed to the authenticated user, NOT just the
+    # client-supplied session_id, so one user can never inherit another user's
+    # (or another tenant's) conversation context by guessing/fixing a session id.
+    mem_key = f"u{user_id}:{session_id}" if user_id is not None else session_id
+    prior_projects = session_store.last_project_ids(mem_key)
 
     ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
+
+    # H1 (defence in depth) — regardless of where project_ids came from (intent
+    # match OR session memory), keep only projects that belong to the caller's
+    # org before any SQL/RAG lookup. Closes cross-tenant reads on every path.
+    if org_id is not None and ir.project_ids:
+        from app.models import Project
+
+        owned = {
+            pid
+            for (pid,) in db.query(Project.id)
+            .filter(Project.id.in_(ir.project_ids), Project.organization_id == org_id)
+            .all()
+        }
+        ir.project_ids = [p for p in ir.project_ids if p in owned]
+        ir.matched_projects = [m for m in ir.matched_projects if m["id"] in owned]
 
     # A project was named but doesn't exist in our data. We never reuse the
     # previous project's data (§8), but we CAN offer an unverified general-
@@ -103,7 +123,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                 hit = dict(hit)
                 hit["cached"] = True
                 hit["session_id"] = session_id
-                session_store.remember_turn(session_id, query=query, intents=ir.intents, project_ids=ir.project_ids)
+                session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
                 _log_query(db, session_id=session_id, query=query, ir=ir, envelope=hit,
                            latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
                 return hit
@@ -228,7 +248,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         confidences.append(round(min(confidences) if confidences else 0.4, 2))
 
     # ---- 4) Compose / Hallucination policy -------------------------------
-    session_store.remember_turn(session_id, query=query, intents=ir.intents, project_ids=ir.project_ids)
+    session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
 
     if not blocks:
         # Nothing in the company knowledge base — fall back to the LLM's general

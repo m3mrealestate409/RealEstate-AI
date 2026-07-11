@@ -6,6 +6,42 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-07-11
+
+### Security — production-grade audit, Critical + High fixes
+
+A full security audit was performed. The 2 Critical and 3 High findings are
+fixed and verified (all 13 tests pass); remaining Medium/Low items are tracked
+for a follow-up hardening pass.
+
+- **[Critical] JWT secret hardening** — the app now **refuses to start in
+  production** (`APP_ENV` != development) with a weak or default `SECRET_KEY`
+  (min 32 chars). Prevents forged super-admin tokens if a deployment shipped the
+  default secret.
+- **[Critical] Upload path-traversal → RCE** — uploaded file names are no longer
+  used to build server paths. A new safe handler (`app/core/uploads.py`) writes
+  to a server-generated UUID name, accepts **PDF only**, enforces a **25 MB**
+  size cap, and verifies the path stays inside the uploads directory. Applied to
+  brochure, cost-sheet, and replace-document uploads.
+- **[High] Cross-tenant isolation on the query path** — conversation/session
+  memory is now bound to the authenticated user (not just the client-supplied
+  `session_id`), and every resolved project is **re-validated against the
+  caller's organization** before any SQL/RAG lookup. Closes a cross-tenant read
+  via session fixation.
+- **[High] Default credentials** — removed the pre-filled demo email/password
+  and the on-screen "Demo:" hint from the login page; the seeder now **refuses to
+  create default-password admin/super-admin accounts in production**.
+- **[High] Dev config in production** — added `entrypoint.prod.sh` (no
+  `--reload`, multiple workers) and `docker-compose.prod.yml` (no source
+  bind-mount, `APP_DEBUG=false`). CORS now uses an explicit `CORS_ORIGINS`
+  allow-list in production (wildcard only in local debug, without credentials).
+
+### Notes
+- `.env.example` documents the new production variables (`APP_ENV`, `SECRET_KEY`,
+  `CORS_ORIGINS`, `SEED_*`).
+- Reminder: `init_db` migrations run at container **start** only — restart the
+  API container after adding schema changes.
+
 ## [1.16.0] — 2026-07-11
 
 ### Added — Internet fallback (unverified)

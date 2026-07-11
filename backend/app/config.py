@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me"
     access_token_expire_minutes: int = 480
     algorithm: str = "HS256"
+    # Comma-separated allowed browser origins in production (CORS). Ignored in
+    # debug mode (which allows all origins for local dev).
+    cors_origins: str = ""
 
     # --- Database ---
     database_url: str = (
@@ -60,10 +63,25 @@ class Settings(BaseSettings):
         """True only when a real Gemini key has been supplied."""
         return bool(self.gemini_api_key) and self.gemini_api_key != "PASTE_YOUR_KEY_HERE"
 
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() not in ("development", "dev", "test", "testing", "local")
+
+
+_WEAK_SECRETS = {"", "dev-secret-change-me", "change-this-to-a-long-random-string-in-production"}
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    # C1 — never boot production with a weak/default JWT secret. Anyone who knows
+    # the default string could forge a super-admin token. Fail fast instead.
+    if s.is_production and (s.secret_key in _WEAK_SECRETS or len(s.secret_key) < 32):
+        raise RuntimeError(
+            "SECRET_KEY must be a strong, unique 32+ character random value in production. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        )
+    return s
 
 
 settings = get_settings()

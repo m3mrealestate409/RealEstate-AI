@@ -3,7 +3,6 @@ Admin endpoints — data management, document upload/index, audit trail.
 All mutations require 'admin' role and are audit-logged (Constitution §19).
 """
 import os
-import shutil
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -12,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_audit
 from app.core.security import require_role
 from app.core.tenancy import get_scoped_project
+from app.core.uploads import save_pdf_upload
 from app.database import get_db
 from app.models import Builder, Document, Project, User
 from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
@@ -91,11 +91,7 @@ def upload_document(
     """Upload a brochure/legal PDF and index it into the RAG store."""
     project = get_scoped_project(db, project_id, admin)
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    safe_name = f"{project_id}_{datetime.now(timezone.utc).timestamp()}_{file.filename}"
-    dest = os.path.join(UPLOAD_DIR, safe_name)
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    dest = save_pdf_upload(file, UPLOAD_DIR, str(project_id))
 
     document = Document(
         project_id=project_id, title=title, doc_type=doc_type, file_path=dest,
@@ -130,11 +126,7 @@ def upload_cost_sheet(
     existing cost sheet for the project."""
     project = get_scoped_project(db, project_id, admin)
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    safe_name = f"{project_id}_costsheet_{datetime.now(timezone.utc).timestamp()}_{file.filename}"
-    dest = os.path.join(UPLOAD_DIR, safe_name)
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    dest = save_pdf_upload(file, UPLOAD_DIR, f"{project_id}_costsheet")
 
     doc = Document(
         project_id=project_id, title=f"{project.name} Cost Sheet", doc_type="cost_sheet",

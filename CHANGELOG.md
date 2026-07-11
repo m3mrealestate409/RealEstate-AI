@@ -6,6 +6,18 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-07-10
+
+### Added — AI-assisted data entry
+- **AI Import** (Admin → 🪄 AI Import) — upload a brochure/price-list PDF and
+  Gemini extracts the structured data (type, land parcel, green area, status,
+  possession, towers, configurations with pricing, payment plan) into an
+  **editable preview**. Prices are highlighted for review. Nothing is saved until
+  the admin confirms; on save it writes to the project's SQL tables.
+- Endpoints: `POST /v1/admin/extract` (PDF → draft, nothing saved) and
+  `POST /v1/admin/projects/{id}/apply` (reviewed draft → SQL). Org-scoped,
+  audited; the AI never invents figures (unknown values come back blank).
+
 ## [1.10.0] — 2026-07-10
 
 ### Added — Richer project details

@@ -124,6 +124,8 @@ export const api = {
     request(`/v1/admin/projects/${projectId}/payment-plans`, { method: "POST", body: data }),
   importProjectsCsv: (formData) =>
     request("/v1/admin/import/projects-csv", { method: "POST", body: formData }),
+  extractDraft: (formData) => request("/v1/admin/extract", { method: "POST", body: formData }),
+  applyDraft: (projectId, draft) => request(`/v1/admin/projects/${projectId}/apply`, { method: "POST", body: draft }),
 
   // User management (admin)
   listUsers: () => request("/v1/admin/users"),

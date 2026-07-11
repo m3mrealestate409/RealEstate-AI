@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import AiSettings from "./AiSettings.jsx";
+import AiImport from "./AiImport.jsx";
 import { StatusPill } from "./Knowledge.jsx";
 
 export default function Admin() {
@@ -13,6 +14,7 @@ export default function Admin() {
       </div>
       <div className="calc-tabs">
         <button className={`tab ${tab === "ai" ? "tab-active" : ""}`} onClick={() => setTab("ai")}>🤖 AI Settings</button>
+        <button className={`tab ${tab === "import-ai" ? "tab-active" : ""}`} onClick={() => setTab("import-ai")}>🪄 AI Import</button>
         <button className={`tab ${tab === "project" ? "tab-active" : ""}`} onClick={() => setTab("project")}>New Project</button>
         <button className={`tab ${tab === "data" ? "tab-active" : ""}`} onClick={() => setTab("data")}>Manage Data</button>
         <button className={`tab ${tab === "document" ? "tab-active" : ""}`} onClick={() => setTab("document")}>Upload Brochure</button>
@@ -24,6 +26,7 @@ export default function Admin() {
         <button className={`tab ${tab === "audit" ? "tab-active" : ""}`} onClick={() => setTab("audit")}>Audit Log</button>
       </div>
       {tab === "ai" && <AiSettings />}
+      {tab === "import-ai" && <AiImport />}
       {tab === "project" && <NewProject />}
       {tab === "data" && <ManageData />}
       {tab === "document" && <UploadDoc />}

@@ -15,6 +15,7 @@ from app.api.v1 import (
     analytics,
     auth,
     calculate,
+    extract,
     knowledge,
     manage,
     projects,
@@ -56,6 +57,7 @@ app.include_router(users.router)
 app.include_router(knowledge.router)
 app.include_router(system.router)
 app.include_router(superadmin.router)
+app.include_router(extract.router)
 
 
 @app.get("/health", tags=["system"])

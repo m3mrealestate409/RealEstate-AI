@@ -6,6 +6,17 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-07-11
+
+### Added
+- **Bulk AI Import** — the AI Import tab now takes multiple brochure PDFs at once.
+  Each becomes a draft in a review queue: assign it to a project, extract, review
+  and edit, then Save — one at a time. Nothing is stored until you Save each
+  (extraction runs sequentially to respect AI rate limits). Single-file import
+  still works the same way.
+- **Sample CSV download** — the Import CSV tab has a "Download sample CSV" button
+  with the correct columns and example rows.
+
 ## [1.14.0] — 2026-07-11
 
 ### Added — Location & connectivity

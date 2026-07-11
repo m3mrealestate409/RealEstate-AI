@@ -716,13 +716,28 @@ function ImportCsv() {
     finally { setBusy(false); }
   }
 
+  function downloadSample() {
+    const rows = [
+      "name,slug,city,locality,project_status,possession_date",
+      "Green Valley,green-valley,Gurugram,Sector 90,Under Construction,2028-06-30",
+      "Palm Court,palm-court,Noida,Sector 150,Ready to Move,2026-12-31",
+      "Sunrise Enclave,sunrise-enclave,Gurugram,Sector 79,Delivered,2025-03-31",
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "projects-sample.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <form className="admin-form" onSubmit={submit}>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
       <div className="settings-note">
         CSV columns: <span className="mono">name, slug, city, locality, project_status, possession_date</span> (YYYY-MM-DD).
-        Export from Excel as CSV.
+        Not sure of the format? Download the sample below and fill it in Excel.
       </div>
+      <button type="button" className="btn" style={{ marginBottom: 14 }} onClick={downloadSample}>⬇ Download sample CSV</button>
       <label className="field"><span>CSV file</span><input type="file" accept=".csv" onChange={(e) => setFile(e.target.files[0])} required /></label>
       <button className="btn btn-primary" disabled={busy}>{busy ? "Importing…" : "Import projects"}</button>
     </form>

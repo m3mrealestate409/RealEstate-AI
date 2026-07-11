@@ -1,112 +1,164 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 
-// AI-assisted data entry: upload brochure -> extract -> review/edit -> save.
+// AI-assisted data entry — works for a SINGLE pdf or a BULK batch.
+// Flow: upload PDFs → assign each to a project → extract (draft, nothing saved)
+// → review/edit each → save. Reuses /extract and /apply per item.
 export default function AiImport() {
   const [projects, setProjects] = useState([]);
-  const [projectId, setProjectId] = useState("");
-  const [file, setFile] = useState(null);
-  const [draft, setDraft] = useState(null);
+  const [items, setItems] = useState([]); // {id, file, name, projectId, draft, status, error, open}
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
 
   useEffect(() => { api.projects().then(setProjects); }, []);
 
-  async function extract(e) {
-    e.preventDefault();
-    if (!file) return;
-    setBusy(true); setMsg(null); setDraft(null);
+  function addFiles(files) {
+    const now = Date.now();
+    const added = [...files].map((f, i) => ({
+      id: `${now}-${i}`, file: f, name: f.name, projectId: "",
+      draft: null, status: "pending", error: null, open: false,
+    }));
+    setItems((prev) => [...prev, ...added]);
+  }
+  const patch = (id, upd) => setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...upd } : it)));
+  const removeItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
+
+  async function extractOne(it) {
+    patch(it.id, { status: "extracting", error: null });
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", it.file);
     try {
       const r = await api.extractDraft(fd);
-      setDraft(normalizeDraft(r.draft));
-    } catch (err) { setMsg({ ok: false, text: err.message }); }
-    finally { setBusy(false); }
+      patch(it.id, { status: "ready", draft: normalizeDraft(r.draft), open: true });
+    } catch (err) {
+      patch(it.id, { status: "error", error: err.message });
+    }
   }
 
-  async function save() {
-    setBusy(true); setMsg(null);
+  async function extractAll() {
+    setBusy(true);
+    // sequential — avoids hammering the AI rate limit
+    for (const it of items) {
+      if (it.status === "pending") await extractOne(it);
+    }
+    setBusy(false);
+  }
+
+  async function saveOne(it) {
+    if (!it.projectId) { patch(it.id, { error: "Choose a project first." }); return; }
+    patch(it.id, { status: "saving", error: null });
     try {
-      const r = await api.applyDraft(projectId, toPayload(draft));
+      const r = await api.applyDraft(it.projectId, toPayload(it.draft));
       const s = r.applied;
-      setMsg({ ok: true, text: `Saved: ${s.fields} fields, ${s.towers} towers, ${s.configurations} configs${s.payment_plan ? ", payment plan" : ""}.` });
-      setDraft(null); setFile(null);
-    } catch (err) { setMsg({ ok: false, text: err.message }); }
-    finally { setBusy(false); }
+      patch(it.id, { status: "saved", open: false, savedMsg: `${s.fields} fields, ${s.towers} towers, ${s.configurations} configs, ${s.location_points} location${s.payment_plan ? ", plan" : ""}` });
+    } catch (err) {
+      patch(it.id, { status: "error", error: err.message });
+    }
   }
 
-  const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
+  const pendingCount = items.filter((i) => i.status === "pending").length;
 
   return (
     <div className="admin-form">
-      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
-
       <div className="settings-note">
-        🪄 Upload a brochure PDF — AI reads it and pre-fills the fields below.
-        <b> Review and edit everything (especially prices)</b> before saving. Nothing is stored until you click Save.
+        🪄 Upload one or many brochure PDFs. Each is read by AI into an <b>editable draft</b> —
+        assign it to a project, review (especially prices), then Save. <b>Nothing is stored until you Save.</b>
       </div>
 
-      <form onSubmit={extract}>
-        <div className="calc-fields">
-          <label className="field"><span>Save into project</span>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} required>
-              <option value="">Select a project…</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-          <label className="field"><span>Brochure / price-list PDF</span>
-            <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} required />
-          </label>
-        </div>
-        <button className="btn btn-primary" disabled={busy || !file}>{busy && !draft ? "Extracting…" : "Extract with AI"}</button>
-      </form>
+      <label className="field">
+        <span>Add brochure PDF(s)</span>
+        <input type="file" accept="application/pdf" multiple onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+      </label>
 
-      {draft && (
-        <div className="extract-preview">
-          <div className="block-title" style={{ marginTop: 20 }}>Review extracted data</div>
-
-          <div className="calc-fields">
-            <label className="field"><span>Type</span>
-              <select value={draft.project_type || ""} onChange={(e) => setField("project_type", e.target.value)}>
-                <option value="">—</option><option>Residential</option><option>Commercial</option><option>Industrial</option>
-              </select>
-            </label>
-            <label className="field"><span>Status</span>
-              <select value={draft.project_status || ""} onChange={(e) => setField("project_status", e.target.value)}>
-                <option value="">—</option><option>Launched</option><option>Under Construction</option><option>Ready to Move</option><option>Delivered</option>
-              </select>
-            </label>
-            <label className="field"><span>Land parcel</span><input value={draft.land_parcel || ""} onChange={(e) => setField("land_parcel", e.target.value)} /></label>
-            <label className="field"><span>Green area</span><input value={draft.green_area || ""} onChange={(e) => setField("green_area", e.target.value)} /></label>
-            <label className="field"><span>Possession (YYYY-MM-DD)</span><input value={draft.possession_date || ""} onChange={(e) => setField("possession_date", e.target.value)} /></label>
-          </div>
-
-          <EditList title="Towers" rows={draft.towers} onChange={(rows) => setField("towers", rows)}
-            cols={[["name", "Name"], ["floors", "Floors", "number"], ["height", "Height"], ["units_per_floor", "Units/floor", "number"]]}
-            blank={{ name: "", floors: "", height: "", units_per_floor: "" }} />
-
-          <EditList title="Configurations (⚠️ check prices)" rows={draft.configurations} onChange={(rows) => setField("configurations", rows)}
-            cols={[["type", "Type"], ["carpet_area", "Carpet", "number"], ["super_area", "Super", "number"], ["base_price", "Price", "number", true], ["plc", "PLC", "number"], ["gst_percent", "GST%", "number"]]}
-            blank={{ type: "", carpet_area: "", super_area: "", base_price: "", price_unit: "per_sqft", plc: "", gst_percent: "" }} />
-
-          <EditList title="Location & Connectivity" rows={draft.location_points} onChange={(rows) => setField("location_points", rows)}
-            cols={[["category", "Category"], ["name", "Place"], ["distance", "Distance"]]}
-            blank={{ category: "nearby", name: "", distance: "" }} />
-
-          <div className="block-title" style={{ marginTop: 16 }}>Payment Plan</div>
-          <label className="field" style={{ maxWidth: 260 }}><span>Plan name</span>
-            <input value={draft.payment_plan?.name || ""} onChange={(e) => setField("payment_plan", { ...draft.payment_plan, name: e.target.value })} />
-          </label>
-          <EditList rows={draft.payment_plan?.milestones || []} onChange={(rows) => setField("payment_plan", { ...draft.payment_plan, milestones: rows })}
-            cols={[["label", "Milestone"], ["percent", "%", "number"]]} blank={{ label: "", percent: "" }} />
-
-          <div style={{ marginTop: 18 }}>
-            <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "✓ Save to project"}</button>
-            <button className="btn btn-ghost" onClick={() => setDraft(null)}>Discard</button>
-          </div>
-        </div>
+      {pendingCount > 0 && (
+        <button type="button" className="btn btn-primary" onClick={extractAll} disabled={busy}>
+          {busy ? "Extracting…" : `Extract all (${pendingCount})`}
+        </button>
       )}
+
+      <div className="import-queue">
+        {items.map((it) => (
+          <div className={`queue-item status-${it.status}`} key={it.id}>
+            <div className="queue-row">
+              <span className="queue-name">📄 {it.name}</span>
+              <select value={it.projectId} onChange={(e) => patch(it.id, { projectId: e.target.value })} disabled={it.status === "saved"}>
+                <option value="">Assign to project…</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <StatusTag status={it.status} savedMsg={it.savedMsg} />
+              <div className="queue-actions">
+                {it.status === "pending" && <button className="btn btn-ghost" onClick={() => extractOne(it)}>Extract</button>}
+                {(it.status === "ready" || it.status === "error") && it.draft && (
+                  <button className="btn btn-ghost" onClick={() => patch(it.id, { open: !it.open })}>{it.open ? "Hide" : "Review"}</button>
+                )}
+                {it.status !== "saved" && <button className="btn btn-ghost" onClick={() => removeItem(it.id)}>✕</button>}
+              </div>
+            </div>
+            {it.error && <div className="alert alert-error" style={{ margin: "6px 0" }}>{it.error}</div>}
+            {it.open && it.draft && (
+              <div className="queue-draft">
+                <DraftEditor draft={it.draft} setDraft={(fn) => patch(it.id, { draft: typeof fn === "function" ? fn(it.draft) : fn })} />
+                <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => saveOne(it)} disabled={it.status === "saving" || !it.projectId}>
+                  {it.status === "saving" ? "Saving…" : "✓ Save to project"}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {items.length === 0 && <div className="muted" style={{ marginTop: 12 }}>No files yet. Add a PDF above.</div>}
+      </div>
+    </div>
+  );
+}
+
+function StatusTag({ status, savedMsg }) {
+  const map = {
+    pending: ["chip-gray", "pending"], extracting: ["chip-amber", "extracting…"],
+    ready: ["chip-amber", "review"], saving: ["chip-amber", "saving…"],
+    saved: ["chip-green", "saved ✓"], error: ["chip-red", "error"],
+  };
+  const [cls, label] = map[status] || map.pending;
+  return <span className={`status-chip ${cls}`} title={savedMsg || ""}>{label}</span>;
+}
+
+// The editable preview form for one draft.
+function DraftEditor({ draft, setDraft }) {
+  const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
+  return (
+    <div className="extract-preview">
+      <div className="calc-fields">
+        <label className="field"><span>Type</span>
+          <select value={draft.project_type || ""} onChange={(e) => setField("project_type", e.target.value)}>
+            <option value="">—</option><option>Residential</option><option>Commercial</option><option>Industrial</option>
+          </select>
+        </label>
+        <label className="field"><span>Status</span>
+          <select value={draft.project_status || ""} onChange={(e) => setField("project_status", e.target.value)}>
+            <option value="">—</option><option>Launched</option><option>Under Construction</option><option>Ready to Move</option><option>Delivered</option>
+          </select>
+        </label>
+        <label className="field"><span>Land parcel</span><input value={draft.land_parcel || ""} onChange={(e) => setField("land_parcel", e.target.value)} /></label>
+        <label className="field"><span>Green area</span><input value={draft.green_area || ""} onChange={(e) => setField("green_area", e.target.value)} /></label>
+        <label className="field"><span>Possession (YYYY-MM-DD)</span><input value={draft.possession_date || ""} onChange={(e) => setField("possession_date", e.target.value)} /></label>
+      </div>
+
+      <EditList title="Towers" rows={draft.towers} onChange={(rows) => setField("towers", rows)}
+        cols={[["name", "Name"], ["floors", "Floors", "number"], ["height", "Height"], ["units_per_floor", "Units/floor", "number"]]}
+        blank={{ name: "", floors: "", height: "", units_per_floor: "" }} />
+
+      <EditList title="Configurations (⚠️ check prices)" rows={draft.configurations} onChange={(rows) => setField("configurations", rows)}
+        cols={[["type", "Type"], ["carpet_area", "Carpet", "number"], ["super_area", "Super", "number"], ["base_price", "Price", "number", true], ["plc", "PLC", "number"], ["gst_percent", "GST%", "number"]]}
+        blank={{ type: "", carpet_area: "", super_area: "", base_price: "", price_unit: "per_sqft", plc: "", gst_percent: "" }} />
+
+      <EditList title="Location & Connectivity" rows={draft.location_points} onChange={(rows) => setField("location_points", rows)}
+        cols={[["category", "Category"], ["name", "Place"], ["distance", "Distance"]]}
+        blank={{ category: "nearby", name: "", distance: "" }} />
+
+      <div className="block-title" style={{ marginTop: 16 }}>Payment Plan</div>
+      <label className="field" style={{ maxWidth: 260 }}><span>Plan name</span>
+        <input value={draft.payment_plan?.name || ""} onChange={(e) => setField("payment_plan", { ...draft.payment_plan, name: e.target.value })} />
+      </label>
+      <EditList rows={draft.payment_plan?.milestones || []} onChange={(rows) => setField("payment_plan", { ...draft.payment_plan, milestones: rows })}
+        cols={[["label", "Milestone"], ["percent", "%", "number"]]} blank={{ label: "", percent: "" }} />
     </div>
   );
 }
@@ -152,7 +204,6 @@ function normalizeDraft(d) {
   };
 }
 
-// Convert form strings back to numbers/nulls for the API.
 function toPayload(d) {
   const num = (v) => (v === "" || v == null ? null : Number(v));
   return {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { BrandMark } from "./Logo.jsx";
@@ -6,8 +7,11 @@ import Icon from "./Icons.jsx";
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   function handleLogout() {
+    closeMenu();
     logout();
     navigate("/login");
   }
@@ -18,16 +22,30 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {/* Mobile / tablet top bar with hamburger */}
+      <header className="mobile-topbar">
+        <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+          <Icon name="menu" size={22} />
+        </button>
+        <BrandMark size={26} />
+        <span className="mobile-brand">PropX Estate</span>
+      </header>
+
+      {menuOpen && <div className="sidebar-backdrop" onClick={closeMenu} />}
+
+      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
         <div className="brand">
           <BrandMark size={38} />
           <div>
             <div className="brand-name">PropX Estate</div>
             <div className="brand-sub">Knowledge Guru</div>
           </div>
+          <button className="drawer-close" onClick={closeMenu} aria-label="Close menu">
+            <Icon name="close" size={20} />
+          </button>
         </div>
 
-        <nav className="nav">
+        <nav className="nav" onClick={closeMenu}>
           <NavLink to="/" end className="nav-link">
             <span className="nav-ic"><Icon name="ask" /></span> Ask
           </NavLink>

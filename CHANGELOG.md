@@ -6,6 +6,14 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.12.1] — 2026-07-11
+
+### Fixed
+- **Mobile & tablet navigation** — on narrow screens the sidebar was hidden with
+  no way to navigate. Added a top bar with a hamburger that opens the sidebar as
+  a slide-in drawer (with backdrop); tapping a link navigates and closes it.
+  Desktop is unchanged.
+
 ## [1.12.0] — 2026-07-11
 
 ### Added — Cost sheet

@@ -61,6 +61,19 @@ const PATHS = {
       <line x1="12" y1="19" x2="12" y2="23" />
     </>
   ),
+  menu: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </>
+  ),
+  close: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 18, className = "" }) {

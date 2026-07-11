@@ -6,6 +6,21 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.22.0] — 2026-07-11
+
+### Changed — Cleaner document answers
+- When the AI writes a **summary**, the raw brochure excerpt is no longer shown
+  as a separate block — the formatted summary plus the cited source already
+  cover it (the retrieved text is still used for grounding and citations).
+- When a document answer has **no summary** (e.g. specifications), the retrieved
+  brochure text is now broken into **bullet points** instead of one run-on line.
+
+### Added — Query length limit
+- Queries are capped at **1000 characters** (backend validation + a frontend
+  input limit and near-limit counter), so a large pasted block can't inflate
+  LLM / embedding token cost. Real questions are far shorter, so this is
+  invisible in normal use.
+
 ## [1.21.0] — 2026-07-11
 
 ### Changed — Better-reading LLM answers

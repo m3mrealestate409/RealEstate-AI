@@ -31,7 +31,12 @@ class UserOut(BaseModel):
 
 # --- Query (the engine) ---
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, examples=["Golf Hills 3BHK price and payment plan"])
+    # Cap length so a huge pasted text can't blow up LLM/embedding token cost.
+    # 1000 chars (~150 words) is far more than any real real-estate question.
+    query: str = Field(
+        ..., min_length=1, max_length=1000,
+        examples=["Golf Hills 3BHK price and payment plan"],
+    )
     session_id: str | None = None
 
 

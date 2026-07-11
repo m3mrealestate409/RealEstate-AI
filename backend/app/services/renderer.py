@@ -7,6 +7,8 @@ what the engine returns. Never long paragraphs when data is structured.
 """
 from __future__ import annotations
 
+import re
+
 
 def price_block(project_name: str, data: dict) -> dict:
     rows = []
@@ -170,12 +172,24 @@ def amenities_block(project_name: str, data: dict) -> dict:
     return {"type": "card", "title": f"{project_name} - Amenities", "cards": cards}
 
 
+_BULLET_SPLIT = re.compile(r"(?:\s+[-–—•·]\s+|\s*[;\n]+\s*)")
+
+
+def _to_bullets(text: str) -> list[str]:
+    """Break a whitespace-collapsed brochure chunk into readable bullet lines.
+    Brochure PDFs put ' - ' / '•' between points; those separators survive
+    chunking, so we split a run-on excerpt into scannable items (falls back to
+    the whole text if there are no separators)."""
+    parts = [p.strip(" -–—•·\t:").strip() for p in _BULLET_SPLIT.split(text or "")]
+    parts = [p for p in parts if p]
+    return parts or ([text.strip()] if text and text.strip() else [])
+
+
 def rag_block(title: str, chunks: list) -> dict:
-    return {
-        "type": "checklist",
-        "title": title,
-        "items": [c.content for c in chunks],
-    }
+    items: list[str] = []
+    for c in chunks:
+        items.extend(_to_bullets(c.content))
+    return {"type": "checklist", "title": title, "items": items}
 
 
 def paragraph_block(title: str, text: str) -> dict:

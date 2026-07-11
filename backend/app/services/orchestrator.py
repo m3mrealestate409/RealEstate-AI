@@ -227,8 +227,6 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
             db, query, project_ids=ir.project_ids or None, org_id=org_id
         )
         if chunks:
-            title = "Documents"
-            blocks.append(renderer.rag_block(f"From brochure — {title}", chunks))
             for c in chunks:
                 citations.append(
                     {
@@ -243,6 +241,11 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                     f"[{c.project_name} p{c.page}] {c.content}"
                 )
             confidences.append(_confidence_for_rag(chunks))
+            # Show the raw brochure excerpt ONLY when the LLM won't summarize it.
+            # When there IS a summary, the (nicely formatted) summary + the source
+            # citation already cover it — the raw run-on excerpt is just noise.
+            if not ir.needs_llm:
+                blocks.append(renderer.rag_block("From brochure", chunks))
 
     # ---- 3) LLM (reasoning only, grounded) -------------------------------
     if ir.needs_llm:

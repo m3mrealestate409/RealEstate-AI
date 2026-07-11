@@ -26,6 +26,9 @@ const SUGGESTIONS = [
   "Golf Hills inventory",
 ];
 
+// Cap query length (matches the backend) so a huge paste can't inflate token cost.
+const MAX_QUERY_LEN = 1000;
+
 export default function Query() {
   const sessionId = useSessionId();
   const [input, setInput] = useState("");
@@ -156,6 +159,9 @@ export default function Query() {
         ))}
       </div>
 
+      {input.length > MAX_QUERY_LEN * 0.8 && (
+        <div className="char-count muted">{input.length}/{MAX_QUERY_LEN}</div>
+      )}
       <form
         className="composer"
         onSubmit={(e) => {
@@ -167,6 +173,7 @@ export default function Query() {
           className="composer-input"
           placeholder={listening ? "Listening…" : "Ask about price, payment plan, possession, amenities…"}
           value={input}
+          maxLength={MAX_QUERY_LEN}
           onChange={(e) => setInput(e.target.value)}
         />
         {speechSupported && (

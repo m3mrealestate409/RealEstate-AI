@@ -15,15 +15,36 @@ from app.services import database_service as dbsvc
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
 
 
-def _latest_brochure(db: Session, project_id: int) -> Document | None:
-    """The most recently uploaded/replaced brochure for a project.
-    `uploaded_at` is refreshed on every upload AND replace, so the newest file
-    always wins — even across multiple separate brochure uploads."""
+def _latest_doc(db: Session, project_id: int, doc_type: str) -> Document | None:
+    """The most recently uploaded/replaced document of a type for a project.
+    `uploaded_at` is refreshed on upload AND replace, so the newest file wins."""
     return (
         db.query(Document)
-        .filter(Document.project_id == project_id, Document.doc_type == "brochure")
+        .filter(Document.project_id == project_id, Document.doc_type == doc_type)
         .order_by(Document.uploaded_at.desc(), Document.version.desc())
         .first()
+    )
+
+
+def _doc_info(db: Session, project_id: int, doc_type: str, user: User) -> dict:
+    get_scoped_project(db, project_id, user)
+    doc = _latest_doc(db, project_id, doc_type)
+    if not doc or not doc.file_path or not os.path.exists(doc.file_path):
+        return {"available": False}
+    return {
+        "available": True, "title": doc.title, "version": doc.version,
+        "uploaded_at": doc.uploaded_at.isoformat() if doc.uploaded_at else None,
+    }
+
+
+def _doc_file(db: Session, project_id: int, doc_type: str, user: User, label: str):
+    get_scoped_project(db, project_id, user)
+    doc = _latest_doc(db, project_id, doc_type)
+    if not doc or not doc.file_path or not os.path.exists(doc.file_path):
+        raise HTTPException(404, f"No {label} available for this project")
+    return FileResponse(
+        doc.file_path, media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{(doc.title or label)}.pdf"'},
     )
 
 
@@ -76,28 +97,19 @@ def project_towers(project_id: int, db: Session = Depends(get_db), user: User = 
 
 @router.get("/{project_id}/brochure/info")
 def brochure_info(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Whether this project has a viewable brochure + its metadata (for the UI)."""
-    get_scoped_project(db, project_id, user)
-    doc = _latest_brochure(db, project_id)
-    if not doc or not doc.file_path or not os.path.exists(doc.file_path):
-        return {"available": False}
-    return {
-        "available": True,
-        "title": doc.title,
-        "version": doc.version,
-        "uploaded_at": doc.uploaded_at.isoformat() if doc.uploaded_at else None,
-    }
+    return _doc_info(db, project_id, "brochure", user)
 
 
 @router.get("/{project_id}/brochure")
 def view_brochure(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Stream the latest brochure PDF inline (org-scoped)."""
-    get_scoped_project(db, project_id, user)
-    doc = _latest_brochure(db, project_id)
-    if not doc or not doc.file_path or not os.path.exists(doc.file_path):
-        raise HTTPException(404, "No brochure available for this project")
-    return FileResponse(
-        doc.file_path,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{(doc.title or "brochure")}.pdf"'},
-    )
+    return _doc_file(db, project_id, "brochure", user, "brochure")
+
+
+@router.get("/{project_id}/cost-sheet/info")
+def cost_sheet_info(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _doc_info(db, project_id, "cost_sheet", user)
+
+
+@router.get("/{project_id}/cost-sheet")
+def view_cost_sheet(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _doc_file(db, project_id, "cost_sheet", user, "cost sheet")

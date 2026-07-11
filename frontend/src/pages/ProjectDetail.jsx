@@ -15,7 +15,9 @@ export default function ProjectDetail() {
   const [inv, setInv] = useState(null);
   const [towers, setTowers] = useState([]);
   const [brochure, setBrochure] = useState(null);   // {available, title, version}
+  const [costSheet, setCostSheet] = useState(null); // {available, title}
   const [pdfUrl, setPdfUrl] = useState(null);        // object URL when viewing
+  const [pdfTitle, setPdfTitle] = useState("");
   const [loadingPdf, setLoadingPdf] = useState(false);
 
   useEffect(() => {
@@ -24,13 +26,15 @@ export default function ProjectDetail() {
     api.projectPaymentPlan(id).then(setPlan);
     api.projectInventory(id).then(setInv);
     api.brochureInfo(id).then(setBrochure).catch(() => setBrochure({ available: false }));
+    api.costSheetInfo(id).then(setCostSheet).catch(() => setCostSheet({ available: false }));
     api.projectTowers(id).then(setTowers).catch(() => setTowers([]));
   }, [id]);
 
-  async function openBrochure() {
+  async function openPdf(path, title) {
     setLoadingPdf(true);
     try {
-      setPdfUrl(await fetchBlobUrl(`/v1/projects/${id}/brochure`));
+      setPdfTitle(title);
+      setPdfUrl(await fetchBlobUrl(path));
     } catch (e) {
       alert(e.message);
     } finally {
@@ -49,10 +53,15 @@ export default function ProjectDetail() {
       <Link to="/projects" className="back-link">← Projects</Link>
       <div className="page-head row-between">
         <h2>{project.name}</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {brochure?.available && (
-            <button className="btn btn-primary" onClick={openBrochure} disabled={loadingPdf}>
-              {loadingPdf ? "Loading…" : "📄 View Brochure"}
+            <button className="btn btn-primary" onClick={() => openPdf(`/v1/projects/${id}/brochure`, brochure.title || "Brochure")} disabled={loadingPdf}>
+              📄 View Brochure
+            </button>
+          )}
+          {costSheet?.available && (
+            <button className="btn" onClick={() => openPdf(`/v1/projects/${id}/cost-sheet`, costSheet.title || "Cost Sheet")} disabled={loadingPdf}>
+              💰 View Cost Sheet
             </button>
           )}
           <StatusChip status={project.project_status} />
@@ -92,9 +101,9 @@ export default function ProjectDetail() {
         <div className="pdf-overlay" onClick={closeBrochure}>
           <div className="pdf-modal" onClick={(e) => e.stopPropagation()}>
             <div className="pdf-modal-head">
-              <span>{brochure?.title || "Brochure"} {brochure?.version ? `(v${brochure.version})` : ""}</span>
+              <span>{pdfTitle}</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <a className="btn btn-ghost" href={pdfUrl} download={`${project.name}-brochure.pdf`}>Download</a>
+                <a className="btn btn-ghost" href={pdfUrl} download={`${project.name}-${pdfTitle}.pdf`}>Download</a>
                 <button className="btn btn-ghost" onClick={closeBrochure}>✕ Close</button>
               </div>
             </div>

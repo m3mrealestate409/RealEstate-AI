@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client.js";
+import { api, fetchBlobUrl } from "../api/client.js";
 import AiSettings from "./AiSettings.jsx";
 import AiImport from "./AiImport.jsx";
 import { StatusPill } from "./Knowledge.jsx";
+
+// Open a protected PDF (brochure/cost sheet) in a new tab via authed blob fetch.
+async function openDoc(path) {
+  try {
+    const url = await fetchBlobUrl(path);
+    window.open(url, "_blank");
+  } catch (e) {
+    alert(e.message);
+  }
+}
 
 export default function Admin() {
   const [tab, setTab] = useState("ai");
@@ -309,12 +319,14 @@ function ManageData() {
             <button className={`tab ${sub === "edit" ? "tab-active" : ""}`} onClick={() => setSub("edit")}>Update Price / Stock</button>
             <button className={`tab ${sub === "config" ? "tab-active" : ""}`} onClick={() => setSub("config")}>Add Configuration</button>
             <button className={`tab ${sub === "plan" ? "tab-active" : ""}`} onClick={() => setSub("plan")}>Add Payment Plan</button>
+            <button className={`tab ${sub === "costsheet" ? "tab-active" : ""}`} onClick={() => setSub("costsheet")}>Cost Sheet</button>
           </div>
           {sub === "details" && <EditProjectDetails projectId={projectId} />}
           {sub === "towers" && <Towers projectId={projectId} />}
           {sub === "edit" && <EditConfigs projectId={projectId} />}
           {sub === "config" && <AddConfig projectId={projectId} />}
           {sub === "plan" && <AddPlan projectId={projectId} />}
+          {sub === "costsheet" && <CostSheet projectId={projectId} />}
         </>
       )}
     </div>
@@ -402,6 +414,51 @@ function Towers({ projectId }) {
         </table>
       </div>
     </div>
+  );
+}
+
+function CostSheet({ projectId }) {
+  const [info, setInfo] = useState(null);
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const load = () => api.costSheetInfo(projectId).then(setInfo).catch(() => setInfo({ available: false }));
+  useEffect(() => { load(); }, [projectId]);
+
+  async function upload(e) {
+    e.preventDefault();
+    if (!file) return;
+    setBusy(true); setMsg(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      await api.uploadCostSheet(projectId, fd);
+      setFile(null);
+      await load();
+      setMsg({ ok: true, text: "Cost sheet uploaded." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <form className="admin-form" onSubmit={upload}>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+      <div className="settings-note">
+        Cost sheet is <b>optional</b>. If you have one, upload the PDF — it will be viewable/downloadable on the project page.
+        It is <b>not</b> used for AI answers (prices come from the structured data).
+      </div>
+      {info?.available && (
+        <div className="alert alert-ok">
+          Current cost sheet: <b>{info.title}</b>{" "}
+          <a className="btn btn-ghost" style={{ marginLeft: 8 }} href="#" onClick={(e) => { e.preventDefault(); openDoc(`/v1/projects/${projectId}/cost-sheet`); }}>View</a>
+          <span className="muted small"> (uploading a new one replaces it)</span>
+        </div>
+      )}
+      <label className="field"><span>Cost sheet PDF</span>
+        <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} />
+      </label>
+      <button className="btn btn-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload cost sheet"}</button>
+    </form>
   );
 }
 

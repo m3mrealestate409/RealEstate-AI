@@ -106,6 +106,37 @@ def upload_document(
     return {"document_id": document.id, "chunks_indexed": chunks, "title": title}
 
 
+@router.post("/projects/{project_id}/cost-sheet", status_code=201)
+def upload_cost_sheet(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role("admin")),
+):
+    """Upload an OPTIONAL cost-sheet PDF for viewing/download. NOT indexed into
+    RAG (pricing is SQL, §6) — this is just a downloadable file. Replaces any
+    existing cost sheet for the project."""
+    project = get_scoped_project(db, project_id, admin)
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    safe_name = f"{project_id}_costsheet_{datetime.now(timezone.utc).timestamp()}_{file.filename}"
+    dest = os.path.join(UPLOAD_DIR, safe_name)
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    doc = Document(
+        project_id=project_id, title=f"{project.name} Cost Sheet", doc_type="cost_sheet",
+        file_path=dest, version=1, status="completed",
+        indexed_at=datetime.now(timezone.utc),
+    )
+    db.add(doc)
+    db.flush()
+    record_audit(db, user_id=admin.id, action="CREATE", entity="documents",
+                 entity_id=doc.id, after={"doc_type": "cost_sheet"})
+    db.commit()
+    return {"document_id": doc.id, "message": "Cost sheet uploaded."}
+
+
 @router.get("/audit")
 def list_audit(
     limit: int = 100,

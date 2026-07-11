@@ -6,6 +6,17 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-07-11
+
+### Added — Cost sheet
+- **Cost Sheet** (optional) — Admin → Manage Data → Cost Sheet lets an admin
+  upload a project's cost-sheet PDF. It is stored for viewing/download only and
+  is **not** indexed into RAG (pricing stays in SQL, §6).
+- The project page now shows a **View Cost Sheet** button next to View Brochure
+  (inline viewer + download), when a cost sheet exists.
+- Endpoints: `POST /v1/admin/projects/{id}/cost-sheet` (upload) and
+  `GET /v1/projects/{id}/cost-sheet(/info)` (serve/metadata), org-scoped.
+
 ## [1.11.0] — 2026-07-10
 
 ### Added — AI-assisted data entry

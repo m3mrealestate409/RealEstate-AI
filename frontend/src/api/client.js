@@ -90,6 +90,9 @@ export const api = {
   projectInventory: (id) => request(`/v1/projects/${id}/inventory`),
   projectTowers: (id) => request(`/v1/projects/${id}/towers`),
   brochureInfo: (id) => request(`/v1/projects/${id}/brochure/info`),
+  costSheetInfo: (id) => request(`/v1/projects/${id}/cost-sheet/info`),
+  uploadCostSheet: (projectId, formData) =>
+    request(`/v1/admin/projects/${projectId}/cost-sheet`, { method: "POST", body: formData }),
   calcTypes: () => request("/v1/calculate/types"),
   calculate: (type, params) => request(`/v1/calculate/${type}`, { method: "POST", body: { params } }),
   createProject: (data) => request("/v1/admin/projects", { method: "POST", body: data }),

@@ -6,6 +6,17 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.13.1] — 2026-07-11
+
+### Changed
+- Renamed "Builder" to **"Developer"** across the UI (real-estate wording).
+  Internal tables are unchanged.
+
+### Added
+- **Delete a developer** — Admin → Developers now has a Delete action. Deletion
+  is blocked with a clear message if any project still uses that developer
+  (`DELETE /v1/admin/builders/{id}`, org-scoped).
+
 ## [1.13.0] — 2026-07-11
 
 ### Added — Project ↔ builder

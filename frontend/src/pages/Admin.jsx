@@ -29,7 +29,7 @@ export default function Admin() {
         <button className={`tab ${tab === "data" ? "tab-active" : ""}`} onClick={() => setTab("data")}>Manage Data</button>
         <button className={`tab ${tab === "document" ? "tab-active" : ""}`} onClick={() => setTab("document")}>Upload Brochure</button>
         <button className={`tab ${tab === "documents" ? "tab-active" : ""}`} onClick={() => setTab("documents")}>Documents</button>
-        <button className={`tab ${tab === "builders" ? "tab-active" : ""}`} onClick={() => setTab("builders")}>Builders</button>
+        <button className={`tab ${tab === "builders" ? "tab-active" : ""}`} onClick={() => setTab("builders")}>Developers</button>
         <button className={`tab ${tab === "doctypes" ? "tab-active" : ""}`} onClick={() => setTab("doctypes")}>Doc Types</button>
         <button className={`tab ${tab === "import" ? "tab-active" : ""}`} onClick={() => setTab("import")}>Import CSV</button>
         <button className={`tab ${tab === "users" ? "tab-active" : ""}`} onClick={() => setTab("users")}>Users</button>
@@ -69,7 +69,7 @@ function ProjectFields({ f, set }) {
     <div className="calc-fields">
       <label className="field"><span>Name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
       {"slug" in f && <label className="field"><span>Slug (unique)</span><input value={f.slug} onChange={(e) => set("slug", e.target.value)} required /></label>}
-      <label className="field"><span>Builder</span>
+      <label className="field"><span>Developer</span>
         <select value={f.builder_id || ""} onChange={(e) => set("builder_id", e.target.value)}>
           <option value="">— None —</option>
           {builders.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -252,7 +252,13 @@ function Builders() {
 
   async function create(e) {
     e.preventDefault(); setMsg(null);
-    try { await api.createBuilder(f); setF({ name: "", rera_id: "" }); await load(); setMsg({ ok: true, text: "Builder added." }); }
+    try { await api.createBuilder(f); setF({ name: "", rera_id: "" }); await load(); setMsg({ ok: true, text: "Developer added." }); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function remove(b) {
+    if (!confirm(`Delete developer "${b.name}"?`)) return;
+    setMsg(null);
+    try { await api.deleteBuilder(b.id); await load(); }
     catch (err) { setMsg({ ok: false, text: err.message }); }
   }
 
@@ -261,16 +267,22 @@ function Builders() {
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
       <form onSubmit={create}>
         <div className="calc-fields">
-          <label className="field"><span>Builder name</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required /></label>
+          <label className="field"><span>Developer name</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required /></label>
           <label className="field"><span>RERA ID</span><input value={f.rera_id} onChange={(e) => setF({ ...f, rera_id: e.target.value })} /></label>
         </div>
-        <button className="btn btn-primary">Add builder</button>
+        <button className="btn btn-primary">Add developer</button>
       </form>
       <div className="table-wrap" style={{ marginTop: 16 }}>
         <table className="data-table">
-          <thead><tr><th>Name</th><th>RERA ID</th><th>Projects</th></tr></thead>
+          <thead><tr><th>Name</th><th>RERA ID</th><th>Projects</th><th></th></tr></thead>
           <tbody>
-            {builders.map((b) => <tr key={b.id}><td>{b.name}</td><td>{b.rera_id || "—"}</td><td>{b.projects}</td></tr>)}
+            {builders.map((b) => (
+              <tr key={b.id}>
+                <td>{b.name}</td><td>{b.rera_id || "—"}</td><td>{b.projects}</td>
+                <td><button className="btn btn-ghost" onClick={() => remove(b)}>Delete</button></td>
+              </tr>
+            ))}
+            {builders.length === 0 && <tr><td colSpan="4" className="muted">No developers yet.</td></tr>}
           </tbody>
         </table>
       </div>

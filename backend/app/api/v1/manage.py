@@ -306,6 +306,21 @@ def create_builder(
     return {"id": b.id, "name": b.name}
 
 
+@router.delete("/builders/{builder_id}")
+def delete_builder(builder_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    b = db.get(Builder, builder_id)
+    if not b or (not admin.is_super_admin and b.organization_id != admin.organization_id):
+        raise HTTPException(404, "Developer not found")
+    in_use = db.query(Project).filter(Project.builder_id == builder_id).count()
+    if in_use:
+        raise HTTPException(409, f"Cannot delete — {in_use} project(s) use this developer. Reassign them first.")
+    record_audit(db, user_id=admin.id, action="DELETE", entity="builders",
+                 entity_id=builder_id, before={"name": b.name})
+    db.delete(b)
+    db.commit()
+    return {"deleted": builder_id}
+
+
 class DocTypesIn(BaseModel):
     types: list[str]
 

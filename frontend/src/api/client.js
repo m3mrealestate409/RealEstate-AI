@@ -160,6 +160,7 @@ export const api = {
   // Builders & document types
   listBuilders: () => request("/v1/admin/builders"),
   createBuilder: (data) => request("/v1/admin/builders", { method: "POST", body: data }),
+  deleteBuilder: (id) => request(`/v1/admin/builders/${id}`, { method: "DELETE" }),
   getDocTypes: () => request("/v1/admin/document-types"),
   setDocTypes: (types) => request("/v1/admin/document-types", { method: "PUT", body: { types } }),
 };

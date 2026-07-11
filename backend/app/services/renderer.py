@@ -69,7 +69,7 @@ def possession_block(project_name: str, data: dict) -> dict:
 def builder_block(project_name: str, data: dict) -> dict:
     return {
         "type": "card",
-        "title": f"{project_name} - Builder",
+        "title": f"{project_name} - Developer",
         "cards": [{"heading": data.get("builder"), "items": [f"RERA: {data.get('rera_id') or 'N/A'}"]}],
     }
 

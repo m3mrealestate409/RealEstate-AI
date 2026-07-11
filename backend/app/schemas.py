@@ -59,6 +59,7 @@ class QueryResponse(BaseModel):
     suggestions: list[str] = []
     limit_reached: bool = False
     cached: bool = False
+    unverified: bool = False
 
 
 # --- Calculation ---

@@ -6,7 +6,19 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
-## [1.15.0] — 2026-07-11
+## [1.16.0] — 2026-07-11
+
+### Added — Internet fallback (unverified)
+- When the company knowledge base has **no answer**, the engine now falls back to
+  the LLM's general knowledge instead of a dead-end "not available" — so the user
+  still gets something.
+- Such answers are clearly flagged: a red **"🌐 Internet · Not confident"** chip
+  plus a warning banner ("not from your data … verify before sharing, especially
+  prices"). The prompt instructs the AI to never invent precise figures.
+- Verified answers from your SQL/RAG data are unchanged (no badge). The fallback
+  needs a real LLM provider (skipped in mock mode) and counts against quota.
+
+
 
 ### Added
 - **Bulk AI Import** — the AI Import tab now takes multiple brochure PDFs at once.

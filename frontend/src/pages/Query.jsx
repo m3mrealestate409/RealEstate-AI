@@ -123,11 +123,21 @@ export default function Query() {
                   {turn.response.cached && (
                     <span className="handler-chip handler-cached">⚡ cached</span>
                   )}
+                  {turn.response.unverified && (
+                    <span className="handler-chip handler-unverified">🌐 Internet · Not confident</span>
+                  )}
                   {!turn.response.not_available && <ConfidenceBadge value={turn.response.confidence} />}
                 </div>
 
                 {turn.response.resolution_note && (
                   <div className="resolution-note">🔎 {turn.response.resolution_note}</div>
+                )}
+
+                {turn.response.unverified && (
+                  <div className="unverified-note">
+                    ⚠️ This is <b>not</b> from your company data — it's an AI answer from general
+                    knowledge and may be inaccurate. <b>Verify before sharing, especially prices.</b>
+                  </div>
                 )}
 
                 {turn.response.content?.blocks?.map((b, j) => <BlockRenderer key={j} block={b} />)}

@@ -52,12 +52,14 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     session_id = session_id or "anonymous"
     org_id = org_scope_id(user) if user is not None else None
     user_id = getattr(user, "id", None)
+    today = date.today().isoformat()
     prior_projects = session_store.last_project_ids(session_id)
 
     ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
 
-    # A project was named but doesn't exist in our data — never guess or reuse
-    # the previous project's data (Constitution §8). Tell the user + suggest.
+    # A project was named but doesn't exist in our data. We never reuse the
+    # previous project's data (§8), but we CAN offer an unverified general-
+    # knowledge answer + suggest the known projects.
     if ir.unknown_project:
         from app.models import Project
 
@@ -65,21 +67,31 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         if org_id is not None:
             pq = pq.filter(Project.organization_id == org_id)
         names = [p.name for p in pq.all()]
-        block = renderer.paragraph_block(
-            "Result",
-            "Information not available in the current knowledge base. "
-            + (f"Did you mean: {', '.join(names)}?" if names else ""),
-        )
-        env = _envelope(
-            blocks=[block], citations=[], handlers=["none"], session_id=session_id,
-            not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
-        )
+        fb = _internet_fallback(query)
+        if fb:
+            env = _envelope(
+                blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
+                citations=[], handlers=["internet"], session_id=session_id,
+                not_available=False, confidence=0.3, intent=ir, suggestions=names[:4],
+            )
+            env["unverified"] = True
+            if user is not None:
+                quota.consume_quota(user, today, org_id)
+        else:
+            block = renderer.paragraph_block(
+                "Result",
+                "Information not available in the current knowledge base. "
+                + (f"Did you mean: {', '.join(names)}?" if names else ""),
+            )
+            env = _envelope(
+                blocks=[block], citations=[], handlers=["none"], session_id=session_id,
+                not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
+            )
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
         return env
 
     # ---- CACHE + QUOTA: only EXPENSIVE (LLM/RAG) queries; SQL look-ups are free.
-    today = date.today().isoformat()
     is_expensive = bool(ir.rag_intents or ir.needs_llm)
     cacheable = is_expensive and not ir.resolved_from_memory  # follow-ups depend on context
 
@@ -219,16 +231,29 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     session_store.remember_turn(session_id, query=query, intents=ir.intents, project_ids=ir.project_ids)
 
     if not blocks:
-        env = _envelope(
-            blocks=[renderer.not_available_block()],
-            citations=[],
-            handlers=_handlers_used(ir),
-            session_id=session_id,
-            not_available=True,
-            confidence=0.0,
-            intent=ir,
-            suggestions=_suggestions(ir),
-        )
+        # Nothing in the company knowledge base — fall back to the LLM's general
+        # knowledge, clearly flagged as UNVERIFIED (red badge in the UI).
+        fb = _internet_fallback(query) if not ir.unknown_project else None
+        if fb:
+            env = _envelope(
+                blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
+                citations=[], handlers=["internet"], session_id=session_id,
+                not_available=False, confidence=0.3, intent=ir, suggestions=_suggestions(ir),
+            )
+            env["unverified"] = True
+            if user is not None:
+                quota.consume_quota(user, today, org_id)  # it's a real LLM call
+        else:
+            env = _envelope(
+                blocks=[renderer.not_available_block()],
+                citations=[],
+                handlers=_handlers_used(ir),
+                session_id=session_id,
+                not_available=True,
+                confidence=0.0,
+                intent=ir,
+                suggestions=_suggestions(ir),
+            )
     else:
         overall_conf = round(sum(confidences) / len(confidences), 2) if confidences else 0.0
         env = _envelope(
@@ -274,6 +299,34 @@ def _comparison_table(db: Session, project_ids: list[int], name_of) -> tuple[lis
     for field in ["Status", "Possession", "Builder", *config_types]:
         rows.append([field, *[facts[pid].get(field, "—") for pid in project_ids]])
     return columns, rows
+
+
+INTERNET_SYSTEM = (
+    "You are a real-estate assistant. The company's own database has NO record for this "
+    "question, so answer from your GENERAL knowledge. Be concise and useful. "
+    "CRITICAL: if you are not certain about a specific local project or an exact figure "
+    "(especially a price), clearly say you are not sure — NEVER invent a precise number, "
+    "price, or date. It is better to give general context than a made-up fact."
+)
+
+
+def _internet_fallback(query: str) -> str | None:
+    """Last-resort answer from the LLM's general knowledge (unverified). Skipped
+    in mock mode. The answer is always flagged unverified to the user."""
+    from app.services.runtime_config import get_llm_config
+
+    if get_llm_config().get("provider") == "mock":
+        return None
+    try:
+        resp = get_llm_provider().complete(
+            system=INTERNET_SYSTEM,
+            messages=[Message(role="user", content=query)],
+            max_tokens=1024,
+        )
+        text = (resp.text or "").strip()
+        return text or None
+    except Exception:
+        return None
 
 
 def _suggestions(ir: intent_svc.IntentResult) -> list[str]:
@@ -348,4 +401,5 @@ def _envelope(*, blocks, citations, handlers, session_id, not_available, confide
         "llm_provider": get_llm_config()["provider"],
         "suggestions": suggestions or [],
         "cached": False,
+        "unverified": False,
     }

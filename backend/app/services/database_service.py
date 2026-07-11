@@ -166,6 +166,29 @@ def overview(db: Session, project_id: int) -> dict:
     }
 
 
+def location(db: Session, project_id: int) -> dict:
+    """Structured location details grouped by category."""
+    from app.models import LocationPoint
+
+    p = db.get(Project, project_id)
+    if not p:
+        return {"found": False}
+    points = db.query(LocationPoint).filter(LocationPoint.project_id == project_id).all()
+    grouped: dict[str, list] = {"nearby": [], "connectivity": [], "upcoming": []}
+    for lp in points:
+        grouped.setdefault(lp.category or "nearby", []).append(
+            {"name": lp.name, "distance": lp.distance, "notes": lp.notes}
+        )
+    return {
+        "found": bool(points),
+        "city": p.city, "locality": p.locality,
+        "nearby": grouped.get("nearby", []),
+        "connectivity": grouped.get("connectivity", []),
+        "upcoming": grouped.get("upcoming", []),
+        "last_updated": _iso(p.updated_at),
+    }
+
+
 def offers(db: Session, project_id: int) -> dict:
     today = date.today()
     active = (
@@ -194,4 +217,5 @@ DB_RESOLVERS = {
     "status": status,
     "offer": offers,
     "overview": overview,
+    "location": location,
 }

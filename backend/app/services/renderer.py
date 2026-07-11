@@ -124,6 +124,29 @@ def overview_block(project_name: str, data: dict) -> dict:
     return {"type": "card", "title": f"{project_name} - Overview", "cards": cards}
 
 
+def location_block(project_name: str, data: dict) -> dict:
+    groups = [
+        ("Nearby", data.get("nearby") or []),
+        ("Connectivity", data.get("connectivity") or []),
+        ("Upcoming Development", data.get("upcoming") or []),
+    ]
+    cards = []
+    for label, points in groups:
+        if not points:
+            continue
+        cards.append({
+            "heading": label,
+            "items": [
+                p["name"] + (f" — {p['distance']}" if p.get("distance") else "")
+                + (f" ({p['notes']})" if p.get("notes") else "")
+                for p in points
+            ],
+        })
+    if not cards:
+        cards = [{"heading": "Location", "items": [f"{data.get('locality') or ''}, {data.get('city') or ''}"]}]
+    return {"type": "card", "title": f"{project_name} - Location & Connectivity", "cards": cards}
+
+
 def rag_block(title: str, chunks: list) -> dict:
     return {
         "type": "checklist",
@@ -179,4 +202,5 @@ DB_BLOCK_BUILDERS = {
     "status": status_block,
     "offer": offer_block,
     "overview": overview_block,
+    "location": location_block,
 }

@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.core.tenancy import get_scoped_project, scope_by_org
 from app.database import get_db
-from app.models import Document, Project, Tower, User
-from app.schemas import ProjectOut, TowerOut
+from app.models import Document, LocationPoint, Project, Tower, User
+from app.schemas import LocationPointOut, ProjectOut, TowerOut
 from app.services import database_service as dbsvc
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
@@ -93,6 +93,12 @@ def project_status(project_id: int, db: Session = Depends(get_db), user: User = 
 def project_towers(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     get_scoped_project(db, project_id, user)
     return db.query(Tower).filter(Tower.project_id == project_id).order_by(Tower.name).all()
+
+
+@router.get("/{project_id}/location", response_model=list[LocationPointOut])
+def project_location(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_scoped_project(db, project_id, user)
+    return db.query(LocationPoint).filter(LocationPoint.project_id == project_id).all()
 
 
 @router.get("/{project_id}/brochure/info")

@@ -34,6 +34,9 @@ INTENT_KEYWORDS: dict[str, list[str]] = {
     "overview": ["land parcel", "land area", "acre", "towers", "tower", "floors", "height",
                  "green area", "open area", "residential", "commercial", "industrial",
                  "project type", "details", "how many towers"],
+    "location": ["location", "nearby", "near by", "surrounding", "surroundings", "around",
+                 "aas paas", "connectivity", "metro", "airport", "highway", "expressway",
+                 "distance", "upcoming", "development around", "what's near", "whats near"],
     # --- Calculation ---
     "calculation": ["calculate", "emi", "roi", "rental yield", "stamp duty", "total cost", "gst", "how much will"],
     # --- RAG (documents) ---
@@ -48,7 +51,7 @@ INTENT_KEYWORDS: dict[str, list[str]] = {
                         "options", "budget", "which should", "show me"],
 }
 
-DB_INTENTS = {"price", "payment_plan", "possession", "inventory", "builder", "status", "offer", "overview"}
+DB_INTENTS = {"price", "payment_plan", "possession", "inventory", "builder", "status", "offer", "overview", "location"}
 RAG_INTENTS = {"amenities", "specifications", "floor_plan", "legal"}
 CALC_INTENTS = {"calculation"}
 LLM_INTENTS = {"comparison", "summary", "recommendation"}

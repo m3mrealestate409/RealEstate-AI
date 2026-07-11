@@ -14,6 +14,7 @@ export default function ProjectDetail() {
   const [plan, setPlan] = useState(null);
   const [inv, setInv] = useState(null);
   const [towers, setTowers] = useState([]);
+  const [location, setLocation] = useState([]);
   const [brochure, setBrochure] = useState(null);   // {available, title, version}
   const [costSheet, setCostSheet] = useState(null); // {available, title}
   const [pdfUrl, setPdfUrl] = useState(null);        // object URL when viewing
@@ -28,6 +29,7 @@ export default function ProjectDetail() {
     api.brochureInfo(id).then(setBrochure).catch(() => setBrochure({ available: false }));
     api.costSheetInfo(id).then(setCostSheet).catch(() => setCostSheet({ available: false }));
     api.projectTowers(id).then(setTowers).catch(() => setTowers([]));
+    api.projectLocation(id).then(setLocation).catch(() => setLocation([]));
   }, [id]);
 
   async function openPdf(path, title) {
@@ -111,6 +113,28 @@ export default function ProjectDetail() {
             <iframe className="pdf-frame" src={pdfUrl} title="Brochure" />
           </div>
         </div>
+      )}
+
+      {location.length > 0 && (
+        <section className="detail-section">
+          <h3>Location & Connectivity</h3>
+          <div className="card-grid">
+            {[["nearby", "Nearby"], ["connectivity", "Connectivity"], ["upcoming", "Upcoming Development"]].map(([cat, label]) => {
+              const items = location.filter((p) => p.category === cat);
+              if (items.length === 0) return null;
+              return (
+                <div className="info-card" key={cat}>
+                  <div className="info-card-head">{label}</div>
+                  <ul className="info-card-list">
+                    {items.map((p) => (
+                      <li key={p.id}>{p.name}{p.distance ? <span className="muted"> — {p.distance}</span> : null}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       <section className="detail-section">

@@ -90,6 +90,10 @@ export default function AiImport() {
             cols={[["type", "Type"], ["carpet_area", "Carpet", "number"], ["super_area", "Super", "number"], ["base_price", "Price", "number", true], ["plc", "PLC", "number"], ["gst_percent", "GST%", "number"]]}
             blank={{ type: "", carpet_area: "", super_area: "", base_price: "", price_unit: "per_sqft", plc: "", gst_percent: "" }} />
 
+          <EditList title="Location & Connectivity" rows={draft.location_points} onChange={(rows) => setField("location_points", rows)}
+            cols={[["category", "Category"], ["name", "Place"], ["distance", "Distance"]]}
+            blank={{ category: "nearby", name: "", distance: "" }} />
+
           <div className="block-title" style={{ marginTop: 16 }}>Payment Plan</div>
           <label className="field" style={{ maxWidth: 260 }}><span>Plan name</span>
             <input value={draft.payment_plan?.name || ""} onChange={(e) => setField("payment_plan", { ...draft.payment_plan, name: e.target.value })} />
@@ -143,6 +147,7 @@ function normalizeDraft(d) {
     project_type: d.project_type || "", project_status: d.project_status || "",
     land_parcel: d.land_parcel || "", green_area: d.green_area || "", possession_date: d.possession_date || "",
     towers: d.towers || [], configurations: d.configurations || [],
+    location_points: d.location_points || [],
     payment_plan: d.payment_plan || { name: "", milestones: [] },
   };
 }
@@ -158,6 +163,9 @@ function toPayload(d) {
     configurations: d.configurations.filter((c) => c.type).map((c) => ({
       type: c.type, carpet_area: num(c.carpet_area), super_area: num(c.super_area),
       base_price: num(c.base_price), price_unit: c.price_unit || "per_sqft", plc: num(c.plc), gst_percent: num(c.gst_percent),
+    })),
+    location_points: (d.location_points || []).filter((l) => l.name).map((l) => ({
+      category: l.category || "nearby", name: l.name, distance: l.distance || null,
     })),
     payment_plan: d.payment_plan && d.payment_plan.milestones?.length
       ? { name: d.payment_plan.name || null, milestones: d.payment_plan.milestones.filter((m) => m.label).map((m) => ({ label: m.label, percent: Number(m.percent) || 0 })) }

@@ -6,6 +6,20 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-07-11
+
+### Added — Location & connectivity
+- **Structured location points** per project — each a category (**Nearby /
+  Connectivity / Upcoming Development**), a place name, and an optional distance.
+  Managed under Admin → Manage Data → Location.
+- Project page shows a grouped **"Location & Connectivity"** section.
+- Query engine answers location questions ("what's nearby", "connectivity",
+  "upcoming development") from SQL.
+- **AI Import** now also extracts location points from the brochure's
+  location/connectivity section into the editable preview.
+- Endpoints: `GET/POST /v1/admin/projects/{id}/location`, `DELETE /v1/admin/location/{id}`,
+  `GET /v1/projects/{id}/location` — org-scoped.
+
 ## [1.13.1] — 2026-07-11
 
 ### Changed

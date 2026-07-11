@@ -341,6 +341,7 @@ function ManageData() {
           <div className="calc-tabs">
             <button className={`tab ${sub === "details" ? "tab-active" : ""}`} onClick={() => setSub("details")}>Project Details</button>
             <button className={`tab ${sub === "towers" ? "tab-active" : ""}`} onClick={() => setSub("towers")}>Towers</button>
+            <button className={`tab ${sub === "location" ? "tab-active" : ""}`} onClick={() => setSub("location")}>Location</button>
             <button className={`tab ${sub === "edit" ? "tab-active" : ""}`} onClick={() => setSub("edit")}>Update Price / Stock</button>
             <button className={`tab ${sub === "config" ? "tab-active" : ""}`} onClick={() => setSub("config")}>Add Configuration</button>
             <button className={`tab ${sub === "plan" ? "tab-active" : ""}`} onClick={() => setSub("plan")}>Add Payment Plan</button>
@@ -348,6 +349,7 @@ function ManageData() {
           </div>
           {sub === "details" && <EditProjectDetails projectId={projectId} />}
           {sub === "towers" && <Towers projectId={projectId} />}
+          {sub === "location" && <LocationPoints projectId={projectId} />}
           {sub === "edit" && <EditConfigs projectId={projectId} />}
           {sub === "config" && <AddConfig projectId={projectId} />}
           {sub === "plan" && <AddPlan projectId={projectId} />}
@@ -435,6 +437,61 @@ function Towers({ projectId }) {
               </tr>
             ))}
             {towers.length === 0 && <tr><td colSpan="5" className="muted">No towers yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const LOC_CATEGORIES = [["nearby", "Nearby"], ["connectivity", "Connectivity"], ["upcoming", "Upcoming Development"]];
+
+function LocationPoints({ projectId }) {
+  const [points, setPoints] = useState([]);
+  const [f, setF] = useState({ category: "nearby", name: "", distance: "" });
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const load = () => api.listLocation(projectId).then(setPoints);
+  useEffect(() => { load(); }, [projectId]);
+
+  async function add(e) {
+    e.preventDefault(); setMsg(null);
+    try {
+      await api.addLocation(projectId, { category: f.category, name: f.name, distance: f.distance || null });
+      setF({ category: f.category, name: "", distance: "" });
+      await load(); setMsg({ ok: true, text: "Location point added." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function remove(id) { if (confirm("Delete this location point?")) { await api.deleteLocation(id); load(); } }
+
+  const label = (c) => (LOC_CATEGORIES.find((x) => x[0] === c) || [c, c])[1];
+
+  return (
+    <div className="admin-form">
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+      <form onSubmit={add}>
+        <div className="calc-fields">
+          <label className="field"><span>Category</span>
+            <select value={f.category} onChange={(e) => set("category", e.target.value)}>
+              {LOC_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label className="field"><span>Name / place</span><input placeholder="DPS School, Metro Station…" value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
+          <label className="field"><span>Distance (optional)</span><input placeholder="2 km / 10 min" value={f.distance} onChange={(e) => set("distance", e.target.value)} /></label>
+        </div>
+        <button className="btn btn-primary">Add location point</button>
+      </form>
+      <div className="table-wrap" style={{ marginTop: 16 }}>
+        <table className="data-table">
+          <thead><tr><th>Category</th><th>Place</th><th>Distance</th><th></th></tr></thead>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.id}>
+                <td>{label(p.category)}</td><td>{p.name}</td><td>{p.distance || "—"}</td>
+                <td><button className="btn btn-ghost" onClick={() => remove(p.id)}>Delete</button></td>
+              </tr>
+            ))}
+            {points.length === 0 && <tr><td colSpan="4" className="muted">No location points yet.</td></tr>}
           </tbody>
         </table>
       </div>

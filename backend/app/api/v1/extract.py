@@ -21,6 +21,7 @@ from app.database import get_db
 from app.models import (
     Configuration,
     Inventory,
+    LocationPoint,
     PaymentPlan,
     PaymentPlanMilestone,
     Price,
@@ -95,6 +96,13 @@ class TowerDraft(BaseModel):
     units_per_floor: int | None = None
 
 
+class LocationDraft(BaseModel):
+    category: str = "nearby"
+    name: str
+    distance: str | None = None
+    notes: str | None = None
+
+
 class ApplyDraft(BaseModel):
     project_type: str | None = None
     land_parcel: str | None = None
@@ -104,6 +112,7 @@ class ApplyDraft(BaseModel):
     towers: list[TowerDraft] = []
     configurations: list[ConfigDraft] = []
     payment_plan: PaymentPlanDraft | None = None
+    location_points: list[LocationDraft] = []
 
 
 @router.post("/projects/{project_id}/apply")
@@ -115,7 +124,7 @@ def apply_draft(
 ):
     """Write the reviewed draft into SQL (additive). Returns a summary."""
     project = get_scoped_project(db, project_id, admin)
-    summary = {"fields": 0, "towers": 0, "configurations": 0, "payment_plan": False}
+    summary = {"fields": 0, "towers": 0, "configurations": 0, "payment_plan": False, "location_points": 0}
 
     # Project-level attributes (only the ones provided).
     for attr in ("project_type", "land_parcel", "green_area", "project_status"):
@@ -153,6 +162,13 @@ def apply_draft(
             db.add(Inventory(configuration_id=cfg.id, total_units=c.total_units,
                             available_units=c.available_units))
         summary["configurations"] += 1
+
+    for lp in payload.location_points:
+        if not lp.name:
+            continue
+        db.add(LocationPoint(project_id=project_id, category=lp.category or "nearby",
+                            name=lp.name, distance=lp.distance, notes=lp.notes))
+        summary["location_points"] += 1
 
     pp = payload.payment_plan
     if pp and pp.milestones:

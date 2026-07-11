@@ -24,7 +24,10 @@ SCHEMA_HINT = """{
   "configurations": [ {"type": string, "carpet_area": number|null, "super_area": number|null,
                        "base_price": number|null, "price_unit": "per_sqft"|"total"|null,
                        "plc": number|null, "gst_percent": number|null} ],
-  "payment_plan": {"name": string|null, "milestones": [ {"label": string, "percent": number} ]}
+  "payment_plan": {"name": string|null, "milestones": [ {"label": string, "percent": number} ]},
+  "location_points": [ {"category": "nearby"|"connectivity"|"upcoming", "name": string, "distance": string|null} ]
+      // nearby = schools/hospitals/malls; connectivity = roads/metro/airport;
+      // upcoming = planned developments in the area. distance like "2 km" / "10 min" if stated.
 }"""
 
 SYSTEM = (
@@ -60,6 +63,7 @@ def _normalize(d: dict) -> dict:
         "towers": d.get("towers") or [],
         "configurations": d.get("configurations") or [],
         "payment_plan": d.get("payment_plan") or {"name": None, "milestones": []},
+        "location_points": d.get("location_points") or [],
     }
 
 

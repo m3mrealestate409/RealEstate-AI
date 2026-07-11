@@ -143,6 +143,9 @@ class Project(Base):
     towers: Mapped[list["Tower"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="Tower.name"
     )
+    location_points: Mapped[list["LocationPoint"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class Tower(Base):
@@ -158,6 +161,22 @@ class Tower(Base):
     units_per_floor: Mapped[int | None] = mapped_column(Integer)
 
     project: Mapped["Project"] = relationship(back_populates="towers")
+
+
+class LocationPoint(Base):
+    """A structured location highlight for a project (nearby place / connectivity /
+    upcoming development), each with an optional distance."""
+
+    __tablename__ = "location_points"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    category: Mapped[str] = mapped_column(String)   # nearby | connectivity | upcoming
+    name: Mapped[str] = mapped_column(String)       # "DPS School", "Dwarka Expressway"
+    distance: Mapped[str | None] = mapped_column(String)  # "2 km", "10 min"
+    notes: Mapped[str | None] = mapped_column(String)
+
+    project: Mapped["Project"] = relationship(back_populates="location_points")
 
 
 class Configuration(Base):

@@ -131,3 +131,17 @@ class TowerOut(TowerIn):
 
     class Config:
         from_attributes = True
+
+
+class LocationPointIn(BaseModel):
+    category: str = "nearby"       # nearby | connectivity | upcoming
+    name: str
+    distance: str | None = None
+    notes: str | None = None
+
+
+class LocationPointOut(LocationPointIn):
+    id: int
+
+    class Config:
+        from_attributes = True

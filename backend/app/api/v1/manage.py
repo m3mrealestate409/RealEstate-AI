@@ -21,6 +21,7 @@ from app.models import (
     Builder,
     Configuration,
     Inventory,
+    LocationPoint,
     PaymentPlan,
     PaymentPlanMilestone,
     Price,
@@ -29,7 +30,7 @@ from app.models import (
     Tower,
     User,
 )
-from app.schemas import TowerIn, TowerOut
+from app.schemas import LocationPointIn, LocationPointOut, TowerIn, TowerOut
 
 router = APIRouter(prefix="/v1/admin", tags=["data-management"])
 
@@ -274,6 +275,41 @@ def delete_tower(tower_id: int, db: Session = Depends(get_db), admin: User = Dep
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"deleted": tower_id}
+
+
+@router.get("/projects/{project_id}/location", response_model=list[LocationPointOut])
+def list_location(project_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    get_scoped_project(db, project_id, admin)
+    return db.query(LocationPoint).filter(LocationPoint.project_id == project_id).all()
+
+
+@router.post("/projects/{project_id}/location", response_model=LocationPointOut, status_code=201)
+def add_location(project_id: int, payload: LocationPointIn, db: Session = Depends(get_db),
+                 admin: User = Depends(require_role("admin"))):
+    get_scoped_project(db, project_id, admin)
+    lp = LocationPoint(project_id=project_id, **payload.model_dump())
+    db.add(lp)
+    db.flush()
+    record_audit(db, user_id=admin.id, action="CREATE", entity="location_points",
+                 entity_id=lp.id, after=payload.model_dump())
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    db.refresh(lp)
+    return lp
+
+
+@router.delete("/location/{point_id}")
+def delete_location(point_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    lp = db.get(LocationPoint, point_id)
+    if not lp:
+        raise HTTPException(404, "Location point not found")
+    get_scoped_project(db, lp.project_id, admin)
+    record_audit(db, user_id=admin.id, action="DELETE", entity="location_points",
+                 entity_id=point_id, before={"name": lp.name})
+    db.delete(lp)
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"deleted": point_id}
 
 
 class BuilderIn(BaseModel):

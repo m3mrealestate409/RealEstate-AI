@@ -546,9 +546,13 @@ function CostSheet({ projectId }) {
 
 function EditConfigs({ projectId }) {
   const [configs, setConfigs] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [msg, setMsg] = useState(null);
   const load = () => api.listConfigurations(projectId).then(setConfigs);
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => {
+    load();
+    api.listPaymentPlans(projectId).then(setPlans).catch(() => setPlans([]));
+  }, [projectId]);
 
   if (configs.length === 0)
     return <div className="muted">No configurations yet. Use "Add Configuration" first.</div>;
@@ -558,27 +562,42 @@ function EditConfigs({ projectId }) {
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
       <div className="edit-config-list">
         {configs.map((c) => (
-          <EditConfigRow key={c.id} config={c} onDone={(m) => { setMsg(m); load(); }} />
+          <EditConfigRow key={c.id} config={c} plans={plans} onDone={(m) => { setMsg(m); load(); }} />
         ))}
       </div>
     </div>
   );
 }
 
-function EditConfigRow({ config, onDone }) {
-  const [price, setPrice] = useState(config.current_price?.base_price ?? "");
+function EditConfigRow({ config, plans = [], onDone }) {
   const [avail, setAvail] = useState(config.inventory?.available_units ?? "");
   const [saving, setSaving] = useState(false);
+
+  // Which price we're editing: "" = base, else a payment_plan_id (as string).
+  const [target, setTarget] = useState("");
+  const priceFor = (t) => {
+    if (!t) return config.current_price?.base_price ?? "";
+    const pp = (config.plan_prices || []).find((x) => String(x.payment_plan_id) === String(t));
+    return pp?.base_price ?? "";
+  };
+  const [price, setPrice] = useState(priceFor(""));
+
+  function changeTarget(t) { setTarget(t); setPrice(priceFor(t)); }
 
   async function savePrice() {
     setSaving(true);
     try {
       const cp = config.current_price || {};
       await api.updatePrice(config.id, {
-        base_price: Number(price), price_unit: cp.price_unit || "per_sqft",
-        plc: cp.plc ?? null, gst_percent: cp.gst_percent ?? null,
+        base_price: Number(price),
+        price_unit: cp.price_unit || "per_sqft",
+        // Plan overrides inherit PLC/GST from the base price → send null.
+        plc: target ? null : (cp.plc ?? null),
+        gst_percent: target ? null : (cp.gst_percent ?? null),
+        payment_plan_id: target ? Number(target) : null,
       });
-      onDone({ ok: true, text: `${config.type}: price updated to ${Number(price).toLocaleString("en-IN")} (old price kept in history).` });
+      const label = target ? (plans.find((p) => String(p.id) === String(target))?.name || "plan") : "base";
+      onDone({ ok: true, text: `${config.type} · ${label}: price updated to ${Number(price).toLocaleString("en-IN")} (old price kept in history).` });
     } catch (e) { onDone({ ok: false, text: e.message }); }
     finally { setSaving(false); }
   }
@@ -591,18 +610,35 @@ function EditConfigRow({ config, onDone }) {
     finally { setSaving(false); }
   }
 
-  const priceChanged = String(price) !== String(config.current_price?.base_price ?? "");
+  const priceChanged = String(price) !== String(priceFor(target));
   const stockChanged = String(avail) !== String(config.inventory?.available_units ?? "");
 
   return (
     <div className="edit-config-row">
       <div className="ecr-title">{config.type}
-        <span className="muted small"> · from {config.current_price?.effective_from || "—"}</span>
+        <span className="muted small"> · base from {config.current_price?.effective_from || "—"}</span>
       </div>
+
+      {(config.plan_prices || []).length > 0 && (
+        <div className="ecr-planprices">
+          {config.plan_prices.map((pp) => (
+            <span key={pp.payment_plan_id} className="chip chip-sm">
+              {pp.plan}: ₹{Number(pp.base_price).toLocaleString("en-IN")}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="ecr-fields">
         <div className="ecr-field">
           <label>Price ({config.current_price?.price_unit || "per_sqft"})</label>
           <div className="ecr-inline">
+            {plans.length > 0 && (
+              <select value={target} onChange={(e) => changeTarget(e.target.value)}>
+                <option value="">Base (all plans)</option>
+                {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
             <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
             <button className="btn btn-primary" disabled={!priceChanged || saving} onClick={savePrice}>Update</button>
           </div>
@@ -659,6 +695,10 @@ function AddPlan({ projectId }) {
   const [desc, setDesc] = useState("");
   const [milestones, setMilestones] = useState([{ label: "On Booking", percent: 10 }, { label: "On Possession", percent: 90 }]);
   const [msg, setMsg] = useState(null);
+  const [plans, setPlans] = useState([]);
+
+  const loadPlans = () => api.listPaymentPlans(projectId).then(setPlans).catch(() => setPlans([]));
+  useEffect(() => { loadPlans(); }, [projectId]);
 
   const total = milestones.reduce((s, m) => s + Number(m.percent || 0), 0);
   function setM(i, k, v) { setMilestones((s) => s.map((m, j) => (j === i ? { ...m, [k]: v } : m))); }
@@ -672,12 +712,35 @@ function AddPlan({ projectId }) {
         milestones: milestones.map((m) => ({ label: m.label, percent: Number(m.percent) })),
       });
       setMsg({ ok: true, text: r.message });
+      loadPlans();
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+
+  async function removePlan(p) {
+    if (!window.confirm(`Delete payment plan "${p.name}"? Any prices set only for this plan will also be removed (those configs revert to base price).`)) return;
+    setMsg(null);
+    try {
+      const r = await api.deletePaymentPlan(p.id);
+      setMsg({ ok: true, text: r.message });
+      loadPlans();
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
 
   return (
     <form onSubmit={submit}>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      {plans.length > 0 && (
+        <div className="existing-plans">
+          <div className="muted small" style={{ marginBottom: 6 }}>Existing payment plans</div>
+          {plans.map((p) => (
+            <div className="existing-plan-row" key={p.id}>
+              <span>{p.name}</span>
+              <button type="button" className="btn btn-ghost btn-danger" onClick={() => removePlan(p)}>Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="calc-fields">
         <label className="field"><span>Plan name (e.g. 10:80:10)</span><input value={name} onChange={(e) => setName(e.target.value)} required /></label>
         <label className="field"><span>Description</span><input value={desc} onChange={(e) => setDesc(e.target.value)} /></label>

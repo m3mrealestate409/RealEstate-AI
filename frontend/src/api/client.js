@@ -129,6 +129,10 @@ export const api = {
     request(`/v1/admin/configurations/${configId}/inventory`, { method: "PUT", body: data }),
   addPaymentPlan: (projectId, data) =>
     request(`/v1/admin/projects/${projectId}/payment-plans`, { method: "POST", body: data }),
+  listPaymentPlans: (projectId) =>
+    request(`/v1/admin/projects/${projectId}/payment-plans`),
+  deletePaymentPlan: (planId) =>
+    request(`/v1/admin/payment-plans/${planId}`, { method: "DELETE" }),
   importProjectsCsv: (formData) =>
     request("/v1/admin/import/projects-csv", { method: "POST", body: formData }),
   extractDraft: (formData) => request("/v1/admin/extract", { method: "POST", body: formData }),

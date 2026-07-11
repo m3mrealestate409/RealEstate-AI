@@ -50,6 +50,9 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS land_parcel TEXT"))
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS green_area TEXT"))
         conn.execute(text("ALTER TABLE builders ADD COLUMN IF NOT EXISTS organization_id BIGINT"))
+        # Per-payment-plan pricing: a Price may target a specific payment plan
+        # (NULL = the base price for all plans).
+        conn.execute(text("ALTER TABLE prices ADD COLUMN IF NOT EXISTS payment_plan_id BIGINT"))
     logger.info("Database initialised.")
 
 

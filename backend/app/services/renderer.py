@@ -9,21 +9,35 @@ from __future__ import annotations
 
 
 def price_block(project_name: str, data: dict) -> dict:
+    rows = []
+    for r in data.get("prices", []):
+        plans = r.get("plans") or []
+        # Show the base row unless the config has ONLY plan-specific prices.
+        if r.get("base_price") is not None or not plans:
+            rows.append([
+                r["configuration"],
+                "Base (all plans)",
+                r.get("carpet_area"),
+                r.get("base_price"),
+                r.get("price_unit"),
+                r.get("plc"),
+                r.get("gst_percent"),
+            ])
+        for pl in plans:
+            rows.append([
+                r["configuration"],
+                pl["plan"],
+                r.get("carpet_area"),
+                pl["base_price"],
+                pl["price_unit"],
+                pl.get("plc"),
+                pl.get("gst_percent"),
+            ])
     return {
         "type": "table",
         "title": f"{project_name} - Price",
-        "columns": ["Configuration", "Carpet Area", "Base Price", "Unit", "PLC", "GST %"],
-        "rows": [
-            [
-                r["configuration"],
-                r.get("carpet_area"),
-                r["base_price"],
-                r["price_unit"],
-                r.get("plc"),
-                r.get("gst_percent"),
-            ]
-            for r in data.get("prices", [])
-        ],
+        "columns": ["Configuration", "Plan", "Carpet Area", "Base Price", "Unit", "PLC", "GST %"],
+        "rows": rows,
     }
 
 

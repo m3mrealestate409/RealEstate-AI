@@ -16,13 +16,27 @@ from app.models import Configuration, Price, Project
 
 
 def _current_price(db: Session, config_id: int) -> Price | None:
+    # Prefer the base price (plan-independent). If a config only has plan-specific
+    # prices, fall back to the cheapest so it still appears in recommendations.
+    base = (
+        db.query(Price)
+        .filter(
+            Price.configuration_id == config_id,
+            Price.payment_plan_id.is_(None),
+            or_(Price.effective_to.is_(None), Price.effective_to >= date.today()),
+        )
+        .order_by(Price.effective_from.desc())
+        .first()
+    )
+    if base:
+        return base
     return (
         db.query(Price)
         .filter(
             Price.configuration_id == config_id,
             or_(Price.effective_to.is_(None), Price.effective_to >= date.today()),
         )
-        .order_by(Price.effective_from.desc())
+        .order_by(Price.base_price.asc())
         .first()
     )
 

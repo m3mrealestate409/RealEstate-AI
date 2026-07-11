@@ -6,6 +6,28 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-07-11
+
+### Added — Per-payment-plan pricing
+- The **same configuration can now have a different price per payment plan**
+  (real estate: e.g. Down-Payment is cheaper than CLP or Subvention). Each
+  config keeps a **base price** (applies to all plans) plus optional **per-plan
+  overrides**. A plan override supplies only the rate — PLC and GST are inherited
+  from the base price.
+- **Admin → Manage Data → Update Price / Stock**: a "For plan" selector lets you
+  set the base price or a specific plan's price; existing plan prices show as
+  chips on each configuration.
+- The query engine and the project page now show a plan-wise price table
+  (Configuration · Plan · Price…). Recommendations use the base price (falling
+  back to the cheapest plan price).
+- Backward compatible: all existing prices become the base price automatically.
+
+### Added — Delete payment plans
+- Payment plans can now be **deleted** (previously only added). Admin → Manage
+  Data → Add Payment Plan lists existing plans with a Delete button.
+- Deleting a plan also removes any prices set only for that plan (those configs
+  revert to their base price); the confirmation dialog states this.
+
 ## [1.17.0] — 2026-07-11
 
 ### Security — production-grade audit, Critical + High fixes

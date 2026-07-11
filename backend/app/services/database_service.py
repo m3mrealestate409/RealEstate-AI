@@ -32,34 +32,70 @@ def get_project(db: Session, project_id: int) -> Project | None:
 
 
 def current_price(db: Session, project_id: int) -> dict:
-    """Current price per configuration (effective_to IS NULL)."""
+    """Current price per configuration. Each config has a BASE price
+    (payment_plan_id IS NULL) plus optional per-payment-plan overrides. A plan
+    override supplies its own rate; PLC/GST are inherited from the base when the
+    override leaves them blank."""
+    today = date.today()
     configs = db.query(Configuration).filter(Configuration.project_id == project_id).all()
     rows, last_updated = [], None
     for cfg in configs:
-        price = (
+        open_prices = (
             db.query(Price)
             .filter(
                 Price.configuration_id == cfg.id,
-                or_(Price.effective_to.is_(None), Price.effective_to >= date.today()),
+                or_(Price.effective_to.is_(None), Price.effective_to >= today),
             )
             .order_by(Price.effective_from.desc())
-            .first()
+            .all()
         )
-        if not price:
+        if not open_prices:
             continue
+
+        # Latest open price per plan (None key = base price).
+        by_plan: dict = {}
+        for p in open_prices:
+            by_plan.setdefault(p.payment_plan_id, p)  # first = latest (ordered desc)
+
+        base = by_plan.get(None)
+        base_plc = float(base.plc) if base and base.plc is not None else None
+        base_gst = float(base.gst_percent) if base and base.gst_percent is not None else None
+
+        plans = []
+        for plan_id, p in by_plan.items():
+            if plan_id is None:
+                continue
+            pp = db.get(PaymentPlan, plan_id)
+            plans.append(
+                {
+                    "payment_plan_id": plan_id,
+                    "plan": pp.name if pp else f"Plan {plan_id}",
+                    "base_price": float(p.base_price),
+                    "price_unit": p.price_unit,
+                    "plc": float(p.plc) if p.plc is not None else base_plc,
+                    "gst_percent": float(p.gst_percent) if p.gst_percent is not None else base_gst,
+                    "source": p.source,
+                    "effective_from": _iso(p.effective_from),
+                }
+            )
+        plans.sort(key=lambda r: r["plan"])
+
         rows.append(
             {
                 "configuration": cfg.type,
                 "carpet_area": float(cfg.carpet_area) if cfg.carpet_area else None,
-                "base_price": float(price.base_price),
-                "price_unit": price.price_unit,
-                "plc": float(price.plc) if price.plc else None,
-                "gst_percent": float(price.gst_percent) if price.gst_percent else None,
-                "source": price.source,
-                "effective_from": _iso(price.effective_from),
+                "base_price": float(base.base_price) if base else None,
+                "price_unit": base.price_unit if base else (plans[0]["price_unit"] if plans else "per_sqft"),
+                "plc": base_plc,
+                "gst_percent": base_gst,
+                "source": base.source if base else None,
+                "effective_from": _iso(base.effective_from) if base else None,
+                "plans": plans,
             }
         )
-        last_updated = price.effective_from if not last_updated else max(last_updated, price.effective_from)
+        for p in open_prices:
+            if p.effective_from:
+                last_updated = p.effective_from if not last_updated else max(last_updated, p.effective_from)
     return {"found": bool(rows), "prices": rows, "last_updated": _iso(last_updated)}
 
 

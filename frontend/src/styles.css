@@ -231,6 +231,14 @@ a { color: inherit; text-decoration: none; }
 .ecr-field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
 .ecr-inline { display: flex; gap: 6px; }
 .ecr-inline input { width: 130px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.ecr-inline select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; min-width: 130px; }
+.ecr-planprices { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.existing-plans { margin-bottom: 16px; max-width: 420px; }
+.existing-plan-row { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; }
+.existing-plan-row span { font-weight: 600; }
+.btn-danger { color: #c0392b; }
+.btn-danger:hover { background: #fdecea; border-color: #f5c6c0; }
 
 /* ---------- PDF brochure viewer ---------- */
 .pdf-overlay { position: fixed; inset: 0; background: rgba(10,14,22,.6); z-index: 100;

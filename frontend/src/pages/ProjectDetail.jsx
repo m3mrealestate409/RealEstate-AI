@@ -141,15 +141,29 @@ export default function ProjectDetail() {
         <h3>Price <SourceTag>SQL</SourceTag></h3>
         <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>Config</th><th>Carpet</th><th>Base Price</th><th>Unit</th><th>PLC</th><th>GST%</th></tr></thead>
+            <thead><tr><th>Config</th><th>Plan</th><th>Carpet</th><th>Base Price</th><th>Unit</th><th>PLC</th><th>GST%</th></tr></thead>
             <tbody>
-              {price?.prices?.map((p, i) => (
-                <tr key={i}>
-                  <td>{p.configuration}</td><td>{money(p.carpet_area)}</td>
-                  <td>₹{money(p.base_price)}</td><td>{p.price_unit}</td>
-                  <td>₹{money(p.plc)}</td><td>{p.gst_percent}</td>
-                </tr>
-              )) || <tr><td colSpan="6" className="muted">—</td></tr>}
+              {price?.prices?.flatMap((p, i) => {
+                const trs = [];
+                if (p.base_price != null || !(p.plans?.length))
+                  trs.push(
+                    <tr key={`${i}-b`}>
+                      <td>{p.configuration}</td><td className="muted">Base (all plans)</td>
+                      <td>{money(p.carpet_area)}</td><td>₹{money(p.base_price)}</td><td>{p.price_unit}</td>
+                      <td>₹{money(p.plc)}</td><td>{p.gst_percent}</td>
+                    </tr>
+                  );
+                (p.plans || []).forEach((pl, j) =>
+                  trs.push(
+                    <tr key={`${i}-p${j}`}>
+                      <td></td><td>{pl.plan}</td><td></td>
+                      <td>₹{money(pl.base_price)}</td><td>{pl.price_unit}</td>
+                      <td>₹{money(pl.plc)}</td><td>{pl.gst_percent}</td>
+                    </tr>
+                  )
+                );
+                return trs;
+              }) || <tr><td colSpan="7" className="muted">—</td></tr>}
             </tbody>
           </table>
         </div>

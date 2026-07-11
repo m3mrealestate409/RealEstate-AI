@@ -208,6 +208,10 @@ class Price(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     configuration_id: Mapped[int] = mapped_column(ForeignKey("configurations.id", ondelete="CASCADE"))
+    # Optional: price specific to a payment plan (real estate — the same config
+    # can cost differently under CLP vs Down-Payment vs Subvention). NULL = the
+    # base/default price that applies when no plan-specific price exists.
+    payment_plan_id: Mapped[int | None] = mapped_column(ForeignKey("payment_plans.id"))
     base_price: Mapped[float] = mapped_column(Numeric, nullable=False)
     price_unit: Mapped[str] = mapped_column(String, default="per_sqft")  # per_sqft | total
     plc: Mapped[float | None] = mapped_column(Numeric)

@@ -105,12 +105,32 @@ def list_configurations(
             db.query(Price)
             .filter(
                 Price.configuration_id == cfg.id,
+                Price.payment_plan_id.is_(None),  # the BASE price (plan overrides listed separately)
                 or_(Price.effective_to.is_(None), Price.effective_to >= date.today()),
             )
             .order_by(Price.effective_from.desc())
             .first()
         )
         inv = db.query(Inventory).filter(Inventory.configuration_id == cfg.id).first()
+
+        # Per-payment-plan price overrides (latest open row per plan).
+        plan_rows = (
+            db.query(Price, PaymentPlan.name)
+            .join(PaymentPlan, PaymentPlan.id == Price.payment_plan_id)
+            .filter(Price.configuration_id == cfg.id, Price.effective_to.is_(None))
+            .order_by(Price.effective_from.desc())
+            .all()
+        )
+        plan_prices, seen = [], set()
+        for p, pname in plan_rows:
+            if p.payment_plan_id in seen:
+                continue
+            seen.add(p.payment_plan_id)
+            plan_prices.append({
+                "payment_plan_id": p.payment_plan_id, "plan": pname,
+                "base_price": float(p.base_price), "price_unit": p.price_unit,
+            })
+
         out.append({
             "id": cfg.id, "type": cfg.type,
             "carpet_area": float(cfg.carpet_area) if cfg.carpet_area else None,
@@ -122,6 +142,7 @@ def list_configurations(
                 "effective_from": price.effective_from.isoformat() if price.effective_from else None,
                 "source": price.source,
             } if price else None,
+            "plan_prices": plan_prices,
             "inventory": {
                 "total_units": inv.total_units, "available_units": inv.available_units,
             } if inv else None,
@@ -135,6 +156,9 @@ class PriceUpdateIn(BaseModel):
     plc: float | None = None
     gst_percent: float | None = None
     source: str | None = None
+    # None = the base price (applies to all plans). Set to a payment plan id to
+    # give that plan its own price (real estate — price varies by payment plan).
+    payment_plan_id: int | None = None
 
 
 @router.put("/configurations/{config_id}/price")
@@ -142,23 +166,40 @@ def update_price(
     config_id: int, payload: PriceUpdateIn,
     db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
 ):
-    """Update a configuration's price WITHOUT losing history.
-    Closes the currently-open price(s) as of today and inserts a new current row."""
+    """Update a configuration's price WITHOUT losing history. Scoped to a single
+    payment plan (or the base price when payment_plan_id is None): closes the
+    currently-open price(s) for that plan and inserts a new current row."""
     cfg = db.get(Configuration, config_id)
     if not cfg:
         raise HTTPException(404, "Configuration not found")
     get_scoped_project(db, cfg.project_id, admin)
 
-    # Close any still-open price rows so the new one becomes current.
-    open_prices = db.query(Price).filter(
+    plan_name = "base"
+    if payload.payment_plan_id is not None:
+        pp = db.get(PaymentPlan, payload.payment_plan_id)
+        if not pp or pp.project_id != cfg.project_id:
+            raise HTTPException(422, "Invalid payment plan for this configuration's project")
+        plan_name = pp.name
+
+    # Close any still-open price rows FOR THIS PLAN (or base) so the new one wins.
+    q = db.query(Price).filter(
         Price.configuration_id == config_id, Price.effective_to.is_(None)
-    ).all()
-    old_snapshot = [{"base_price": float(p.base_price), "from": p.effective_from.isoformat()} for p in open_prices]
+    )
+    if payload.payment_plan_id is None:
+        q = q.filter(Price.payment_plan_id.is_(None))
+    else:
+        q = q.filter(Price.payment_plan_id == payload.payment_plan_id)
+    open_prices = q.all()
+    old_snapshot = [
+        {"base_price": float(p.base_price), "from": p.effective_from.isoformat() if p.effective_from else None}
+        for p in open_prices
+    ]
     for p in open_prices:
         p.effective_to = date.today()
 
     new = Price(
-        configuration_id=config_id, base_price=payload.base_price, price_unit=payload.price_unit,
+        configuration_id=config_id, payment_plan_id=payload.payment_plan_id,
+        base_price=payload.base_price, price_unit=payload.price_unit,
         plc=payload.plc, gst_percent=payload.gst_percent, effective_from=date.today(),
         effective_to=None, source=payload.source or "Price update", created_by=admin.id,
     )
@@ -169,8 +210,8 @@ def update_price(
                  after=payload.model_dump(mode="json"))
     db.commit()
     cache.bump_org(admin.organization_id)
-    return {"configuration_id": config_id, "new_price": payload.base_price,
-            "message": f"Price updated to {payload.base_price} (previous price kept in history)."}
+    return {"configuration_id": config_id, "new_price": payload.base_price, "plan": plan_name,
+            "message": f"Price for '{plan_name}' updated to {payload.base_price} (previous price kept in history)."}
 
 
 class InventoryUpdateIn(BaseModel):
@@ -204,6 +245,22 @@ def update_inventory(
     return {"configuration_id": config_id, "message": "Inventory updated."}
 
 
+@router.get("/projects/{project_id}/payment-plans")
+def list_payment_plans(
+    project_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Active payment plans for a project (id + name) — used to attach per-plan
+    prices in the price editor."""
+    get_scoped_project(db, project_id, admin)
+    plans = (
+        db.query(PaymentPlan)
+        .filter(PaymentPlan.project_id == project_id, PaymentPlan.is_active.is_(True))
+        .order_by(PaymentPlan.name)
+        .all()
+    )
+    return [{"id": p.id, "name": p.name} for p in plans]
+
+
 @router.post("/projects/{project_id}/payment-plans", status_code=201)
 def add_payment_plan(
     project_id: int, payload: PaymentPlanIn,
@@ -224,6 +281,32 @@ def add_payment_plan(
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"payment_plan_id": pp.id, "message": f"Added payment plan '{payload.name}'."}
+
+
+@router.delete("/payment-plans/{plan_id}")
+def delete_payment_plan(
+    plan_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Delete a payment plan. Any config prices tied ONLY to this plan are removed
+    too (those configs simply fall back to their base price). Milestones cascade."""
+    pp = db.get(PaymentPlan, plan_id)
+    if not pp:
+        raise HTTPException(404, "Payment plan not found")
+    get_scoped_project(db, pp.project_id, admin)
+
+    removed_prices = (
+        db.query(Price).filter(Price.payment_plan_id == plan_id)
+        .delete(synchronize_session=False)
+    )
+    record_audit(db, user_id=admin.id, action="DELETE", entity="payment_plans",
+                 entity_id=plan_id, before={"name": pp.name, "removed_plan_prices": removed_prices})
+    db.delete(pp)  # milestones cascade via ondelete
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    msg = f"Deleted payment plan '{pp.name}'."
+    if removed_prices:
+        msg += f" {removed_prices} plan-specific price(s) removed (those configs revert to base price)."
+    return {"deleted": plan_id, "removed_plan_prices": removed_prices, "message": msg}
 
 
 @router.delete("/configurations/{config_id}")

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, fetchBlobUrl } from "../api/client.js";
+import { api, fetchBlob, fetchBlobUrl } from "../api/client.js";
 import { StatusChip } from "./Projects.jsx";
 import Icon from "../components/Icons.jsx";
 
@@ -56,35 +56,44 @@ export default function ProjectDetail() {
     setPdfUrl(null);
   }
 
+  // Share a PDF to WhatsApp (and other apps). On mobile the actual file is shared
+  // via the native share sheet; on desktop we download it and open WhatsApp Web.
+  const [sharing, setSharing] = useState(false);
+  async function sharePdf(path, filename, message) {
+    setSharing(true);
+    try {
+      const blob = await fetchBlob(path);
+      const file = new File([blob], filename, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename, text: message });
+      } else {
+        // Desktop fallback: download + open WhatsApp with a prefilled message.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") alert(e.message || "Could not share");
+    } finally {
+      setSharing(false);
+    }
+  }
+
   if (!project) return <div className="page muted">Loading…</div>;
 
   return (
     <div className="page">
       <Link to="/projects" className="back-link">← Projects</Link>
+      <div className="detail-header">
+        <div className="detail-header-main">
       <div className="page-head">
         <div className="title-row">
           <h2>{project.name}</h2>
           {project.rise_type && <span className="rise-badge">{project.rise_type}</span>}
           <StatusChip status={project.project_status} />
         </div>
-      </div>
-      <div className="doc-actions">
-        {brochure?.available && (
-          <button className="btn btn-primary" onClick={() => openPdf(`/v1/projects/${id}/brochure`, brochure.title || "Brochure")} disabled={loadingPdf}>
-            📄 View Brochure
-          </button>
-        )}
-        {costSheets.length > 0 && (
-          <div className="costsheet-picker">
-            <select value={selectedSheet} onChange={(e) => setSelectedSheet(e.target.value)}>
-              {costSheets.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-            </select>
-            <button className="btn" disabled={loadingPdf} onClick={() => {
-              const s = costSheets.find((x) => String(x.id) === String(selectedSheet)) || costSheets[0];
-              openPdf(`/v1/projects/${id}/cost-sheets/${s.id}`, s.title || "Cost Sheet");
-            }}>💰 View</button>
-          </div>
-        )}
       </div>
       {project.builder_name && <div className="builder-line">🏗️ by {project.builder_name}</div>}
       <div className="muted">📍 {project.locality}, {project.city} · Possession {project.possession_date || "—"}</div>
@@ -105,6 +114,58 @@ export default function ProjectDetail() {
           )}
         </div>
       )}
+        </div>
+
+        {(brochure?.available || costSheets.length > 0) && (
+          <div className="detail-header-docs">
+        <div className="doc-panel">
+          {brochure?.available && (
+            <div className="doc-row">
+              <div className="doc-row-main">
+                <span className="doc-ico">📄</span>
+                <span className="doc-name">Brochure</span>
+              </div>
+              <div className="doc-row-actions">
+                <button className="btn btn-sm" disabled={loadingPdf}
+                  onClick={() => openPdf(`/v1/projects/${id}/brochure`, brochure.title || "Brochure")}>View</button>
+                <button className="share-btn" disabled={sharing} title="Share on WhatsApp" aria-label="Share on WhatsApp"
+                  onClick={() => sharePdf(`/v1/projects/${id}/brochure`, `${project.name} Brochure.pdf`, `Hi! Please find the ${project.name} brochure attached.`)}>
+                  <Icon name="share" size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+          {costSheets.length > 0 && (
+            <div className="doc-row">
+              <div className="doc-row-main">
+                <span className="doc-ico">💰</span>
+                <span className="doc-name">Cost Sheet</span>
+                {costSheets.length > 1 ? (
+                  <select className="doc-select" value={selectedSheet} onChange={(e) => setSelectedSheet(e.target.value)}>
+                    {costSheets.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+                  </select>
+                ) : (
+                  <span className="doc-sub">{costSheets[0].title}</span>
+                )}
+              </div>
+              <div className="doc-row-actions">
+                <button className="btn btn-sm" disabled={loadingPdf} onClick={() => {
+                  const s = costSheets.find((x) => String(x.id) === String(selectedSheet)) || costSheets[0];
+                  openPdf(`/v1/projects/${id}/cost-sheets/${s.id}`, s.title || "Cost Sheet");
+                }}>View</button>
+                <button className="share-btn" disabled={sharing} title="Share on WhatsApp" aria-label="Share on WhatsApp" onClick={() => {
+                  const s = costSheets.find((x) => String(x.id) === String(selectedSheet)) || costSheets[0];
+                  sharePdf(`/v1/projects/${id}/cost-sheets/${s.id}`, `${s.title}.pdf`, `Hi! Please find the ${project.name} cost sheet (${s.title}) attached.`);
+                }}>
+                  <Icon name="share" size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+          </div>
+        )}
+      </div>
 
       {(project.project_type || project.land_parcel || project.green_area || towers.length > 0) && (
         <section className="detail-section">

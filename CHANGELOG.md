@@ -6,6 +6,31 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.20.0] — 2026-07-11
+
+### Added — Share brochure / cost sheet on WhatsApp
+- Each document (brochure and cost sheet) now has a **Share** action on the
+  project page. On mobile it shares the actual PDF via the native share sheet
+  (WhatsApp included); on desktop it downloads the PDF and opens WhatsApp Web
+  with a prefilled message. No public link — the auth-protected PDF is fetched
+  by the app first.
+
+### Changed — Project page layout & performance
+- **Documents panel** — brochure + cost sheet are grouped in one clean card
+  (brochure on top). On **desktop** it sits at the top-right of the header; on
+  **mobile** it stacks below. The share control is an icon.
+- **Faster AI answers** — switched the default LLM to `gemini-flash-lite-latest`,
+  which has "thinking" **off** by default. Real answers dropped from ~6 s (often
+  truncated) to ~1.4 s and are complete. This engine's LLM work is simple and
+  grounded, so extended reasoning isn't needed. The model is changeable anytime
+  from Admin → AI Settings.
+
+### Fixed
+- **Brand logo disappearing** — the PropX monogram renders twice per page (mobile
+  top bar + sidebar) and both used the same SVG gradient IDs; duplicate IDs made
+  the browser resolve the wrong gradient and blank out the logo. Gradient IDs are
+  now unique per instance (via `useId`).
+
 ## [1.19.0] — 2026-07-11
 
 ### Added — Amenities are now SQL-first

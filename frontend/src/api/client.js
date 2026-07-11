@@ -63,8 +63,8 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
   return res.json();
 }
 
-// Fetch a protected binary file (e.g. a PDF) with auth and return an object URL.
-export async function fetchBlobUrl(path) {
+// Fetch a protected binary file (e.g. a PDF) with auth and return the Blob.
+export async function fetchBlob(path) {
   const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -75,7 +75,12 @@ export async function fetchBlobUrl(path) {
     throw new Error("Session expired");
   }
   if (!res.ok) throw new Error("Could not load file");
-  return URL.createObjectURL(await res.blob());
+  return res.blob();
+}
+
+// Same, but as an object URL (for inline viewing).
+export async function fetchBlobUrl(path) {
+  return URL.createObjectURL(await fetchBlob(path));
 }
 
 export const api = {

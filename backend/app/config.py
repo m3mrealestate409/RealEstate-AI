@@ -34,7 +34,9 @@ class Settings(BaseSettings):
 
     # --- LLM provider layer ---
     llm_provider: str = "mock"          # mock | gemini | claude | openai | openrouter | ollama
-    llm_model: str = "gemini-flash-latest"
+    # flash-lite has "thinking" OFF by default → much faster + cheaper, and this
+    # engine's LLM work is simple/grounded so it doesn't need extended reasoning.
+    llm_model: str = "gemini-flash-lite-latest"
     gemini_api_key: str = ""
     openai_api_key: str = ""
     claude_api_key: str = ""

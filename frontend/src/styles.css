@@ -240,14 +240,34 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(90deg, #fff7e6, #fdf0d0); border: 1px solid #e6cf94; color: #5c4409;
   font-size: 14px; }
 .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.doc-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-  flex-wrap: wrap; margin: 10px 0 4px; }
-/* Cost sheet: dropdown + View joined inside one border so they read as one control. */
-.costsheet-picker { display: inline-flex; align-items: stretch; border: 1px solid var(--border);
-  border-radius: 8px; overflow: hidden; background: var(--card, #fff); }
-.costsheet-picker select { border: none; padding: 8px 10px; background: transparent; max-width: 200px;
-  outline: none; }
-.costsheet-picker .btn { border: none; border-left: 1px solid var(--border); border-radius: 0; }
+/* Detail header: main info left, documents panel top-right on desktop; stacks on mobile. */
+.detail-header { display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 24px; flex-wrap: wrap; }
+.detail-header-main { flex: 1 1 320px; min-width: 0; }
+.detail-header-docs { flex: 0 0 auto; }
+.detail-header-docs .doc-panel { margin-top: 0; }
+@media (max-width: 760px) {
+  .detail-header-docs { width: 100%; }
+  .detail-header-docs .doc-panel { max-width: none; margin-top: 4px; }
+}
+
+/* Documents panel — brochure + cost sheet in one clean bordered card. */
+.doc-panel { border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  margin: 14px 0 4px; max-width: 480px; background: var(--card, #fff); }
+.doc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; flex-wrap: wrap; }
+.doc-row + .doc-row { border-top: 1px solid var(--border); }
+.doc-row-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.doc-ico { font-size: 16px; }
+.doc-name { font-weight: 600; }
+.doc-sub { color: var(--muted); font-size: 13px; }
+.doc-select { padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; max-width: 170px; }
+.doc-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.share-btn { background: none; border: none; cursor: pointer; color: #0f8a6f; padding: 5px;
+  display: inline-flex; align-items: center; border-radius: 6px; }
+.share-btn:hover:not(:disabled) { background: #e7f8f0; }
+.share-btn:disabled { opacity: .5; cursor: default; }
 .eye-btn { background: none; border: none; cursor: pointer; padding: 0 4px; line-height: 1;
   display: inline-flex; align-items: center; vertical-align: middle; color: inherit; }
 .launch-highlight { display: inline-flex; align-items: center; gap: 4px; }

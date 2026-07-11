@@ -84,7 +84,9 @@ class ProjectCreate(BaseModel):
     project_type: str | None = None
     land_parcel: str | None = None
     green_area: str | None = None
+    rise_type: str | None = None
     launch_date: date | None = None
+    launch_price: float | None = None
     possession_date: date | None = None
 
 
@@ -98,7 +100,9 @@ class ProjectUpdate(BaseModel):
     project_type: str | None = None
     land_parcel: str | None = None
     green_area: str | None = None
+    rise_type: str | None = None
     launch_date: date | None = None
+    launch_price: float | None = None
     possession_date: date | None = None
 
 
@@ -114,6 +118,9 @@ class ProjectOut(BaseModel):
     project_type: str | None = None
     land_parcel: str | None = None
     green_area: str | None = None
+    rise_type: str | None = None
+    launch_date: date | None = None
+    launch_price: float | None = None
     possession_date: date | None
 
     class Config:

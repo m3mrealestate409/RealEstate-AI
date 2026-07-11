@@ -83,7 +83,7 @@ def current_price(db: Session, project_id: int) -> dict:
         rows.append(
             {
                 "configuration": cfg.type,
-                "carpet_area": float(cfg.carpet_area) if cfg.carpet_area else None,
+                "size": float(cfg.super_area) if cfg.super_area else None,
                 "base_price": float(base.base_price) if base else None,
                 "price_unit": base.price_unit if base else (plans[0]["price_unit"] if plans else "per_sqft"),
                 "plc": base_plc,
@@ -225,6 +225,31 @@ def location(db: Session, project_id: int) -> dict:
     }
 
 
+def amenities(db: Session, project_id: int) -> dict:
+    """Structured amenities/facilities, grouped by category. SQL-first — served
+    from the DB (extracted once at import), never from RAG/LLM."""
+    from app.models import Amenity
+
+    p = db.get(Project, project_id)
+    if not p:
+        return {"found": False}
+    rows = (
+        db.query(Amenity)
+        .filter(Amenity.project_id == project_id)
+        .order_by(Amenity.category, Amenity.name)
+        .all()
+    )
+    grouped: dict[str, list[str]] = {}
+    for a in rows:
+        grouped.setdefault(a.category or "General", []).append(a.name)
+    return {
+        "found": bool(rows),
+        "amenities": [a.name for a in rows],
+        "grouped": grouped,
+        "last_updated": _iso(p.updated_at),
+    }
+
+
 def offers(db: Session, project_id: int) -> dict:
     today = date.today()
     active = (
@@ -254,4 +279,5 @@ DB_RESOLVERS = {
     "offer": offers,
     "overview": overview,
     "location": location,
+    "amenities": amenities,
 }

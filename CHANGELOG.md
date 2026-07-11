@@ -6,6 +6,41 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.19.0] — 2026-07-11
+
+### Added — Amenities are now SQL-first
+- Amenities/facilities are extracted **once** from the brochure at AI-import time
+  and stored in the database, then always served from SQL — the LLM is never hit
+  for an amenities query again (previously every amenities question ran RAG +
+  LLM). New `amenities` table; a query like "amenities" now answers from the DB
+  (handler `database`, confidence 0.98), grouped by category.
+- AI Import extracts amenities into the editable draft; **Manage Data → Amenities**
+  lets you add / categorise / delete them; the project page shows an Amenities
+  section (SQL) grouped by category.
+- Note: amenities now come from the DB only — existing projects need amenities
+  populated (re-run AI Import or add them under Manage Data → Amenities).
+
+### Added — Multiple cost sheets with titles
+- A project can have **multiple cost sheets**, each with its own title. They
+  appear in a **dropdown** on the project page for viewing/download. Manage Data
+  → Cost Sheet lists them with View/Delete and a title field on upload.
+
+### Added — Rise type, launch price/year
+- Projects have a **rise type** (High/Mid/Low Rise) shown as a small badge next
+  to the title, and a **launch price** + **launch year** shown in a highlighted
+  strip. Launch price is hidden behind an eye toggle (click to reveal). All three
+  are editable under Manage Data → Project Details.
+
+### Changed
+- **"Carpet area" → "Size"** everywhere (uses super area); the separate carpet
+  field is removed from all forms, tables and AI extraction.
+- **Price table**: the plan column shows **"BSP"** (instead of "Base (all
+  plans)"), and columns are reordered to `Configuration · Plan · Base Price ·
+  Size · Unit · PLC · GST%` so Size and Unit sit together.
+- **Project page header**: the status chip sits next to the rise-type badge; the
+  View Brochure / cost-sheet controls are right-aligned; the cost-sheet dropdown
+  and its View button are joined inside one border.
+
 ## [1.18.0] — 2026-07-11
 
 ### Added — Per-payment-plan pricing

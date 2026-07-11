@@ -52,14 +52,23 @@ export default function Admin() {
 
 const STATUS_OPTIONS = ["Launched", "Under Construction", "Ready to Move", "Delivered"];
 const TYPE_OPTIONS = ["Residential", "Commercial", "Industrial"];
+const RISE_OPTIONS = ["High Rise", "Mid Rise", "Low Rise"];
 const BLANK_PROJECT = {
   name: "", slug: "", builder_id: "", city: "", locality: "", project_status: "Under Construction",
   project_type: "Residential", land_parcel: "", green_area: "",
+  rise_type: "", launch_date: "", launch_price: "",
 };
 
 // builder_id comes from a <select> as a string; the API wants int|null.
+// Empty date/number/rise fields must be sent as null (not "") so the API validates.
 function cleanProject(f) {
-  return { ...f, builder_id: f.builder_id ? Number(f.builder_id) : null };
+  return {
+    ...f,
+    builder_id: f.builder_id ? Number(f.builder_id) : null,
+    rise_type: f.rise_type || null,
+    launch_date: f.launch_date || null,
+    launch_price: f.launch_price === "" || f.launch_price == null ? null : Number(f.launch_price),
+  };
 }
 
 function ProjectFields({ f, set }) {
@@ -89,6 +98,14 @@ function ProjectFields({ f, set }) {
       </label>
       <label className="field"><span>Land parcel</span><input placeholder="e.g. 18 acres" value={f.land_parcel || ""} onChange={(e) => set("land_parcel", e.target.value)} /></label>
       <label className="field"><span>Green / open area</span><input placeholder="e.g. 72%" value={f.green_area || ""} onChange={(e) => set("green_area", e.target.value)} /></label>
+      <label className="field"><span>Rise type</span>
+        <select value={f.rise_type || ""} onChange={(e) => set("rise_type", e.target.value)}>
+          <option value="">— None —</option>
+          {RISE_OPTIONS.map((r) => <option key={r}>{r}</option>)}
+        </select>
+      </label>
+      <label className="field"><span>Launch date</span><input type="date" value={f.launch_date || ""} onChange={(e) => set("launch_date", e.target.value)} /></label>
+      <label className="field"><span>Launch price (₹/sq ft)</span><input type="number" placeholder="e.g. 7500" value={f.launch_price ?? ""} onChange={(e) => set("launch_price", e.target.value)} /></label>
     </div>
   );
 }
@@ -342,6 +359,7 @@ function ManageData() {
             <button className={`tab ${sub === "details" ? "tab-active" : ""}`} onClick={() => setSub("details")}>Project Details</button>
             <button className={`tab ${sub === "towers" ? "tab-active" : ""}`} onClick={() => setSub("towers")}>Towers</button>
             <button className={`tab ${sub === "location" ? "tab-active" : ""}`} onClick={() => setSub("location")}>Location</button>
+            <button className={`tab ${sub === "amenities" ? "tab-active" : ""}`} onClick={() => setSub("amenities")}>Amenities</button>
             <button className={`tab ${sub === "edit" ? "tab-active" : ""}`} onClick={() => setSub("edit")}>Update Price / Stock</button>
             <button className={`tab ${sub === "config" ? "tab-active" : ""}`} onClick={() => setSub("config")}>Add Configuration</button>
             <button className={`tab ${sub === "plan" ? "tab-active" : ""}`} onClick={() => setSub("plan")}>Add Payment Plan</button>
@@ -350,6 +368,7 @@ function ManageData() {
           {sub === "details" && <EditProjectDetails projectId={projectId} />}
           {sub === "towers" && <Towers projectId={projectId} />}
           {sub === "location" && <LocationPoints projectId={projectId} />}
+          {sub === "amenities" && <Amenities projectId={projectId} />}
           {sub === "edit" && <EditConfigs projectId={projectId} />}
           {sub === "config" && <AddConfig projectId={projectId} />}
           {sub === "plan" && <AddPlan projectId={projectId} />}
@@ -369,6 +388,8 @@ function EditProjectDetails({ projectId }) {
     project_status: p.project_status || "Under Construction",
     project_type: p.project_type || "Residential",
     land_parcel: p.land_parcel || "", green_area: p.green_area || "",
+    rise_type: p.rise_type || "", launch_date: p.launch_date || "",
+    launch_price: p.launch_price ?? "",
   })); }, [projectId]);
 
   if (!f) return <div className="muted">Loading…</div>;
@@ -499,12 +520,64 @@ function LocationPoints({ projectId }) {
   );
 }
 
+function Amenities({ projectId }) {
+  const [rows, setRows] = useState([]);
+  const [f, setF] = useState({ name: "", category: "" });
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const load = () => api.listAmenities(projectId).then(setRows);
+  useEffect(() => { load(); }, [projectId]);
+
+  async function add(e) {
+    e.preventDefault(); setMsg(null);
+    try {
+      await api.addAmenity(projectId, { name: f.name, category: f.category || null });
+      setF({ name: "", category: f.category });
+      await load(); setMsg({ ok: true, text: "Amenity added." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function remove(id) { if (confirm("Delete this amenity?")) { await api.deleteAmenity(id); load(); } }
+
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        Amenities are stored in the database (SQL-first). AI Import fills them from the brochure <b>once</b>;
+        after that they always come from the DB — no AI call per query. Add/remove here anytime.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+      <form onSubmit={add}>
+        <div className="calc-fields">
+          <label className="field"><span>Amenity</span><input placeholder="Swimming Pool, Clubhouse…" value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
+          <label className="field"><span>Category (optional)</span><input placeholder="Sports / Leisure / Safety…" value={f.category} onChange={(e) => set("category", e.target.value)} /></label>
+        </div>
+        <button className="btn btn-primary">Add amenity</button>
+      </form>
+      <div className="table-wrap" style={{ marginTop: 16 }}>
+        <table className="data-table">
+          <thead><tr><th>Amenity</th><th>Category</th><th></th></tr></thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.id}>
+                <td>{a.name}</td><td>{a.category || "—"}</td>
+                <td><button className="btn btn-ghost" onClick={() => remove(a.id)}>Delete</button></td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan="3" className="muted">No amenities yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function CostSheet({ projectId }) {
-  const [info, setInfo] = useState(null);
+  const [sheets, setSheets] = useState([]);
+  const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
+  const [fileKey, setFileKey] = useState(0);   // to reset the file input
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
-  const load = () => api.costSheetInfo(projectId).then(setInfo).catch(() => setInfo({ available: false }));
+  const load = () => api.listCostSheets(projectId).then(setSheets).catch(() => setSheets([]));
   useEffect(() => { load(); }, [projectId]);
 
   async function upload(e) {
@@ -513,32 +586,57 @@ function CostSheet({ projectId }) {
     setBusy(true); setMsg(null);
     const fd = new FormData();
     fd.append("file", file);
+    fd.append("title", title.trim());
     try {
-      await api.uploadCostSheet(projectId, fd);
-      setFile(null);
+      const r = await api.uploadCostSheet(projectId, fd);
+      setFile(null); setTitle(""); setFileKey((k) => k + 1);
       await load();
-      setMsg({ ok: true, text: "Cost sheet uploaded." });
+      setMsg({ ok: true, text: `Uploaded "${r.title}".` });
     } catch (err) { setMsg({ ok: false, text: err.message }); }
     finally { setBusy(false); }
+  }
+  async function remove(s) {
+    if (!confirm(`Delete cost sheet "${s.title}"?`)) return;
+    try { await api.deleteCostSheet(projectId, s.id); await load(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
   }
 
   return (
     <form className="admin-form" onSubmit={upload}>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
       <div className="settings-note">
-        Cost sheet is <b>optional</b>. If you have one, upload the PDF — it will be viewable/downloadable on the project page.
-        It is <b>not</b> used for AI answers (prices come from the structured data).
+        Cost sheets are <b>optional</b> and <b>multiple</b> are allowed. Give each a title — they show in a
+        dropdown on the project page for viewing/download. Not used for AI answers.
       </div>
-      {info?.available && (
-        <div className="alert alert-ok">
-          Current cost sheet: <b>{info.title}</b>{" "}
-          <a className="btn btn-ghost" style={{ marginLeft: 8 }} href="#" onClick={(e) => { e.preventDefault(); openDoc(`/v1/projects/${projectId}/cost-sheet`); }}>View</a>
-          <span className="muted small"> (uploading a new one replaces it)</span>
+
+      {sheets.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: 16 }}>
+          <table className="data-table">
+            <thead><tr><th>Title</th><th>Uploaded</th><th></th></tr></thead>
+            <tbody>
+              {sheets.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.title}</td>
+                  <td className="muted">{s.uploaded_at ? String(s.uploaded_at).slice(0, 10) : "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <a className="btn btn-ghost" href="#" onClick={(e) => { e.preventDefault(); openDoc(`/v1/projects/${projectId}/cost-sheets/${s.id}`); }}>View</a>
+                    <button type="button" className="btn btn-ghost btn-danger" onClick={() => remove(s)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      <label className="field"><span>Cost sheet PDF</span>
-        <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} />
-      </label>
+
+      <div className="calc-fields">
+        <label className="field"><span>Title (e.g. "3BHK Cost Sheet")</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Optional — defaults to project name" />
+        </label>
+        <label className="field"><span>Cost sheet PDF</span>
+          <input key={fileKey} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} />
+        </label>
+      </div>
       <button className="btn btn-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload cost sheet"}</button>
     </form>
   );
@@ -656,7 +754,7 @@ function EditConfigRow({ config, plans = [], onDone }) {
 }
 
 function AddConfig({ projectId }) {
-  const [f, setF] = useState({ type: "3BHK", carpet_area: "", super_area: "", base_price: "", plc: "", gst_percent: "5", total_units: "", available_units: "" });
+  const [f, setF] = useState({ type: "3BHK", super_area: "", base_price: "", plc: "", gst_percent: "5", total_units: "", available_units: "" });
   const [msg, setMsg] = useState(null);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -664,7 +762,7 @@ function AddConfig({ projectId }) {
     e.preventDefault();
     setMsg(null);
     const body = { type: f.type, price_unit: "per_sqft" };
-    for (const k of ["carpet_area", "super_area", "base_price", "plc", "gst_percent", "total_units", "available_units"])
+    for (const k of ["super_area", "base_price", "plc", "gst_percent", "total_units", "available_units"])
       if (f[k] !== "") body[k] = Number(f[k]);
     try {
       const r = await api.addConfiguration(projectId, body);
@@ -677,8 +775,7 @@ function AddConfig({ projectId }) {
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
       <div className="calc-fields">
         <label className="field"><span>Type (e.g. 3BHK)</span><input value={f.type} onChange={(e) => set("type", e.target.value)} required /></label>
-        <label className="field"><span>Carpet area (sq ft)</span><input type="number" value={f.carpet_area} onChange={(e) => set("carpet_area", e.target.value)} /></label>
-        <label className="field"><span>Super area (sq ft)</span><input type="number" value={f.super_area} onChange={(e) => set("super_area", e.target.value)} /></label>
+        <label className="field"><span>Size (sq ft)</span><input type="number" value={f.super_area} onChange={(e) => set("super_area", e.target.value)} /></label>
         <label className="field"><span>Base price (₹/sq ft)</span><input type="number" value={f.base_price} onChange={(e) => set("base_price", e.target.value)} required /></label>
         <label className="field"><span>PLC (₹)</span><input type="number" value={f.plc} onChange={(e) => set("plc", e.target.value)} /></label>
         <label className="field"><span>GST %</span><input type="number" value={f.gst_percent} onChange={(e) => set("gst_percent", e.target.value)} /></label>

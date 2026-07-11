@@ -21,13 +21,16 @@ SCHEMA_HINT = """{
   "project_status": "Under Construction"|"Ready to Move"|"Delivered"|"Launched"|null,
   "possession_date": "YYYY-MM-DD"|null,
   "towers": [ {"name": string, "floors": int|null, "height": string|null, "units_per_floor": int|null} ],
-  "configurations": [ {"type": string, "carpet_area": number|null, "super_area": number|null,
+  "configurations": [ {"type": string, "super_area": number|null,   // super_area = the unit "size"
                        "base_price": number|null, "price_unit": "per_sqft"|"total"|null,
                        "plc": number|null, "gst_percent": number|null} ],
   "payment_plan": {"name": string|null, "milestones": [ {"label": string, "percent": number} ]},
-  "location_points": [ {"category": "nearby"|"connectivity"|"upcoming", "name": string, "distance": string|null} ]
+  "location_points": [ {"category": "nearby"|"connectivity"|"upcoming", "name": string, "distance": string|null} ],
       // nearby = schools/hospitals/malls; connectivity = roads/metro/airport;
       // upcoming = planned developments in the area. distance like "2 km" / "10 min" if stated.
+  "amenities": [ {"name": string, "category": string|null} ]
+      // facilities: clubhouse, gym, swimming pool, park, kids play area, security, etc.
+      // category optional, e.g. "Sports", "Leisure", "Safety", "Convenience".
 }"""
 
 SYSTEM = (
@@ -64,6 +67,7 @@ def _normalize(d: dict) -> dict:
         "configurations": d.get("configurations") or [],
         "payment_plan": d.get("payment_plan") or {"name": None, "milestones": []},
         "location_points": d.get("location_points") or [],
+        "amenities": d.get("amenities") or [],
     }
 
 

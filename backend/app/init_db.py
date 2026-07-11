@@ -53,6 +53,9 @@ def init_db() -> None:
         # Per-payment-plan pricing: a Price may target a specific payment plan
         # (NULL = the base price for all plans).
         conn.execute(text("ALTER TABLE prices ADD COLUMN IF NOT EXISTS payment_plan_id BIGINT"))
+        # Rise type + launch price (shown on the project page).
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS rise_type TEXT"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS launch_price NUMERIC"))
     logger.info("Database initialised.")
 
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, fetchBlobUrl } from "../api/client.js";
 import { StatusChip } from "./Projects.jsx";
+import Icon from "../components/Icons.jsx";
 
 function money(n) {
   return n == null ? "—" : Number(n).toLocaleString("en-IN");
@@ -15,8 +16,11 @@ export default function ProjectDetail() {
   const [inv, setInv] = useState(null);
   const [towers, setTowers] = useState([]);
   const [location, setLocation] = useState([]);
+  const [amenities, setAmenities] = useState(null); // {found, grouped, amenities}
   const [brochure, setBrochure] = useState(null);   // {available, title, version}
-  const [costSheet, setCostSheet] = useState(null); // {available, title}
+  const [costSheets, setCostSheets] = useState([]); // [{id, title, uploaded_at}]
+  const [selectedSheet, setSelectedSheet] = useState(""); // selected cost sheet id
+  const [showLaunch, setShowLaunch] = useState(false);   // eye toggle for launch price
   const [pdfUrl, setPdfUrl] = useState(null);        // object URL when viewing
   const [pdfTitle, setPdfTitle] = useState("");
   const [loadingPdf, setLoadingPdf] = useState(false);
@@ -27,9 +31,13 @@ export default function ProjectDetail() {
     api.projectPaymentPlan(id).then(setPlan);
     api.projectInventory(id).then(setInv);
     api.brochureInfo(id).then(setBrochure).catch(() => setBrochure({ available: false }));
-    api.costSheetInfo(id).then(setCostSheet).catch(() => setCostSheet({ available: false }));
+    api.listCostSheets(id).then((list) => {
+      setCostSheets(list);
+      if (list[0]) setSelectedSheet(String(list[0].id));
+    }).catch(() => setCostSheets([]));
     api.projectTowers(id).then(setTowers).catch(() => setTowers([]));
     api.projectLocation(id).then(setLocation).catch(() => setLocation([]));
+    api.projectAmenities(id).then(setAmenities).catch(() => setAmenities(null));
   }, [id]);
 
   async function openPdf(path, title) {
@@ -53,24 +61,50 @@ export default function ProjectDetail() {
   return (
     <div className="page">
       <Link to="/projects" className="back-link">← Projects</Link>
-      <div className="page-head row-between">
-        <h2>{project.name}</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {brochure?.available && (
-            <button className="btn btn-primary" onClick={() => openPdf(`/v1/projects/${id}/brochure`, brochure.title || "Brochure")} disabled={loadingPdf}>
-              📄 View Brochure
-            </button>
-          )}
-          {costSheet?.available && (
-            <button className="btn" onClick={() => openPdf(`/v1/projects/${id}/cost-sheet`, costSheet.title || "Cost Sheet")} disabled={loadingPdf}>
-              💰 View Cost Sheet
-            </button>
-          )}
+      <div className="page-head">
+        <div className="title-row">
+          <h2>{project.name}</h2>
+          {project.rise_type && <span className="rise-badge">{project.rise_type}</span>}
           <StatusChip status={project.project_status} />
         </div>
       </div>
+      <div className="doc-actions">
+        {brochure?.available && (
+          <button className="btn btn-primary" onClick={() => openPdf(`/v1/projects/${id}/brochure`, brochure.title || "Brochure")} disabled={loadingPdf}>
+            📄 View Brochure
+          </button>
+        )}
+        {costSheets.length > 0 && (
+          <div className="costsheet-picker">
+            <select value={selectedSheet} onChange={(e) => setSelectedSheet(e.target.value)}>
+              {costSheets.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+            </select>
+            <button className="btn" disabled={loadingPdf} onClick={() => {
+              const s = costSheets.find((x) => String(x.id) === String(selectedSheet)) || costSheets[0];
+              openPdf(`/v1/projects/${id}/cost-sheets/${s.id}`, s.title || "Cost Sheet");
+            }}>💰 View</button>
+          </div>
+        )}
+      </div>
       {project.builder_name && <div className="builder-line">🏗️ by {project.builder_name}</div>}
       <div className="muted">📍 {project.locality}, {project.city} · Possession {project.possession_date || "—"}</div>
+
+      {(project.launch_price != null || project.launch_date) && (
+        <div className="launch-highlight">
+          🚀 <b>Launch Price</b>
+          <button type="button" className="eye-btn" onClick={() => setShowLaunch((v) => !v)}
+                  title={showLaunch ? "Hide" : "Show"} aria-label={showLaunch ? "Hide" : "Show"}>
+            <Icon name={showLaunch ? "eye-off" : "eye"} size={16} />
+          </button>
+          {showLaunch && (
+            <span>
+              {project.launch_price != null && <span>₹{money(project.launch_price)}/sq ft</span>}
+              {project.launch_price != null && project.launch_date && <span> · </span>}
+              {project.launch_date && <span>Launch Year {String(project.launch_date).slice(0, 4)}</span>}
+            </span>
+          )}
+        </div>
+      )}
 
       {(project.project_type || project.land_parcel || project.green_area || towers.length > 0) && (
         <section className="detail-section">
@@ -137,27 +171,43 @@ export default function ProjectDetail() {
         </section>
       )}
 
+      {amenities?.found && (
+        <section className="detail-section">
+          <h3>Amenities <SourceTag>SQL</SourceTag></h3>
+          <div className="card-grid">
+            {Object.entries(amenities.grouped || {}).map(([cat, names]) => (
+              <div className="info-card" key={cat}>
+                <div className="info-card-head">{cat}</div>
+                <ul className="info-card-list">
+                  {names.map((n, i) => <li key={i}>{n}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="detail-section">
         <h3>Price <SourceTag>SQL</SourceTag></h3>
         <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>Config</th><th>Plan</th><th>Carpet</th><th>Base Price</th><th>Unit</th><th>PLC</th><th>GST%</th></tr></thead>
+            <thead><tr><th>Config</th><th>Plan</th><th>Base Price</th><th>Size</th><th>Unit</th><th>PLC</th><th>GST%</th></tr></thead>
             <tbody>
               {price?.prices?.flatMap((p, i) => {
                 const trs = [];
                 if (p.base_price != null || !(p.plans?.length))
                   trs.push(
                     <tr key={`${i}-b`}>
-                      <td>{p.configuration}</td><td className="muted">Base (all plans)</td>
-                      <td>{money(p.carpet_area)}</td><td>₹{money(p.base_price)}</td><td>{p.price_unit}</td>
+                      <td>{p.configuration}</td><td className="muted">BSP</td>
+                      <td>₹{money(p.base_price)}</td><td>{money(p.size)}</td><td>{p.price_unit}</td>
                       <td>₹{money(p.plc)}</td><td>{p.gst_percent}</td>
                     </tr>
                   );
                 (p.plans || []).forEach((pl, j) =>
                   trs.push(
                     <tr key={`${i}-p${j}`}>
-                      <td></td><td>{pl.plan}</td><td></td>
-                      <td>₹{money(pl.base_price)}</td><td>{pl.price_unit}</td>
+                      <td></td><td>{pl.plan}</td>
+                      <td>₹{money(pl.base_price)}</td><td></td><td>{pl.price_unit}</td>
                       <td>₹{money(pl.plc)}</td><td>{pl.gst_percent}</td>
                     </tr>
                   )

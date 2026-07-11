@@ -49,7 +49,7 @@ export default function AiImport() {
     try {
       const r = await api.applyDraft(it.projectId, toPayload(it.draft));
       const s = r.applied;
-      patch(it.id, { status: "saved", open: false, savedMsg: `${s.fields} fields, ${s.towers} towers, ${s.configurations} configs, ${s.location_points} location${s.payment_plan ? ", plan" : ""}` });
+      patch(it.id, { status: "saved", open: false, savedMsg: `${s.fields} fields, ${s.towers} towers, ${s.configurations} configs, ${s.location_points} location, ${s.amenities} amenities${s.payment_plan ? ", plan" : ""}` });
     } catch (err) {
       patch(it.id, { status: "error", error: err.message });
     }
@@ -146,12 +146,16 @@ function DraftEditor({ draft, setDraft }) {
         blank={{ name: "", floors: "", height: "", units_per_floor: "" }} />
 
       <EditList title="Configurations (⚠️ check prices)" rows={draft.configurations} onChange={(rows) => setField("configurations", rows)}
-        cols={[["type", "Type"], ["carpet_area", "Carpet", "number"], ["super_area", "Super", "number"], ["base_price", "Price", "number", true], ["plc", "PLC", "number"], ["gst_percent", "GST%", "number"]]}
-        blank={{ type: "", carpet_area: "", super_area: "", base_price: "", price_unit: "per_sqft", plc: "", gst_percent: "" }} />
+        cols={[["type", "Type"], ["super_area", "Size", "number"], ["base_price", "Price", "number", true], ["plc", "PLC", "number"], ["gst_percent", "GST%", "number"]]}
+        blank={{ type: "", super_area: "", base_price: "", price_unit: "per_sqft", plc: "", gst_percent: "" }} />
 
       <EditList title="Location & Connectivity" rows={draft.location_points} onChange={(rows) => setField("location_points", rows)}
         cols={[["category", "Category"], ["name", "Place"], ["distance", "Distance"]]}
         blank={{ category: "nearby", name: "", distance: "" }} />
+
+      <EditList title="Amenities" rows={draft.amenities} onChange={(rows) => setField("amenities", rows)}
+        cols={[["name", "Amenity"], ["category", "Category"]]}
+        blank={{ name: "", category: "" }} />
 
       <div className="block-title" style={{ marginTop: 16 }}>Payment Plan</div>
       <label className="field" style={{ maxWidth: 260 }}><span>Plan name</span>
@@ -200,6 +204,7 @@ function normalizeDraft(d) {
     land_parcel: d.land_parcel || "", green_area: d.green_area || "", possession_date: d.possession_date || "",
     towers: d.towers || [], configurations: d.configurations || [],
     location_points: d.location_points || [],
+    amenities: d.amenities || [],
     payment_plan: d.payment_plan || { name: "", milestones: [] },
   };
 }
@@ -212,11 +217,14 @@ function toPayload(d) {
     possession_date: d.possession_date || null,
     towers: d.towers.filter((t) => t.name).map((t) => ({ name: t.name, floors: num(t.floors), height: t.height || null, units_per_floor: num(t.units_per_floor) })),
     configurations: d.configurations.filter((c) => c.type).map((c) => ({
-      type: c.type, carpet_area: num(c.carpet_area), super_area: num(c.super_area),
+      type: c.type, super_area: num(c.super_area),
       base_price: num(c.base_price), price_unit: c.price_unit || "per_sqft", plc: num(c.plc), gst_percent: num(c.gst_percent),
     })),
     location_points: (d.location_points || []).filter((l) => l.name).map((l) => ({
       category: l.category || "nearby", name: l.name, distance: l.distance || null,
+    })),
+    amenities: (d.amenities || []).filter((a) => a.name).map((a) => ({
+      name: a.name, category: a.category || null,
     })),
     payment_plan: d.payment_plan && d.payment_plan.milestones?.length
       ? { name: d.payment_plan.name || null, milestones: d.payment_plan.milestones.filter((m) => m.label).map((m) => ({ label: m.label, percent: Number(m.percent) || 0 })) }

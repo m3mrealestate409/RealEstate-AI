@@ -115,7 +115,9 @@ class Project(Base):
     project_type: Mapped[str | None] = mapped_column(String)    # Residential|Commercial|Industrial
     land_parcel: Mapped[str | None] = mapped_column(String)     # e.g. "12 acres"
     green_area: Mapped[str | None] = mapped_column(String)      # e.g. "70%" or "8 acres"
+    rise_type: Mapped[str | None] = mapped_column(String)       # High Rise | Mid Rise | Low Rise
     launch_date: Mapped[date | None] = mapped_column(Date)
+    launch_price: Mapped[float | None] = mapped_column(Numeric) # launch/base sale price (₹/sq ft)
     possession_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -146,6 +148,24 @@ class Project(Base):
     location_points: Mapped[list["LocationPoint"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    amenities: Mapped[list["Amenity"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+
+
+class Amenity(Base):
+    """A project amenity/facility (clubhouse, gym, pool…). SQL-first: extracted
+    ONCE from the brochure at AI-import time, then always served from the DB —
+    the LLM is never hit again for amenities."""
+
+    __tablename__ = "amenities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String)             # "Swimming Pool", "Clubhouse"
+    category: Mapped[str | None] = mapped_column(String)  # optional group: Sports | Leisure | Safety…
+
+    project: Mapped["Project"] = relationship(back_populates="amenities")
 
 
 class Tower(Base):

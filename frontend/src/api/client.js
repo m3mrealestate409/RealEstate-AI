@@ -92,8 +92,11 @@ export const api = {
   projectLocation: (id) => request(`/v1/projects/${id}/location`),
   brochureInfo: (id) => request(`/v1/projects/${id}/brochure/info`),
   costSheetInfo: (id) => request(`/v1/projects/${id}/cost-sheet/info`),
+  listCostSheets: (id) => request(`/v1/projects/${id}/cost-sheets`),
   uploadCostSheet: (projectId, formData) =>
     request(`/v1/admin/projects/${projectId}/cost-sheet`, { method: "POST", body: formData }),
+  deleteCostSheet: (projectId, docId) =>
+    request(`/v1/admin/projects/${projectId}/cost-sheets/${docId}`, { method: "DELETE" }),
   calcTypes: () => request("/v1/calculate/types"),
   calculate: (type, params) => request(`/v1/calculate/${type}`, { method: "POST", body: { params } }),
   createProject: (data) => request("/v1/admin/projects", { method: "POST", body: data }),
@@ -104,6 +107,10 @@ export const api = {
   listLocation: (projectId) => request(`/v1/admin/projects/${projectId}/location`),
   addLocation: (projectId, data) => request(`/v1/admin/projects/${projectId}/location`, { method: "POST", body: data }),
   deleteLocation: (id) => request(`/v1/admin/location/${id}`, { method: "DELETE" }),
+  projectAmenities: (id) => request(`/v1/projects/${id}/amenities`),
+  listAmenities: (projectId) => request(`/v1/admin/projects/${projectId}/amenities`),
+  addAmenity: (projectId, data) => request(`/v1/admin/projects/${projectId}/amenities`, { method: "POST", body: data }),
+  deleteAmenity: (id) => request(`/v1/admin/amenities/${id}`, { method: "DELETE" }),
   uploadDocument: (formData) => request("/v1/admin/documents", { method: "POST", body: formData }),
   audit: () => request("/v1/admin/audit"),
   health: () => request("/health", { auth: false }),

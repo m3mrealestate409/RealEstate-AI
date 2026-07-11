@@ -16,9 +16,9 @@ def price_block(project_name: str, data: dict) -> dict:
         if r.get("base_price") is not None or not plans:
             rows.append([
                 r["configuration"],
-                "Base (all plans)",
-                r.get("carpet_area"),
+                "BSP",
                 r.get("base_price"),
+                r.get("size"),
                 r.get("price_unit"),
                 r.get("plc"),
                 r.get("gst_percent"),
@@ -27,8 +27,8 @@ def price_block(project_name: str, data: dict) -> dict:
             rows.append([
                 r["configuration"],
                 pl["plan"],
-                r.get("carpet_area"),
                 pl["base_price"],
+                r.get("size"),
                 pl["price_unit"],
                 pl.get("plc"),
                 pl.get("gst_percent"),
@@ -36,7 +36,7 @@ def price_block(project_name: str, data: dict) -> dict:
     return {
         "type": "table",
         "title": f"{project_name} - Price",
-        "columns": ["Configuration", "Plan", "Carpet Area", "Base Price", "Unit", "PLC", "GST %"],
+        "columns": ["Configuration", "Plan", "Base Price", "Size", "Unit", "PLC", "GST %"],
         "rows": rows,
     }
 
@@ -161,6 +161,15 @@ def location_block(project_name: str, data: dict) -> dict:
     return {"type": "card", "title": f"{project_name} - Location & Connectivity", "cards": cards}
 
 
+def amenities_block(project_name: str, data: dict) -> dict:
+    grouped = data.get("grouped") or {}
+    if grouped:
+        cards = [{"heading": cat, "items": names} for cat, names in grouped.items()]
+    else:
+        cards = [{"heading": "Amenities", "items": data.get("amenities", [])}]
+    return {"type": "card", "title": f"{project_name} - Amenities", "cards": cards}
+
+
 def rag_block(title: str, chunks: list) -> dict:
     return {
         "type": "checklist",
@@ -217,4 +226,5 @@ DB_BLOCK_BUILDERS = {
     "offer": offer_block,
     "overview": overview_block,
     "location": location_block,
+    "amenities": amenities_block,
 }

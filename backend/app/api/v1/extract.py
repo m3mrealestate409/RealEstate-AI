@@ -19,6 +19,7 @@ from app.core.security import require_role
 from app.core.tenancy import get_scoped_project
 from app.database import get_db
 from app.models import (
+    Amenity,
     Configuration,
     Inventory,
     LocationPoint,
@@ -79,8 +80,7 @@ class PaymentPlanDraft(BaseModel):
 
 class ConfigDraft(BaseModel):
     type: str
-    carpet_area: float | None = None
-    super_area: float | None = None
+    super_area: float | None = None   # shown to users as "Size"
     base_price: float | None = None
     price_unit: str | None = "per_sqft"
     plc: float | None = None
@@ -103,6 +103,11 @@ class LocationDraft(BaseModel):
     notes: str | None = None
 
 
+class AmenityDraft(BaseModel):
+    name: str
+    category: str | None = None
+
+
 class ApplyDraft(BaseModel):
     project_type: str | None = None
     land_parcel: str | None = None
@@ -113,6 +118,7 @@ class ApplyDraft(BaseModel):
     configurations: list[ConfigDraft] = []
     payment_plan: PaymentPlanDraft | None = None
     location_points: list[LocationDraft] = []
+    amenities: list[AmenityDraft] = []
 
 
 @router.post("/projects/{project_id}/apply")
@@ -124,7 +130,8 @@ def apply_draft(
 ):
     """Write the reviewed draft into SQL (additive). Returns a summary."""
     project = get_scoped_project(db, project_id, admin)
-    summary = {"fields": 0, "towers": 0, "configurations": 0, "payment_plan": False, "location_points": 0}
+    summary = {"fields": 0, "towers": 0, "configurations": 0, "payment_plan": False,
+               "location_points": 0, "amenities": 0}
 
     # Project-level attributes (only the ones provided).
     for attr in ("project_type", "land_parcel", "green_area", "project_status"):
@@ -149,8 +156,7 @@ def apply_draft(
     for c in payload.configurations:
         if not c.type:
             continue
-        cfg = Configuration(project_id=project_id, type=c.type,
-                            carpet_area=c.carpet_area, super_area=c.super_area)
+        cfg = Configuration(project_id=project_id, type=c.type, super_area=c.super_area)
         db.add(cfg)
         db.flush()
         if c.base_price is not None:
@@ -169,6 +175,12 @@ def apply_draft(
         db.add(LocationPoint(project_id=project_id, category=lp.category or "nearby",
                             name=lp.name, distance=lp.distance, notes=lp.notes))
         summary["location_points"] += 1
+
+    for am in payload.amenities:
+        if not am.name:
+            continue
+        db.add(Amenity(project_id=project_id, name=am.name, category=am.category))
+        summary["amenities"] += 1
 
     pp = payload.payment_plan
     if pp and pp.milestones:

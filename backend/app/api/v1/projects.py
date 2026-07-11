@@ -101,6 +101,12 @@ def project_location(project_id: int, db: Session = Depends(get_db), user: User 
     return db.query(LocationPoint).filter(LocationPoint.project_id == project_id).all()
 
 
+@router.get("/{project_id}/amenities")
+def project_amenities(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_scoped_project(db, project_id, user)
+    return dbsvc.amenities(db, project_id)
+
+
 @router.get("/{project_id}/brochure/info")
 def brochure_info(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return _doc_info(db, project_id, "brochure", user)
@@ -119,3 +125,34 @@ def cost_sheet_info(project_id: int, db: Session = Depends(get_db), user: User =
 @router.get("/{project_id}/cost-sheet")
 def view_cost_sheet(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return _doc_file(db, project_id, "cost_sheet", user, "cost sheet")
+
+
+@router.get("/{project_id}/cost-sheets")
+def list_cost_sheets(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """All cost sheets for a project (id + title) — for the download dropdown."""
+    get_scoped_project(db, project_id, user)
+    docs = (
+        db.query(Document)
+        .filter(Document.project_id == project_id, Document.doc_type == "cost_sheet")
+        .order_by(Document.uploaded_at.desc())
+        .all()
+    )
+    return [
+        {"id": d.id, "title": d.title, "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None}
+        for d in docs if d.file_path and os.path.exists(d.file_path)
+    ]
+
+
+@router.get("/{project_id}/cost-sheets/{doc_id}")
+def view_cost_sheet_by_id(
+    project_id: int, doc_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    get_scoped_project(db, project_id, user)
+    doc = db.get(Document, doc_id)
+    if (not doc or doc.project_id != project_id or doc.doc_type != "cost_sheet"
+            or not doc.file_path or not os.path.exists(doc.file_path)):
+        raise HTTPException(404, "Cost sheet not found")
+    return FileResponse(
+        doc.file_path, media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{(doc.title or "cost sheet")}.pdf"'},
+    )

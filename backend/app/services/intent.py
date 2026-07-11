@@ -51,8 +51,11 @@ INTENT_KEYWORDS: dict[str, list[str]] = {
                         "options", "budget", "which should", "show me"],
 }
 
-DB_INTENTS = {"price", "payment_plan", "possession", "inventory", "builder", "status", "offer", "overview", "location"}
-RAG_INTENTS = {"amenities", "specifications", "floor_plan", "legal"}
+# amenities is SQL-first (extracted once at import, then served from the DB — the
+# LLM is never hit for it), so it lives in DB_INTENTS, not RAG_INTENTS.
+DB_INTENTS = {"price", "payment_plan", "possession", "inventory", "builder", "status",
+              "offer", "overview", "location", "amenities"}
+RAG_INTENTS = {"specifications", "floor_plan", "legal"}
 CALC_INTENTS = {"calculation"}
 LLM_INTENTS = {"comparison", "summary", "recommendation"}
 

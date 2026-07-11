@@ -118,27 +118,50 @@ def upload_document(
 def upload_cost_sheet(
     project_id: int,
     file: UploadFile = File(...),
+    title: str = Form(""),
     db: Session = Depends(get_db),
     admin: User = Depends(require_role("admin")),
 ):
     """Upload an OPTIONAL cost-sheet PDF for viewing/download. NOT indexed into
-    RAG (pricing is SQL, §6) — this is just a downloadable file. Replaces any
-    existing cost sheet for the project."""
+    RAG (pricing is SQL, §6) - just a downloadable file. A project can have
+    MULTIPLE cost sheets, each with its own title (shown in a dropdown)."""
     project = get_scoped_project(db, project_id, admin)
 
     dest = save_pdf_upload(file, UPLOAD_DIR, f"{project_id}_costsheet")
 
     doc = Document(
-        project_id=project_id, title=f"{project.name} Cost Sheet", doc_type="cost_sheet",
-        file_path=dest, version=1, status="completed",
+        project_id=project_id, title=title.strip() or f"{project.name} Cost Sheet",
+        doc_type="cost_sheet", file_path=dest, version=1, status="completed",
         indexed_at=datetime.now(timezone.utc),
     )
     db.add(doc)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="documents",
-                 entity_id=doc.id, after={"doc_type": "cost_sheet"})
+                 entity_id=doc.id, after={"doc_type": "cost_sheet", "title": doc.title})
     db.commit()
-    return {"document_id": doc.id, "message": "Cost sheet uploaded."}
+    return {"document_id": doc.id, "title": doc.title, "message": "Cost sheet uploaded."}
+
+
+@router.delete("/projects/{project_id}/cost-sheets/{doc_id}")
+def delete_cost_sheet(
+    project_id: int, doc_id: int,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Delete one cost sheet from a project."""
+    get_scoped_project(db, project_id, admin)
+    doc = db.get(Document, doc_id)
+    if not doc or doc.project_id != project_id or doc.doc_type != "cost_sheet":
+        raise HTTPException(404, "Cost sheet not found")
+    if doc.file_path and os.path.exists(doc.file_path):
+        try:
+            os.remove(doc.file_path)
+        except OSError:
+            pass
+    record_audit(db, user_id=admin.id, action="DELETE", entity="documents",
+                 entity_id=doc.id, before={"title": doc.title, "doc_type": "cost_sheet"})
+    db.delete(doc)
+    db.commit()
+    return {"deleted": doc_id}
 
 
 @router.get("/audit")

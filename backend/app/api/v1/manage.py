@@ -18,6 +18,7 @@ from app.core.tenancy import get_scoped_project
 from app.database import get_db
 from app.services import cache
 from app.models import (
+    Amenity,
     Builder,
     Configuration,
     Inventory,
@@ -40,8 +41,7 @@ _DOCTYPES_KEY = "document_types"
 
 class ConfigurationIn(BaseModel):
     type: str
-    carpet_area: float | None = None
-    super_area: float | None = None
+    super_area: float | None = None   # shown to users as "Size"
     base_price: float
     price_unit: str = "per_sqft"
     plc: float | None = None
@@ -70,8 +70,7 @@ def add_configuration(
     get_scoped_project(db, project_id, admin)
 
     cfg = Configuration(
-        project_id=project_id, type=payload.type,
-        carpet_area=payload.carpet_area, super_area=payload.super_area,
+        project_id=project_id, type=payload.type, super_area=payload.super_area,
     )
     db.add(cfg)
     db.flush()
@@ -133,8 +132,7 @@ def list_configurations(
 
         out.append({
             "id": cfg.id, "type": cfg.type,
-            "carpet_area": float(cfg.carpet_area) if cfg.carpet_area else None,
-            "super_area": float(cfg.super_area) if cfg.super_area else None,
+            "size": float(cfg.super_area) if cfg.super_area else None,
             "current_price": {
                 "base_price": float(price.base_price), "price_unit": price.price_unit,
                 "plc": float(price.plc) if price.plc else None,
@@ -393,6 +391,50 @@ def delete_location(point_id: int, db: Session = Depends(get_db), admin: User = 
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"deleted": point_id}
+
+
+# ---- Amenities (SQL-first; extracted once at import, then served from DB) ----
+class AmenityIn(BaseModel):
+    name: str
+    category: str | None = None
+
+
+@router.get("/projects/{project_id}/amenities")
+def list_amenities(project_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    get_scoped_project(db, project_id, admin)
+    rows = (
+        db.query(Amenity).filter(Amenity.project_id == project_id)
+        .order_by(Amenity.category, Amenity.name).all()
+    )
+    return [{"id": a.id, "name": a.name, "category": a.category} for a in rows]
+
+
+@router.post("/projects/{project_id}/amenities", status_code=201)
+def add_amenity(project_id: int, payload: AmenityIn, db: Session = Depends(get_db),
+                admin: User = Depends(require_role("admin"))):
+    get_scoped_project(db, project_id, admin)
+    a = Amenity(project_id=project_id, name=payload.name, category=payload.category)
+    db.add(a)
+    db.flush()
+    record_audit(db, user_id=admin.id, action="CREATE", entity="amenities",
+                 entity_id=a.id, after=payload.model_dump())
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"id": a.id, "name": a.name, "category": a.category}
+
+
+@router.delete("/amenities/{amenity_id}")
+def delete_amenity(amenity_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    a = db.get(Amenity, amenity_id)
+    if not a:
+        raise HTTPException(404, "Amenity not found")
+    get_scoped_project(db, a.project_id, admin)
+    record_audit(db, user_id=admin.id, action="DELETE", entity="amenities",
+                 entity_id=amenity_id, before={"name": a.name})
+    db.delete(a)
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"deleted": amenity_id}
 
 
 class BuilderIn(BaseModel):

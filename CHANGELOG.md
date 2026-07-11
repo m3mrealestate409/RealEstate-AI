@@ -6,6 +6,18 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.21.0] — 2026-07-11
+
+### Changed — Better-reading LLM answers
+- **Markdown is now rendered** in AI summaries / general-knowledge answers, so
+  bold, bullet points and headings display properly instead of showing raw `**`
+  and `*` characters (via `react-markdown`; frontend-only, no token cost).
+- **Rewrote the system prompt** for tone and readability: the assistant opens
+  with a one-line hook, then gives short bullet points with the key term bolded,
+  matches the user's language (English/Hindi/Hinglish), and stays concise. All
+  grounding rules are unchanged (uses only retrieved facts, never invents
+  figures, exact "not available" fallback).
+
 ## [1.20.0] — 2026-07-11
 
 ### Added — Share brochure / cost sheet on WhatsApp

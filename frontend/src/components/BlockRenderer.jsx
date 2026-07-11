@@ -1,5 +1,6 @@
 // Renders the structured answer blocks returned by /v1/query.
 // Format priority mirrors Constitution §17: cards, tables, timeline, checklist, paragraph.
+import ReactMarkdown from "react-markdown";
 
 function fmt(v) {
   if (v === null || v === undefined || v === "") return "—";
@@ -82,7 +83,9 @@ function ParagraphBlock({ block }) {
   return (
     <div className="block">
       {block.title && <div className="block-title">{block.title}</div>}
-      <p className="para">{block.text}</p>
+      <div className="para markdown-body">
+        <ReactMarkdown>{block.text || ""}</ReactMarkdown>
+      </div>
     </div>
   );
 }

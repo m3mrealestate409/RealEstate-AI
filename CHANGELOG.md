@@ -6,6 +6,19 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-07-11
+
+### Added — Project ↔ builder
+- **Choose a builder per project** — the New Project and Project Details forms
+  now have a Builder dropdown (org's builders + "None").
+- The project page shows **"🏗️ by {builder}"** at the top.
+- Project detail/list responses include `builder_id` and `builder_name`.
+
+### Changed
+- **Builders are now organization-scoped** — each tenant sees and picks only its
+  own builders (previously global). Existing builders migrate to the default org.
+  A project can only be assigned a builder from its own organization.
+
 ## [1.12.1] — 2026-07-11
 
 ### Fixed

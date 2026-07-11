@@ -67,6 +67,7 @@ export default function ProjectDetail() {
           <StatusChip status={project.project_status} />
         </div>
       </div>
+      {project.builder_name && <div className="builder-line">🏗️ by {project.builder_name}</div>}
       <div className="muted">📍 {project.locality}, {project.city} · Possession {project.possession_date || "—"}</div>
 
       {(project.project_type || project.land_parcel || project.green_area || towers.length > 0) && (

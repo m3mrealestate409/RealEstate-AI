@@ -83,7 +83,7 @@ def _seed_project(
         return
     b = db.query(Builder).filter(Builder.name == builder).first()
     if not b:
-        b = Builder(name=builder, rera_id=f"RERA-{builder[:3].upper()}-001")
+        b = Builder(name=builder, rera_id=f"RERA-{builder[:3].upper()}-001", organization_id=org.id)
         db.add(b)
         db.flush()
 
@@ -138,6 +138,9 @@ def seed() -> None:
         ), {"oid": org.id})
         db.execute(text(
             "UPDATE projects SET organization_id=:oid WHERE organization_id IS NULL"
+        ), {"oid": org.id})
+        db.execute(text(
+            "UPDATE builders SET organization_id=:oid WHERE organization_id IS NULL"
         ), {"oid": org.id})
         db.commit()
 

@@ -13,7 +13,7 @@ from app.core.audit import record_audit
 from app.core.security import require_role
 from app.core.tenancy import get_scoped_project
 from app.database import get_db
-from app.models import Document, Project, User
+from app.models import Builder, Document, Project, User
 from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
 from app.services import cache
 from app.services.rag.ingest import ingest_document
@@ -21,6 +21,15 @@ from app.services.rag.ingest import ingest_document
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "uploads")
+
+
+def _check_builder(db, builder_id, admin) -> None:
+    """A project may only use a builder from its own organization."""
+    if not builder_id:
+        return
+    b = db.get(Builder, builder_id)
+    if not b or (not admin.is_super_admin and b.organization_id != admin.organization_id):
+        raise HTTPException(422, "Invalid builder for this organization")
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
@@ -31,6 +40,7 @@ def create_project(
 ):
     if db.query(Project).filter(Project.slug == payload.slug).first():
         raise HTTPException(409, "slug already exists")
+    _check_builder(db, payload.builder_id, admin)
     project = Project(**payload.model_dump(), organization_id=admin.organization_id)
     db.add(project)
     db.flush()
@@ -50,6 +60,8 @@ def update_project(
     admin: User = Depends(require_role("admin")),
 ):
     project = get_scoped_project(db, project_id, admin)
+    if payload.builder_id is not None:
+        _check_builder(db, payload.builder_id, admin)
 
     before = {c.name: getattr(project, c.name) for c in project.__table__.columns}
     changes = payload.model_dump(exclude_unset=True)

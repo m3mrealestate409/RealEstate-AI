@@ -283,10 +283,13 @@ class BuilderIn(BaseModel):
 
 @router.get("/builders")
 def list_builders(db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    bq = db.query(Builder)
+    if not admin.is_super_admin and admin.organization_id:
+        bq = bq.filter(Builder.organization_id == admin.organization_id)
     return [
         {"id": b.id, "name": b.name, "rera_id": b.rera_id,
          "projects": db.query(Project).filter(Project.builder_id == b.id).count()}
-        for b in db.query(Builder).order_by(Builder.name).all()
+        for b in bq.order_by(Builder.name).all()
     ]
 
 
@@ -294,7 +297,7 @@ def list_builders(db: Session = Depends(get_db), admin: User = Depends(require_r
 def create_builder(
     payload: BuilderIn, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))
 ):
-    b = Builder(name=payload.name, rera_id=payload.rera_id)
+    b = Builder(name=payload.name, rera_id=payload.rera_id, organization_id=admin.organization_id)
     db.add(b)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="builders",

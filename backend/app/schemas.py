@@ -89,6 +89,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
+    builder_id: int | None = None
     city: str | None = None
     locality: str | None = None
     rera_number: str | None = None
@@ -104,6 +105,8 @@ class ProjectOut(BaseModel):
     id: int
     name: str
     slug: str
+    builder_id: int | None = None
+    builder_name: str | None = None
     city: str | None
     locality: str | None
     project_status: str | None

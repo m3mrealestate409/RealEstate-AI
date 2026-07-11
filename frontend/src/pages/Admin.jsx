@@ -53,15 +53,28 @@ export default function Admin() {
 const STATUS_OPTIONS = ["Launched", "Under Construction", "Ready to Move", "Delivered"];
 const TYPE_OPTIONS = ["Residential", "Commercial", "Industrial"];
 const BLANK_PROJECT = {
-  name: "", slug: "", city: "", locality: "", project_status: "Under Construction",
+  name: "", slug: "", builder_id: "", city: "", locality: "", project_status: "Under Construction",
   project_type: "Residential", land_parcel: "", green_area: "",
 };
 
+// builder_id comes from a <select> as a string; the API wants int|null.
+function cleanProject(f) {
+  return { ...f, builder_id: f.builder_id ? Number(f.builder_id) : null };
+}
+
 function ProjectFields({ f, set }) {
+  const [builders, setBuilders] = useState([]);
+  useEffect(() => { api.listBuilders().then(setBuilders).catch(() => setBuilders([])); }, []);
   return (
     <div className="calc-fields">
       <label className="field"><span>Name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
       {"slug" in f && <label className="field"><span>Slug (unique)</span><input value={f.slug} onChange={(e) => set("slug", e.target.value)} required /></label>}
+      <label className="field"><span>Builder</span>
+        <select value={f.builder_id || ""} onChange={(e) => set("builder_id", e.target.value)}>
+          <option value="">— None —</option>
+          {builders.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      </label>
       <label className="field"><span>City</span><input value={f.city || ""} onChange={(e) => set("city", e.target.value)} /></label>
       <label className="field"><span>Locality</span><input value={f.locality || ""} onChange={(e) => set("locality", e.target.value)} /></label>
       <label className="field"><span>Status</span>
@@ -89,7 +102,7 @@ function NewProject() {
     e.preventDefault();
     setMsg(null);
     try {
-      const p = await api.createProject(f);
+      const p = await api.createProject(cleanProject(f));
       setMsg({ ok: true, text: `Created "${p.name}" (id ${p.id}).` });
       setF(BLANK_PROJECT);
     } catch (err) {
@@ -338,7 +351,7 @@ function EditProjectDetails({ projectId }) {
   const [msg, setMsg] = useState(null);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   useEffect(() => { api.project(projectId).then((p) => setF({
-    name: p.name, city: p.city || "", locality: p.locality || "",
+    name: p.name, builder_id: p.builder_id || "", city: p.city || "", locality: p.locality || "",
     project_status: p.project_status || "Under Construction",
     project_type: p.project_type || "Residential",
     land_parcel: p.land_parcel || "", green_area: p.green_area || "",
@@ -350,7 +363,7 @@ function EditProjectDetails({ projectId }) {
     e.preventDefault();
     setMsg(null);
     try {
-      await api.updateProject(projectId, f);
+      await api.updateProject(projectId, cleanProject(f));
       setMsg({ ok: true, text: "Project details saved." });
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }

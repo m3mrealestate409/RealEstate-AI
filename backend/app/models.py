@@ -72,6 +72,7 @@ class Builder(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     rera_id: Mapped[str | None] = mapped_column(String)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -122,6 +123,11 @@ class Project(Base):
     )
 
     builder: Mapped["Builder"] = relationship(back_populates="projects")
+
+    @property
+    def builder_name(self) -> str | None:
+        return self.builder.name if self.builder else None
+
     configurations: Mapped[list["Configuration"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )

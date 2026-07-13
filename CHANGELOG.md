@@ -6,6 +6,18 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-07-13
+
+### Added — Premium widget identity
+- **Assistant name + profile photo** — set the assistant's display name and
+  upload a profile picture in Admin → Integrations. Shown in the chat widget
+  header (with an initials avatar fallback when no photo is set). Delivered via
+  `/v1/widget/config` so the widget picks it up live.
+- **Redesigned widget header** — avatar + name + an "Online" status, for a
+  polished, branded look.
+- **Premium callback button** — replaced the plain "📞 Callback" text with a
+  clean pill button (proper phone icon + label, subtle hover).
+
 ## [2.3.1] — 2026-07-13
 
 ### Changed

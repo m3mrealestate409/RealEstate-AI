@@ -203,9 +203,11 @@ export const api = {
   getWidgetConfig: () => request("/v1/admin/widget-config"),
   setWidgetConfig: (greeting) => request("/v1/admin/widget-config", { method: "PUT", body: { greeting } }),
 
-  // Assistant persona (org-wide — website, CRM, WhatsApp, app)
+  // Assistant persona + identity (org-wide — website, CRM, WhatsApp, app)
   getAssistantConfig: () => request("/v1/admin/assistant-config"),
-  setAssistantConfig: (persona) => request("/v1/admin/assistant-config", { method: "PUT", body: { persona } }),
+  setAssistantConfig: (data) => request("/v1/admin/assistant-config", { method: "PUT", body: data }),
+  uploadAssistantAvatar: (formData) => request("/v1/admin/assistant-avatar", { method: "POST", body: formData }),
+  deleteAssistantAvatar: () => request("/v1/admin/assistant-avatar", { method: "DELETE" }),
 
   // API keys (external integrations)
   listApiKeys: () => request("/v1/admin/api-keys"),

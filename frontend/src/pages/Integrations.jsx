@@ -35,31 +35,84 @@ function Step({ n, title, children }) {
 
 function AssistantPersona() {
   const [persona, setPersona] = useState("");
+  const [name, setName] = useState("");
+  const [avatar, setAvatar] = useState(null);        // served path
   const [hint, setHint] = useState("");
+  const [nameHint, setNameHint] = useState("Riya");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState(null);
+
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
+  const avatarSrc = avatar ? (avatar.startsWith("http") ? avatar : API_BASE_URL + avatar) : null;
+  const initial = (name || nameHint || "A").trim().charAt(0).toUpperCase();
+
   useEffect(() => {
-    api.getAssistantConfig().then((c) => { setPersona(c.persona || ""); setHint(c.hint || ""); }).catch(() => {});
+    api.getAssistantConfig().then((c) => {
+      setPersona(c.persona || ""); setName(c.name || ""); setAvatar(c.avatar_url || null);
+      setHint(c.hint || ""); setNameHint(c.name_hint || "Riya");
+    }).catch(() => {});
   }, []);
+
   async function save() {
     setSaving(true); setMsg(null);
     try {
-      const r = await api.setAssistantConfig(persona);
-      setPersona(r.persona || "");
+      const r = await api.setAssistantConfig({ persona, name });
+      setPersona(r.persona || ""); setName(r.name || "");
       setMsg({ ok: true, text: "Saved — applies everywhere (website, CRM, WhatsApp, app)." });
     } catch (e) { setMsg({ ok: false, text: e.message }); }
     finally { setSaving(false); }
   }
+  async function onAvatar(file) {
+    if (!file) return;
+    setUploading(true); setMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api.uploadAssistantAvatar(fd);
+      setAvatar(r.avatar_url || null);
+      setMsg({ ok: true, text: "Profile picture updated." });
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setUploading(false); }
+  }
+  async function removeAvatar() {
+    setUploading(true); setMsg(null);
+    try { await api.deleteAssistantAvatar(); setAvatar(null); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setUploading(false); }
+  }
+
   return (
     <div className="int-greeting int-persona">
-      <b>🎭 Assistant persona — applies to every channel</b>
+      <b>🎭 Assistant identity &amp; persona — applies to every channel</b>
       <p className="muted">
-        Give your assistant an identity, voice and style — used on the website widget, CRM, WhatsApp and the app.
-        It only changes tone/personality; prices &amp; facts always stay grounded (never invented).
+        Give your assistant a name, photo and personality — shown on the website chat widget and used
+        across CRM, WhatsApp and the app. It only changes look/tone; prices &amp; facts stay grounded.
       </p>
-      <textarea rows={4} value={persona} onChange={(e) => setPersona(e.target.value)} placeholder={hint} />
+
+      <div className="persona-id-row">
+        <div className="persona-avatar" style={avatarSrc ? { backgroundImage: `url(${avatarSrc})` } : null}>
+          {!avatarSrc && <span>{initial}</span>}
+        </div>
+        <div className="persona-id-fields">
+          <label className="field"><span>Assistant name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={nameHint} maxLength={40} />
+          </label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+              {uploading ? "Uploading…" : "Upload photo"}
+              <input type="file" accept="image/*" hidden onChange={(e) => onAvatar(e.target.files[0])} />
+            </label>
+            {avatar && <button type="button" className="btn btn-sm btn-ghost" onClick={removeAvatar} disabled={uploading}>Remove</button>}
+          </div>
+        </div>
+      </div>
+
+      <label className="field" style={{ marginTop: 4 }}><span>Personality / master prompt</span>
+        <textarea rows={4} value={persona} onChange={(e) => setPersona(e.target.value)} placeholder={hint} />
+      </label>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save persona"}</button>
+        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
         {!persona && hint && <button type="button" className="btn btn-sm" onClick={() => setPersona(hint)}>Use example</button>}
         {msg && <span style={{ fontSize: 13, color: msg.ok ? "var(--muted)" : "#c0392b" }}>{msg.text}</span>}
       </div>

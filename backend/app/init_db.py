@@ -61,6 +61,9 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_persona TEXT"))
         # CRM webhook — captured leads are POSTed here.
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS crm_webhook_url TEXT"))
+        # Chat widget identity — assistant display name + avatar image path.
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_name TEXT"))
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_avatar TEXT"))
     logger.info("Database initialised.")
 
 

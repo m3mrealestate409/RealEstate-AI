@@ -17,6 +17,45 @@ from fastapi import HTTPException, UploadFile
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 _ALLOWED_CONTENT_TYPES = {"application/pdf", "application/octet-stream", "", None}
 
+MAX_IMAGE_BYTES = 3 * 1024 * 1024  # 3 MB
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+def save_image_upload(file: UploadFile, upload_dir: str, prefix: str) -> str:
+    """Validate + stream a small image (avatar) to a server-generated safe path.
+    Same containment/size protections as PDFs. Returns the absolute file path."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _IMAGE_EXTS:
+        raise HTTPException(422, "Only PNG, JPG, WEBP or GIF images are allowed.")
+    if file.content_type and file.content_type not in _IMAGE_CONTENT_TYPES:
+        raise HTTPException(422, "Only image files are allowed.")
+
+    os.makedirs(upload_dir, exist_ok=True)
+    safe_prefix = "".join(c for c in str(prefix) if c.isalnum() or c in ("-", "_"))[:40] or "img"
+    safe_name = f"{safe_prefix}_{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(upload_dir, safe_name)
+
+    if os.path.commonpath([os.path.realpath(dest), os.path.realpath(upload_dir)]) != os.path.realpath(upload_dir):
+        raise HTTPException(400, "Invalid upload path.")
+
+    written = 0
+    try:
+        with open(dest, "wb") as out:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_IMAGE_BYTES:
+                    raise HTTPException(413, "Image too large (max 3 MB).")
+                out.write(chunk)
+    except HTTPException:
+        if os.path.exists(dest):
+            os.unlink(dest)
+        raise
+    return dest
+
 
 def save_pdf_upload(file: UploadFile, upload_dir: str, prefix: str) -> str:
     """Validate + stream a PDF upload to a server-generated safe path.

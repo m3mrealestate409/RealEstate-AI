@@ -64,6 +64,10 @@ class Organization(Base):
     # (web app, website widget, CRM, WhatsApp). Controls voice/tone only; the
     # grounding rules (never invent facts) always stay on top.
     assistant_persona: Mapped[str | None] = mapped_column(Text)
+    # Display identity for the chat widget (premium look): the assistant's name
+    # (e.g. "Riya") and an optional avatar image path served from /static.
+    assistant_name: Mapped[str | None] = mapped_column(String)
+    assistant_avatar: Mapped[str | None] = mapped_column(String)
     # Optional CRM/webhook URL — every captured lead is POSTed here (best-effort)
     # so the company's own CRM receives it in real time. Provider-agnostic.
     crm_webhook_url: Mapped[str | None] = mapped_column(String)

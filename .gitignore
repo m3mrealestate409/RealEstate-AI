@@ -25,3 +25,6 @@ Thumbs.db
 node_modules/
 dist/
 build/
+
+# User-uploaded assistant avatars (runtime data, not source)
+backend/app/static/avatars/

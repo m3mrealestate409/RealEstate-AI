@@ -40,8 +40,15 @@
     "max-height:calc(100vh - 130px);background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.28);" +
     "z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}" +
     ".px-panel.open{display:flex}" +
-    ".px-head{background:" + ACCENT + ";color:#fff;padding:14px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center}" +
-    ".px-head span{cursor:pointer;font-size:20px;opacity:.9}" +
+    ".px-head{background:" + ACCENT + ";color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px}" +
+    ".px-head-id{display:flex;align-items:center;gap:10px;min-width:0}" +
+    ".px-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:rgba(255,255,255,.22) center/cover no-repeat;" +
+    "display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}" +
+    ".px-head-txt{min-width:0}" +
+    ".px-name{font-size:15px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+    ".px-status{font-size:11px;font-weight:500;opacity:.9;display:flex;align-items:center;gap:5px;margin-top:1px}" +
+    ".px-status i{width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block;box-shadow:0 0 0 2px rgba(74,222,128,.35)}" +
+    ".px-x{cursor:pointer;font-size:22px;line-height:1;opacity:.85;padding:0 2px}.px-x:hover{opacity:1}" +
     ".px-msgs{flex:1;overflow-y:auto;padding:14px;background:#f6f7fb;display:flex;flex-direction:column;gap:10px}" +
     ".px-bubble{max-width:82%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}" +
     ".px-user{align-self:flex-end;background:" + ACCENT + ";color:#fff;border-bottom-right-radius:4px}" +
@@ -65,10 +72,13 @@
     ".px-teaser.show{display:block;animation:pxpop .2s}" +
     ".px-teaser-x{position:absolute;top:5px;right:9px;font-size:16px;color:#aaa;cursor:pointer;line-height:1}" +
     "@keyframes pxpop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
-    // Header actions + lead (callback) form.
-    ".px-head-actions{display:flex;align-items:center;gap:12px}" +
-    ".px-cb{cursor:pointer;font-size:13px;font-weight:600;opacity:.95;white-space:nowrap}" +
-    ".px-cb:hover{opacity:1;text-decoration:underline}" +
+    // Header actions + premium callback button + lead form.
+    ".px-head-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}" +
+    ".px-cb{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.18);border:none;color:#fff;" +
+    "border-radius:20px;padding:7px 12px 7px 11px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;" +
+    "font-family:inherit;transition:background .15s,transform .15s;backdrop-filter:blur(2px)}" +
+    ".px-cb:hover{background:rgba(255,255,255,.3);transform:translateY(-1px)}" +
+    ".px-cb-ico{width:15px;height:15px;flex-shrink:0;background:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'/%3E%3C/svg%3E\") center/15px no-repeat}" +
     ".px-lead{display:none;flex-direction:column;gap:9px;padding:14px;background:#fff;border-top:1px solid #eee}" +
     ".px-lead.show{display:flex}" +
     ".px-lead h4{margin:0;font-size:15px;color:#1a1a1a}" +
@@ -91,8 +101,18 @@
   btn.className = "px-btn"; btn.title = TITLE; btn.style.background = BG_CHAT;
   var panel = document.createElement("div"); panel.className = "px-panel";
   panel.innerHTML =
-    '<div class="px-head"><div>' + esc(TITLE) + '</div>' +
-      '<div class="px-head-actions"><span class="px-cb" data-cb>📞 Callback</span><span data-close>&times;</span></div>' +
+    '<div class="px-head">' +
+      '<div class="px-head-id">' +
+        '<div class="px-avatar" data-avatar><span data-initial></span></div>' +
+        '<div class="px-head-txt">' +
+          '<div class="px-name" data-name>' + esc(TITLE) + '</div>' +
+          '<div class="px-status"><i></i>Online</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="px-head-actions">' +
+        '<button class="px-cb" data-cb title="Request a callback"><span class="px-cb-ico"></span>Callback</button>' +
+        '<span class="px-x" data-close>&times;</span>' +
+      '</div>' +
     '</div>' +
     '<div class="px-msgs"></div>' +
     '<div class="px-lead">' +
@@ -282,8 +302,32 @@
     teaser.querySelector(".px-teaser-txt").textContent = text;
     setTimeout(function () { if (!panel.classList.contains("open")) teaser.classList.add("show"); }, 1200);
   }
+  // Apply the assistant's identity (name + avatar) to the header. Falls back to
+  // an initials circle when no photo is set.
+  function applyIdentity(name, avatarUrl) {
+    var display = (name || TITLE || "Assistant");
+    var nameEl = panel.querySelector("[data-name]");
+    if (name) nameEl.textContent = name;
+    var av = panel.querySelector("[data-avatar]");
+    var ini = panel.querySelector("[data-initial]");
+    if (avatarUrl) {
+      var full = /^https?:/.test(avatarUrl) ? avatarUrl : API_URL + avatarUrl;
+      av.style.backgroundImage = "url('" + full + "')";
+      ini.textContent = "";
+    } else {
+      ini.textContent = display.trim().charAt(0).toUpperCase() || "A";
+    }
+  }
+  applyIdentity(null, null); // initials from TITLE until config loads
+
   fetch(API_URL + "/v1/widget/config", { headers: { "X-API-Key": API_KEY } })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (c) { if (c && c.greeting) GREETING = c.greeting; showTeaser(GREETING); })
+    .then(function (c) {
+      if (c) {
+        if (c.greeting) GREETING = c.greeting;
+        applyIdentity(c.name, c.avatar_url);
+      }
+      showTeaser(GREETING);
+    })
     .catch(function () { showTeaser(GREETING); });
 })();

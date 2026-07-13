@@ -81,8 +81,10 @@ def _is_smalltalk(query: str) -> bool:
 
 logger = logging.getLogger(__name__)
 
-# A 10-digit Indian mobile (optionally +91 / 0 prefixed, with spaces/dashes).
-_PHONE_RE = re.compile(r"(?:(?:\+?91|0)[\s-]?)?([6-9]\d{4}[\s-]?\d{5})")
+# A 10-digit Indian mobile after separators are stripped — so ANY grouping the
+# visitor might type (98765 43210, 9876 543210, 987-654-3210, +91 98765-43210)
+# is caught. We favour recall: a missed number is a lost lead.
+_PHONE_RE = re.compile(r"(?<!\d)(?:\+?91|0)?([6-9]\d{9})(?!\d)")
 # Phrases that signal the visitor wants a human to reach out.
 _CALLBACK_WORDS = (
     "call me", "callback", "call back", "phone me", "contact me", "reach me",
@@ -93,12 +95,13 @@ _CALLBACK_WORDS = (
 
 
 def _extract_phone(query: str) -> str | None:
-    """Return a normalised 10-digit phone if the text clearly contains one."""
-    m = _PHONE_RE.search(query or "")
-    if not m:
+    """Return a normalised 10-digit phone if the text contains one. Common phone
+    separators are stripped first so any grouping the visitor types is caught."""
+    if not query:
         return None
-    digits = re.sub(r"\D", "", m.group(1))
-    return digits if len(digits) == 10 else None
+    compact = re.sub(r"[\s\-.()]", "", query)  # 98765 43210 / 987-654-3210 → digits
+    m = _PHONE_RE.search(compact)
+    return m.group(1) if m else None
 
 
 def _wants_callback(query: str) -> bool:

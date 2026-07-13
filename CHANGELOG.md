@@ -6,6 +6,15 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-07-13
+
+### Fixed
+- **Chat phone → lead missed some formats** — the auto-lead phone detector only
+  matched a couple of number groupings, so a visitor typing e.g. `9876 543210`
+  or `987-654-3210` was not captured. It now strips separators first and catches
+  any grouping (spaces, dashes, dots, `+91`/`0` prefix), while still ignoring
+  ordinary numbers in questions (prices, areas, budgets).
+
 ## [2.2.0] — 2026-07-13
 
 ### Added — Smarter chat experience (website widget)

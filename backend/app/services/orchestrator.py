@@ -22,7 +22,7 @@ from app.core.tenancy import org_scope_id
 from app.models import QueryLog
 from app.services import database_service as dbsvc
 from app.services import intent as intent_svc
-from app.services import cache, nlparse, quota, recommend, renderer
+from app.services import cache, nlparse, quota, ratelimit, recommend, renderer
 from app.services.llm import get_llm_provider
 from app.services.llm.base import Message
 from app.services.rag import retrieve as rag_retrieve
@@ -332,6 +332,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     # ---- CACHE + QUOTA: only EXPENSIVE (LLM/RAG) queries; SQL look-ups are free.
     is_expensive = bool(ir.rag_intents or ir.needs_llm)
     cacheable = is_expensive and not ir.resolved_from_memory  # follow-ups depend on context
+    suppress_llm = False  # set when the widget's daily budget is spent (degrade to DB-only)
 
     if is_expensive:
         # 1) Serve a cached answer if we have one — no LLM call, no quota spent.
@@ -349,8 +350,18 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                            latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
                 return hit
 
-        # 2) Enforce per-employee tier limit AND company-wide plan quota.
-        if user is not None:
+        # 2) Budget. The public widget (API key) uses its OWN daily LLM budget,
+        #    kept SEPARATE from employee quotas so abuse can't block real staff.
+        #    When its budget is spent we DEGRADE: skip the LLM/RAG but still
+        #    answer from the database below (prices/plans stay available).
+        if getattr(user, "_via_api_key", False):
+            w_ok, _, _ = ratelimit.widget_daily_check(org_id)
+            if w_ok:
+                ratelimit.widget_daily_consume(org_id)
+            else:
+                suppress_llm = True
+        # 3) Employees: existing per-employee tier limit AND company-wide quota.
+        elif user is not None:
             u_ok, _, u_limit = quota.check_quota(db, user, today)
             o_ok, _, o_limit = quota.check_org_quota(db, org_id, today)
             if not u_ok or not o_ok:
@@ -432,7 +443,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
             context_for_llm.append(f"[recommendations] {matches}")
 
     # ---- 2) RAG (documents only) -----------------------------------------
-    if ir.rag_intents or ir.needs_llm:
+    if (ir.rag_intents or ir.needs_llm) and not suppress_llm:
         chunks = rag_retrieve.retrieve(
             db, query, project_ids=ir.project_ids or None, org_id=org_id
         )
@@ -458,7 +469,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                 blocks.append(renderer.rag_block("From brochure", chunks))
 
     # ---- 3) LLM (reasoning only, grounded) -------------------------------
-    if ir.needs_llm:
+    if ir.needs_llm and not suppress_llm:
         provider = get_llm_provider()
         ctx = "\n".join(context_for_llm) if context_for_llm else ""
         user_msg = ""
@@ -475,6 +486,25 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         confidences.append(round(min(confidences) if confidences else 0.4, 2))
 
     # ---- 4) Compose / Hallucination policy -------------------------------
+    if suppress_llm and not blocks:
+        # Widget's daily AI budget is spent and the DB had no direct answer.
+        # Don't make an LLM call — invite a callback instead (turns the limit
+        # into a lead opportunity).
+        env = _envelope(
+            blocks=[renderer.paragraph_block(
+                "",
+                "We're experiencing high demand right now. Please leave your number and our "
+                "team will get back to you — or ask about a specific project's price, payment "
+                "plan, or amenities and I'll pull it up.",
+            )],
+            citations=[], handlers=["quota"], session_id=session_id,
+            not_available=True, confidence=0.0, intent=ir, suggestions=_suggestions(ir),
+        )
+        env["suggest_callback"] = True
+        session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
+        _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
+                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+        return env
     if not blocks:
         # Nothing in the company knowledge base — fall back to the LLM's general
         # knowledge, clearly flagged as UNVERIFIED (red badge in the UI).

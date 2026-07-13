@@ -6,7 +6,25 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
-## [2.2.2] — 2026-07-13
+## [2.3.0] — 2026-07-13
+
+### Added — Abuse protection for the public chat widget
+The public website widget now has its own guards so a bad actor can't flood it,
+run up AI cost, or starve real employees. All Redis-backed and fail-open.
+
+- **Rate limit (anti-flood)** — per chat session (20 / 5 min) and per IP
+  (40 / 5 min) on `/v1/query` and `/v1/leads`. Over the limit returns HTTP 429;
+  the widget shows a friendly "please wait a moment" message. Employees (JWT)
+  are unaffected.
+- **Daily cost ceiling** — each org's widget has its own daily budget of
+  expensive (LLM) queries (default 300). When spent it **degrades** rather than
+  errors: prices/plans/amenities (from the database) keep working, and other
+  questions get a warm "high demand — leave your number" reply that offers a
+  callback (turning the limit into a lead).
+- **Separate budgets** — widget traffic now counts against its **own** budget,
+  not the employee/company quota, so public abuse can never block staff.
+
+
 
 ### Added
 - **Leads: "Interested in" column** — the project a lead was viewing/discussing

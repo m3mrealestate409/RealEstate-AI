@@ -164,7 +164,11 @@
         source: "widget", session_id: SESSION, page_url: location.href,
       }),
     })
-      .then(function (r) { if (!r.ok) throw new Error(r.status === 401 ? "Auth failed — check the API key." : "Could not send"); return r.json(); })
+      .then(function (r) {
+        if (r.status === 429) throw new Error("Too many requests — please wait a moment and try again.");
+        if (!r.ok) throw new Error(r.status === 401 ? "Auth failed — check the API key." : "Could not send");
+        return r.json();
+      })
       .then(function () {
         leadStatus.textContent = "✓ Thanks! Our team will call you shortly.";
         leadStatus.className = "px-lead-status px-lead-ok";
@@ -255,7 +259,11 @@
       headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
       body: JSON.stringify({ query: q, session_id: SESSION, format: "text" }),
     })
-      .then(function (r) { if (!r.ok) throw new Error(r.status === 401 ? "Auth failed — check the API key." : "Request failed"); return r.json(); })
+      .then(function (r) {
+        if (r.status === 429) throw new Error("You're sending messages too quickly — please wait a moment. 🙏");
+        if (!r.ok) throw new Error(r.status === 401 ? "Auth failed — check the API key." : "Request failed");
+        return r.json();
+      })
       .then(function (d) {
         var full = d.answer_text || "Information not available.";
         // Render the full answer + run all logic IMMEDIATELY (not gated on the

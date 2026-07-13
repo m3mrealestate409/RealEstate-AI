@@ -14,7 +14,7 @@ pushed to it in real time (best-effort, non-blocking).
 import logging
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.core.security import get_current_user, require_role
 from app.core.tenancy import org_scope_id
 from app.database import get_db
 from app.models import Lead, Organization, User
+from app.services import ratelimit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["leads"])
@@ -54,6 +55,7 @@ class LeadIn(BaseModel):
 def capture_lead(
     payload: LeadIn,
     background: BackgroundTasks,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -62,6 +64,15 @@ def capture_lead(
         raise HTTPException(422, "A phone number or email is required.")
 
     org_id = org_scope_id(user)
+
+    # Anti-spam: rate-limit public (widget) lead submissions by session + IP.
+    if getattr(user, "_via_api_key", False):
+        xff = request.headers.get("x-forwarded-for")
+        ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+        ok, retry = ratelimit.flood_check(org_id, payload.session_id, ip)
+        if not ok:
+            raise HTTPException(429, "Too many requests. Please wait a moment.",
+                                headers={"Retry-After": str(retry)})
     lead = Lead(
         organization_id=org_id,
         name=(payload.name or "").strip() or None,

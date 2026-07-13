@@ -64,6 +64,8 @@ def init_db() -> None:
         # Chat widget identity — assistant display name + avatar image path.
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_name TEXT"))
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_avatar TEXT"))
+        # Per-employee Live Chat (takeover) access.
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS can_live_chat BOOLEAN DEFAULT false"))
     logger.info("Database initialised.")
 
 

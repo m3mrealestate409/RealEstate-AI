@@ -105,6 +105,9 @@ class User(Base):
     tier: Mapped[str] = mapped_column(String, default="basic")  # basic | advanced (query limit)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Whether this employee can access the Live Chat console (take over website
+    # chats). Admins always can; the admin grants it to other employees.
+    can_live_chat: Mapped[bool] = mapped_column(Boolean, default=False)
     # Multi-tenancy: org-scoped users; super-admins (SaaS owner) have no org.
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False)

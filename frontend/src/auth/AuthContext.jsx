@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
     const u = {
       email, name: res.name, role: res.role,
       is_super_admin: res.is_super_admin, organization_id: res.organization_id,
+      can_live_chat: res.can_live_chat,
     };
     setSession(res.access_token, u);
     setUser(u);

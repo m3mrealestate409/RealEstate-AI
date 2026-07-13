@@ -170,6 +170,7 @@ export const api = {
   createUser: (data) => request("/v1/admin/users", { method: "POST", body: data }),
   toggleUser: (id) => request(`/v1/admin/users/${id}/toggle`, { method: "POST" }),
   setUserTier: (id, tier) => request(`/v1/admin/users/${id}/tier`, { method: "POST", body: { tier } }),
+  toggleUserLiveChat: (id) => request(`/v1/admin/users/${id}/livechat`, { method: "POST" }),
   getTierLimits: () => request("/v1/admin/users/tier-limits"),
   setTierLimits: (data) => request("/v1/admin/users/tier-limits", { method: "PUT", body: data }),
 

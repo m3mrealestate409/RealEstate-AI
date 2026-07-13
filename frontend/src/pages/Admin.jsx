@@ -37,7 +37,6 @@ export default function Admin() {
         <button className={`tab ${tab === "doctypes" ? "tab-active" : ""}`} onClick={() => setTab("doctypes")}>Doc Types</button>
         <button className={`tab ${tab === "import" ? "tab-active" : ""}`} onClick={() => setTab("import")}>Import CSV</button>
         <button className={`tab ${tab === "users" ? "tab-active" : ""}`} onClick={() => setTab("users")}>Users</button>
-        <button className={`tab ${tab === "livechat" ? "tab-active" : ""}`} onClick={() => setTab("livechat")}>💬 Live Chat</button>
         <button className={`tab ${tab === "insights" ? "tab-active" : ""}`} onClick={() => setTab("insights")}>📊 Insights</button>
         <button className={`tab ${tab === "leads" ? "tab-active" : ""}`} onClick={() => setTab("leads")}>📇 Leads</button>
         <button className={`tab ${tab === "apikeys" ? "tab-active" : ""}`} onClick={() => setTab("apikeys")}>🔌 API Keys</button>
@@ -54,7 +53,6 @@ export default function Admin() {
       {tab === "doctypes" && <DocTypes />}
       {tab === "import" && <ImportCsv />}
       {tab === "users" && <Users />}
-      {tab === "livechat" && <LiveChat />}
       {tab === "insights" && <Insights />}
       {tab === "leads" && <Leads />}
       {tab === "apikeys" && <ApiKeys />}
@@ -1014,6 +1012,7 @@ function Users() {
 
   async function toggle(id) { await api.toggleUser(id); load(); }
   async function changeTier(id, tier) { await api.setUserTier(id, tier); load(); }
+  async function toggleLive(id) { await api.toggleUserLiveChat(id); load(); }
   async function saveLimits() {
     setMsg(null);
     try {
@@ -1069,9 +1068,11 @@ function Users() {
 
       <div className="table-wrap" style={{ marginTop: 18 }}>
         <table className="data-table">
-          <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Tier</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Tier</th><th>Live Chat</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {users.map((u) => (
+            {users.map((u) => {
+              const liveOn = u.role === "admin" || u.can_live_chat;
+              return (
               <tr key={u.id}>
                 <td>{u.email}</td><td>{u.name || "—"}</td>
                 <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
@@ -1080,115 +1081,18 @@ function Users() {
                     <option value="basic">basic</option><option value="advanced">advanced</option>
                   </select>
                 </td>
+                <td>
+                  {u.role === "admin"
+                    ? <span className="status-chip chip-green" title="Admins always have Live Chat">always</span>
+                    : <button className={`btn btn-sm ${liveOn ? "btn-primary" : ""}`} onClick={() => toggleLive(u.id)}>{u.can_live_chat ? "✓ On" : "Off"}</button>}
+                </td>
                 <td>{u.is_active === false ? <span className="status-chip chip-gray">inactive</span> : <span className="status-chip chip-green">active</span>}</td>
                 <td><button className="btn btn-ghost" onClick={() => toggle(u.id)}>Toggle</button></td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
-      </div>
-    </div>
-  );
-}
-
-function LiveChat() {
-  const [sessions, setSessions] = useState([]);
-  const [active, setActive] = useState(null);      // session_id
-  const [convo, setConvo] = useState(null);        // {mode, agent, messages}
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const scrollRef = useRef(null);
-  const activeRef = useRef(null);
-  activeRef.current = active;
-
-  // Poll the inbox every 4s.
-  useEffect(() => {
-    let alive = true;
-    const load = () => api.liveSessions().then((s) => { if (alive) setSessions(s); }).catch(() => {});
-    load();
-    const t = setInterval(load, 4000);
-    return () => { alive = false; clearInterval(t); };
-  }, []);
-
-  // Poll the open conversation every 2.5s.
-  useEffect(() => {
-    if (!active) { setConvo(null); return; }
-    let alive = true;
-    const load = () => api.liveTranscript(active).then((c) => { if (alive && activeRef.current === active) setConvo(c); }).catch(() => {});
-    load();
-    const t = setInterval(load, 2500);
-    return () => { alive = false; clearInterval(t); };
-  }, [active]);
-
-  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [convo]);
-
-  async function takeover() { setBusy(true); try { await api.liveTakeover(active); await refresh(); } finally { setBusy(false); } }
-  async function release() { setBusy(true); try { await api.liveRelease(active); await refresh(); } finally { setBusy(false); } }
-  async function refresh() { try { setConvo(await api.liveTranscript(active)); } catch {} }
-  async function send(e) {
-    e.preventDefault();
-    const t = text.trim();
-    if (!t || busy) return;
-    setBusy(true); setText("");
-    try { await api.liveSend(active, t); await refresh(); }
-    catch (err) { setText(t); }
-    finally { setBusy(false); }
-  }
-
-  const isHuman = convo?.mode === "human";
-  return (
-    <div className="admin-form">
-      <div className="settings-note">
-        Live website conversations. Click one to watch it, then <b>Take over</b> to reply as a human —
-        the AI pauses for that visitor until you hand it back.
-      </div>
-      <div className="live-wrap">
-        <div className="live-list">
-          {sessions.length === 0 && <div className="muted" style={{ padding: 12 }}>No active chats right now.</div>}
-          {sessions.map((s) => (
-            <button key={s.session_id} className={`live-item ${active === s.session_id ? "live-item-active" : ""}`}
-              onClick={() => setActive(s.session_id)}>
-              <div className="live-item-top">
-                <span className="live-id">{s.session_id}</span>
-                <span className={`live-mode ${s.mode === "human" ? "live-mode-human" : ""}`}>{s.mode === "human" ? (s.agent ? s.agent : "Human") : "AI"}</span>
-              </div>
-              <div className="live-item-last">{s.last_message || "—"}</div>
-              <div className="live-item-time">{s.last_activity ? new Date(s.last_activity).toLocaleTimeString() : ""}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="live-convo">
-          {!active && <div className="muted live-empty">Select a conversation to view it.</div>}
-          {active && convo && (
-            <>
-              <div className="live-convo-head">
-                <span>{active}</span>
-                <span className={`live-mode ${isHuman ? "live-mode-human" : ""}`}>{isHuman ? `Human · ${convo.agent || "you"}` : "AI"}</span>
-              </div>
-              <div className="live-msgs" ref={scrollRef}>
-                {convo.messages.map((m) => (
-                  <div key={m.id} className={`live-msg live-${m.role}`}>
-                    {m.role === "system"
-                      ? <span className="live-sys">{m.text}</span>
-                      : <><span className="live-role">{m.role === "user" ? "Visitor" : m.role === "ai" ? "AI" : "You"}</span><span className="live-text">{m.text}</span></>}
-                  </div>
-                ))}
-              </div>
-              <div className="live-actions">
-                {!isHuman
-                  ? <button className="btn btn-primary" onClick={takeover} disabled={busy}>Take over this chat</button>
-                  : (
-                    <form className="live-composer" onSubmit={send}>
-                      <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your reply to the visitor…" />
-                      <button className="btn btn-primary" disabled={busy || !text.trim()}>Send</button>
-                      <button type="button" className="btn btn-ghost" onClick={release} disabled={busy}>Return to AI</button>
-                    </form>
-                  )}
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </div>
   );

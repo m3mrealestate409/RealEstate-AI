@@ -125,3 +125,11 @@ def require_super_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super-admin only")
     return user
+
+
+def require_live_chat(user: User = Depends(get_current_user)) -> User:
+    """Access to the Live Chat console. Admins (and super-admins) always have it;
+    other employees only if an admin has granted them access."""
+    if user.role == "admin" or user.is_super_admin or getattr(user, "can_live_chat", False):
+        return user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No Live Chat access")

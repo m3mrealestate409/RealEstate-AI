@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_role
+from app.core.security import get_current_user, require_live_chat
 from app.core.tenancy import org_scope_id
 from app.database import get_db
 from app.models import User
@@ -56,7 +56,7 @@ def widget_poll(
 
 # ---- Agent console side ----------------------------------------------------
 @router.get("/v1/admin/live/sessions")
-def list_sessions(user: User = Depends(require_role("sales")), db: Session = Depends(get_db)):
+def list_sessions(user: User = Depends(require_live_chat), db: Session = Depends(get_db)):
     return livechat.list_active(db, org_scope_id(user))
 
 
@@ -68,7 +68,7 @@ def _load(db: Session, user: User, session_id: str):
 
 
 @router.get("/v1/admin/live/sessions/{session_id}")
-def get_transcript(session_id: str, user: User = Depends(require_role("sales")), db: Session = Depends(get_db)):
+def get_transcript(session_id: str, user: User = Depends(require_live_chat), db: Session = Depends(get_db)):
     cs = _load(db, user, session_id)
     agent_name = None
     if cs.agent_id:
@@ -85,7 +85,7 @@ def get_transcript(session_id: str, user: User = Depends(require_role("sales")),
 
 
 @router.post("/v1/admin/live/sessions/{session_id}/takeover")
-def takeover(session_id: str, user: User = Depends(require_role("sales")), db: Session = Depends(get_db)):
+def takeover(session_id: str, user: User = Depends(require_live_chat), db: Session = Depends(get_db)):
     cs = _load(db, user, session_id)
     livechat.set_mode(db, cs, "human", agent_id=user.id)
     livechat.add_message(db, cs, role="system", text=f"{user.name or 'An agent'} joined the chat.", agent_id=user.id)
@@ -99,7 +99,7 @@ class AgentMsgIn(BaseModel):
 @router.post("/v1/admin/live/sessions/{session_id}/message")
 def agent_message(
     session_id: str, payload: AgentMsgIn,
-    user: User = Depends(require_role("sales")), db: Session = Depends(get_db),
+    user: User = Depends(require_live_chat), db: Session = Depends(get_db),
 ):
     text = (payload.text or "").strip()
     if not text:
@@ -112,7 +112,7 @@ def agent_message(
 
 
 @router.post("/v1/admin/live/sessions/{session_id}/release")
-def release(session_id: str, user: User = Depends(require_role("sales")), db: Session = Depends(get_db)):
+def release(session_id: str, user: User = Depends(require_live_chat), db: Session = Depends(get_db)):
     cs = _load(db, user, session_id)
     livechat.set_mode(db, cs, "ai")
     livechat.add_message(db, cs, role="system", text="The AI assistant is back.")

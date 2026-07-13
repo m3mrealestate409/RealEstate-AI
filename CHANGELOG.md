@@ -6,6 +6,17 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.5.1] — 2026-07-13
+
+### Changed — Live Chat access control
+- **Live Chat is now its own top-level page** (sidebar → 💬 Live Chat), not an
+  Admin sub-tab.
+- **Per-employee access** — admins always have Live Chat; an admin grants it to
+  specific employees from Admin → **Users** (new "Live Chat" toggle). Sales staff
+  without access can't see the page or call the endpoints (403).
+- Login now returns `can_live_chat`; a new `require_live_chat` guard protects
+  every console endpoint.
+
 ## [2.5.0] — 2026-07-13
 
 ### Added — Live chat with human takeover (Phase 1)

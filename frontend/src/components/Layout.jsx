@@ -19,6 +19,7 @@ export default function Layout() {
   const isSuperAdmin = user?.is_super_admin === true;
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "admin" || user?.role === "manager";
+  const canLiveChat = isAdmin || isSuperAdmin || user?.can_live_chat === true;
 
   return (
     <div className="app-shell">
@@ -55,6 +56,11 @@ export default function Layout() {
           <NavLink to="/calculators" className="nav-link">
             <span className="nav-ic"><Icon name="calculator" /></span> Calculators
           </NavLink>
+          {canLiveChat && (
+            <NavLink to="/live" className="nav-link">
+              <span className="nav-ic">💬</span> Live Chat
+            </NavLink>
+          )}
           {isManager && (
             <NavLink to="/dashboard" className="nav-link">
               <span className="nav-ic"><Icon name="analytics" /></span> Analytics

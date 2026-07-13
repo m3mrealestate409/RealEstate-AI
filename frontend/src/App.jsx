@@ -7,6 +7,7 @@ import Projects from "./pages/Projects.jsx";
 import ProjectDetail from "./pages/ProjectDetail.jsx";
 import Calculators from "./pages/Calculators.jsx";
 import Admin from "./pages/Admin.jsx";
+import LiveChat from "./pages/LiveChat.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Knowledge from "./pages/Knowledge.jsx";
 import SystemHealth from "./pages/SystemHealth.jsx";
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="system" element={<SystemHealth />} />
         <Route path="platform" element={<Platform />} />
+        <Route path="live" element={<LiveChat />} />
         <Route path="admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

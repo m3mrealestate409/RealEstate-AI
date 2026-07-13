@@ -23,6 +23,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     return TokenResponse(
         access_token=token, role=user.role, name=user.name,
         is_super_admin=user.is_super_admin, organization_id=user.organization_id,
+        can_live_chat=user.can_live_chat,
     )
 
 

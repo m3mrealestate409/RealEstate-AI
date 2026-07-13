@@ -15,6 +15,7 @@ class TokenResponse(BaseModel):
     name: str | None = None
     is_super_admin: bool = False
     organization_id: int | None = None
+    can_live_chat: bool = False
 
 
 class UserOut(BaseModel):
@@ -24,6 +25,7 @@ class UserOut(BaseModel):
     role: str
     tier: str = "basic"
     is_active: bool = True
+    can_live_chat: bool = False
 
     class Config:
         from_attributes = True

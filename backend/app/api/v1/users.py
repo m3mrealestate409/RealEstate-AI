@@ -87,6 +87,22 @@ def toggle_active(
     return user
 
 
+@router.post("/{user_id}/livechat", response_model=UserOut)
+def toggle_live_chat(
+    user_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Grant/revoke this employee's access to the Live Chat console."""
+    user = db.get(User, user_id)
+    if not user or (not admin.is_super_admin and user.organization_id != admin.organization_id):
+        raise HTTPException(404, "User not found")
+    user.can_live_chat = not user.can_live_chat
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="users",
+                 entity_id=user.id, after={"can_live_chat": user.can_live_chat})
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 class TierUpdate(BaseModel):
     tier: str
 

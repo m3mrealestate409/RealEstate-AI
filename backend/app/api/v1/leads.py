@@ -130,6 +130,20 @@ def update_lead(
     return {"ok": True, "id": lead.id, "status": lead.status}
 
 
+@router.delete("/v1/admin/leads/{lead_id}")
+def delete_lead(
+    lead_id: int,
+    user: User = Depends(require_role("manager")), db: Session = Depends(get_db),
+):
+    org_id = org_scope_id(user)
+    lead = db.get(Lead, lead_id)
+    if not lead or (org_id is not None and lead.organization_id != org_id):
+        raise HTTPException(404, "Lead not found")
+    db.delete(lead)
+    db.commit()
+    return {"ok": True}
+
+
 # ---- CRM webhook config (org admin) ----------------------------------------
 class CrmCfgIn(BaseModel):
     crm_webhook_url: str | None = None

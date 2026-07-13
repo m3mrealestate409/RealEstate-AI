@@ -215,6 +215,7 @@ export const api = {
   // Leads (captured prospects) + CRM webhook
   listLeads: () => request("/v1/admin/leads"),
   updateLeadStatus: (id, status) => request(`/v1/admin/leads/${id}`, { method: "PATCH", body: { status } }),
+  deleteLead: (id) => request(`/v1/admin/leads/${id}`, { method: "DELETE" }),
   getCrmConfig: () => request("/v1/admin/crm-config"),
   setCrmConfig: (crm_webhook_url) => request("/v1/admin/crm-config", { method: "PUT", body: { crm_webhook_url } }),
 };

@@ -1188,6 +1188,11 @@ function Leads() {
     try { await api.updateLeadStatus(id, status); await load(); }
     catch (e) { setMsg({ ok: false, text: e.message }); }
   }
+  async function removeLead(l) {
+    if (!confirm(`Delete lead ${l.phone || l.name || l.id}? This can't be undone.`)) return;
+    try { await api.deleteLead(l.id); await load(); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+  }
 
   return (
     <div className="admin-form">
@@ -1210,23 +1215,25 @@ function Leads() {
 
       <div className="table-wrap" style={{ marginTop: 18 }}>
         <table className="data-table">
-          <thead><tr><th>When</th><th>Name</th><th>Phone</th><th>Message</th><th>Source</th><th>Status</th></tr></thead>
+          <thead><tr><th>When</th><th>Name</th><th>Phone</th><th>Interested in</th><th>Message</th><th>Source</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rows.map((l) => (
               <tr key={l.id}>
                 <td className="muted">{l.created_at ? String(l.created_at).slice(0, 16).replace("T", " ") : "—"}</td>
                 <td>{l.name || "—"}</td>
                 <td>{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : (l.email || "—")}</td>
-                <td>{l.message || l.project_interest || "—"}</td>
+                <td>{l.project_interest ? <span className="status-chip chip-green">{l.project_interest}</span> : "—"}</td>
+                <td>{l.message || "—"}</td>
                 <td><span className="status-chip chip-gray">{l.source}</span></td>
                 <td>
                   <select value={l.status} onChange={(e) => changeStatus(l.id, e.target.value)}>
                     {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
+                <td><button className="btn btn-ghost btn-danger" onClick={() => removeLead(l)}>Delete</button></td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan="6" className="muted">No leads yet. They'll appear here as the assistant captures them.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan="8" className="muted">No leads yet. They'll appear here as the assistant captures them.</td></tr>}
           </tbody>
         </table>
       </div>

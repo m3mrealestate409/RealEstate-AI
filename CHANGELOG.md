@@ -6,6 +6,15 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-07-13
+
+### Added
+- **Leads: "Interested in" column** — the project a lead was viewing/discussing
+  (auto-detected from the chat) now shows in its own column, instead of being
+  hidden behind the message text.
+- **Delete a lead** — a Delete button on each row (and `DELETE /v1/admin/leads/{id}`)
+  so admins can remove test or junk leads without touching the database.
+
 ## [2.2.1] — 2026-07-13
 
 ### Fixed

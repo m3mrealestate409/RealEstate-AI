@@ -6,6 +6,15 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [1.23.0] — 2026-07-12
+
+### Security / multi-tenancy
+- **Audit log is now org-scoped** — a company (org) admin sees only actions by
+  users in their own organization; the super-admin still sees everything.
+- **AI Settings (Gemini config) is now super-admin only** — the tab is hidden for
+  org admins and the settings endpoints require super-admin, so tenant admins
+  can no longer view or change the global AI provider/key.
+
 ## [1.22.0] — 2026-07-11
 
 ### Changed — Cleaner document answers

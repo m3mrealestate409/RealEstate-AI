@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fetchBlobUrl } from "../api/client.js";
+import { useAuth } from "../auth/AuthContext.jsx";
 import AiSettings from "./AiSettings.jsx";
 import AiImport from "./AiImport.jsx";
 import { StatusPill } from "./Knowledge.jsx";
@@ -15,15 +16,17 @@ async function openDoc(path) {
 }
 
 export default function Admin() {
-  const [tab, setTab] = useState("ai");
+  const { user } = useAuth();
+  const isSuper = user?.is_super_admin === true;
+  const [tab, setTab] = useState(isSuper ? "ai" : "import-ai");
   return (
     <div className="page">
       <div className="page-head">
         <h2>Admin</h2>
-        <p className="muted">Configure AI, manage projects, upload brochures, review the audit trail.</p>
+        <p className="muted">Manage projects, upload brochures, review the audit trail.</p>
       </div>
       <div className="calc-tabs">
-        <button className={`tab ${tab === "ai" ? "tab-active" : ""}`} onClick={() => setTab("ai")}>🤖 AI Settings</button>
+        {isSuper && <button className={`tab ${tab === "ai" ? "tab-active" : ""}`} onClick={() => setTab("ai")}>🤖 AI Settings</button>}
         <button className={`tab ${tab === "import-ai" ? "tab-active" : ""}`} onClick={() => setTab("import-ai")}>🪄 AI Import</button>
         <button className={`tab ${tab === "project" ? "tab-active" : ""}`} onClick={() => setTab("project")}>New Project</button>
         <button className={`tab ${tab === "data" ? "tab-active" : ""}`} onClick={() => setTab("data")}>Manage Data</button>
@@ -35,7 +38,7 @@ export default function Admin() {
         <button className={`tab ${tab === "users" ? "tab-active" : ""}`} onClick={() => setTab("users")}>Users</button>
         <button className={`tab ${tab === "audit" ? "tab-active" : ""}`} onClick={() => setTab("audit")}>Audit Log</button>
       </div>
-      {tab === "ai" && <AiSettings />}
+      {tab === "ai" && isSuper && <AiSettings />}
       {tab === "import-ai" && <AiImport />}
       {tab === "project" && <NewProject />}
       {tab === "data" && <ManageData />}

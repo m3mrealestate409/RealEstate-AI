@@ -172,7 +172,14 @@ def list_audit(
 ):
     from app.models import AuditLog
 
-    rows = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit).all()
+    q = db.query(AuditLog).order_by(AuditLog.created_at.desc())
+    # Org admins see only actions performed by users in their OWN org; the
+    # super-admin (platform owner) sees everything.
+    if not admin.is_super_admin:
+        q = q.join(User, User.id == AuditLog.user_id).filter(
+            User.organization_id == admin.organization_id
+        )
+    rows = q.limit(limit).all()
     return [
         {
             "id": r.id,

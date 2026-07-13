@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.audit import record_audit
-from app.core.security import require_role
+from app.core.security import require_super_admin
 from app.database import get_db
 from app.models import User
 from app.services.llm.base import Message
@@ -27,7 +27,7 @@ class LLMSettingsIn(BaseModel):
 
 
 @router.get("/llm")
-def get_llm_settings(admin: User = Depends(require_role("admin"))):
+def get_llm_settings(admin: User = Depends(require_super_admin)):
     return {
         "supported_providers": SUPPORTED_PROVIDERS,
         "current": public_llm_config(),
@@ -37,7 +37,7 @@ def get_llm_settings(admin: User = Depends(require_role("admin"))):
 @router.put("/llm")
 def update_llm_settings(
     payload: LLMSettingsIn,
-    admin: User = Depends(require_role("admin")),
+    admin: User = Depends(require_super_admin),
     db=Depends(get_db),
 ):
     updated = set_llm_config(payload.model_dump())
@@ -55,7 +55,7 @@ STATIC_EMBED_MODELS = ["gemini-embedding-001"]
 
 
 @router.get("/models")
-def list_models(admin: User = Depends(require_role("admin"))):
+def list_models(admin: User = Depends(require_super_admin)):
     """Available model names. Queried live from Gemini when a key is set,
     else a curated fallback list."""
     from app.services.runtime_config import get_llm_config
@@ -87,7 +87,7 @@ def list_models(admin: User = Depends(require_role("admin"))):
 
 
 @router.post("/llm/test")
-def test_llm(admin: User = Depends(require_role("admin"))):
+def test_llm(admin: User = Depends(require_super_admin)):
     """Runs a tiny live completion with the CURRENT saved config."""
     from app.services.llm import get_llm_provider
 

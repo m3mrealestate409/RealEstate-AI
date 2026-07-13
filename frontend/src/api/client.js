@@ -22,9 +22,16 @@ export function getUser() {
   return raw ? JSON.parse(raw) : null;
 }
 
+// Give every request a hard timeout. Without this, a hung/restarting backend
+// leaves the fetch pending forever — the caller's `loading` flag never clears
+// and buttons (e.g. "Ask") stay disabled until a manual page reload.
+const REQUEST_TIMEOUT_MS = 45000;
+
 async function request(path, { method = "GET", body, form, auth = true } = {}) {
   const headers = {};
-  const opts = { method, headers };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const opts = { method, headers, signal: controller.signal };
 
   if (auth) {
     const token = getToken();
@@ -42,7 +49,15 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
     opts.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE}${path}`, opts);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, opts);
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Request timed out — the server took too long. Please try again.");
+    throw new Error("Could not reach the server. Check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
+  }
 
   // Expired/invalid token on an authenticated call → clear session and send
   // the user back to login instead of hanging on a failed request.

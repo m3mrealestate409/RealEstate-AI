@@ -107,8 +107,10 @@
   document.body.appendChild(btn); document.body.appendChild(panel); document.body.appendChild(teaser);
 
   var msgs = panel.querySelector(".px-msgs");
-  var input = panel.querySelector("input");
-  var sendBtn = panel.querySelector("button");
+  // Scope to the footer — the lead form also has inputs/buttons that appear
+  // earlier in the DOM, so an unscoped querySelector would grab the wrong one.
+  var input = panel.querySelector(".px-foot input");
+  var sendBtn = panel.querySelector(".px-foot button");
   var busy = false;
 
   btn.onclick = function () {

@@ -6,6 +6,17 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.1.1] — 2026-07-13
+
+### Fixed
+- **Website widget "Send" broken** — the new lead (Callback) form added inputs
+  and buttons that appear before the message composer in the DOM, so the widget
+  grabbed the wrong element and clicking Send did nothing. Selectors are now
+  scoped to the footer.
+- **Frontend request timeout** — every API call now has a 45s hard timeout
+  (AbortController). Previously a hung/restarting backend left the request
+  pending forever, so the "Ask" button stayed disabled until a page reload.
+
 ## [2.1.0] — 2026-07-13
 
 ### Added — Lead capture, CRM push & Insights

@@ -38,6 +38,9 @@ class QueryRequest(BaseModel):
         examples=["Golf Hills 3BHK price and payment plan"],
     )
     session_id: str | None = None
+    # Response shape for the caller: "blocks" (rich, for UIs), "text" (plain
+    # markdown answer), or "voice" (short, spoken, TTS-friendly).
+    format: str = "blocks"
 
 
 class Citation(BaseModel):
@@ -65,6 +68,8 @@ class QueryResponse(BaseModel):
     limit_reached: bool = False
     cached: bool = False
     unverified: bool = False
+    # Ready-to-use plain-text answer (for CRM inline, WhatsApp, voice, etc.).
+    answer_text: str = ""
 
 
 # --- Calculation ---

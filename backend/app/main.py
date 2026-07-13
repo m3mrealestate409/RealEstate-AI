@@ -13,6 +13,7 @@ from app import __version__
 from app.api.v1 import (
     admin,
     analytics,
+    apikeys,
     auth,
     calculate,
     extract,
@@ -67,6 +68,7 @@ app.include_router(knowledge.router)
 app.include_router(system.router)
 app.include_router(superadmin.router)
 app.include_router(extract.router)
+app.include_router(apikeys.router)
 
 
 @app.get("/health", tags=["system"])

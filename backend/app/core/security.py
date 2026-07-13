@@ -5,11 +5,12 @@ Authentication & RBAC (Constitution §19).
 - JWT bearer tokens; keys/secrets server-side only.
 - Role hierarchy: admin > manager > sales.
 """
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -17,9 +18,35 @@ from app.config import settings
 from app.database import get_db
 from app.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
+# auto_error=False so a request can authenticate with an API key INSTEAD of a
+# bearer token (we decide which below).
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login", auto_error=False)
 
 ROLE_RANK = {"sales": 1, "manager": 2, "admin": 3}
+
+
+def hash_api_key(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def resolve_api_key(db: Session, raw_key: str) -> User | None:
+    """Map an X-API-Key value to the user it acts as (its org-admin creator).
+    Returns None if the key is unknown/revoked or its user is inactive."""
+    from app.models import ApiKey
+
+    row = (
+        db.query(ApiKey)
+        .filter(ApiKey.key_hash == hash_api_key(raw_key), ApiKey.is_active.is_(True))
+        .first()
+    )
+    if not row or not row.created_by:
+        return None
+    user = db.get(User, row.created_by)
+    if not user or not user.is_active:
+        return None
+    row.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+    return user
 
 
 def hash_password(password: str) -> str:
@@ -42,13 +69,26 @@ def create_access_token(subject: str, role: str) -> str:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    token: str | None = Depends(oauth2_scheme),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+    db: Session = Depends(get_db),
 ) -> User:
     cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # 1) API key (machine-to-machine integrations) takes precedence.
+    if x_api_key:
+        user = resolve_api_key(db, x_api_key)
+        if user is None:
+            raise cred_exc
+        return user
+
+    # 2) Otherwise, a JWT bearer token (the web app).
+    if not token:
+        raise cred_exc
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         email: str | None = payload.get("sub")

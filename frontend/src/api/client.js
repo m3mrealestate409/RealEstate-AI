@@ -183,4 +183,9 @@ export const api = {
   deleteBuilder: (id) => request(`/v1/admin/builders/${id}`, { method: "DELETE" }),
   getDocTypes: () => request("/v1/admin/document-types"),
   setDocTypes: (types) => request("/v1/admin/document-types", { method: "PUT", body: { types } }),
+
+  // API keys (external integrations)
+  listApiKeys: () => request("/v1/admin/api-keys"),
+  createApiKey: (name) => request("/v1/admin/api-keys", { method: "POST", body: { name } }),
+  revokeApiKey: (id) => request(`/v1/admin/api-keys/${id}`, { method: "DELETE" }),
 };

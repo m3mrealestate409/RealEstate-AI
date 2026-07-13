@@ -36,6 +36,7 @@ export default function Admin() {
         <button className={`tab ${tab === "doctypes" ? "tab-active" : ""}`} onClick={() => setTab("doctypes")}>Doc Types</button>
         <button className={`tab ${tab === "import" ? "tab-active" : ""}`} onClick={() => setTab("import")}>Import CSV</button>
         <button className={`tab ${tab === "users" ? "tab-active" : ""}`} onClick={() => setTab("users")}>Users</button>
+        <button className={`tab ${tab === "apikeys" ? "tab-active" : ""}`} onClick={() => setTab("apikeys")}>🔌 API Keys</button>
         <button className={`tab ${tab === "audit" ? "tab-active" : ""}`} onClick={() => setTab("audit")}>Audit Log</button>
       </div>
       {tab === "ai" && isSuper && <AiSettings />}
@@ -48,6 +49,7 @@ export default function Admin() {
       {tab === "doctypes" && <DocTypes />}
       {tab === "import" && <ImportCsv />}
       {tab === "users" && <Users />}
+      {tab === "apikeys" && <ApiKeys />}
       {tab === "audit" && <AuditLog />}
     </div>
   );
@@ -858,6 +860,80 @@ function AddPlan({ projectId }) {
       </div>
       <button className="btn btn-primary" disabled={total !== 100}>Add payment plan</button>
     </form>
+  );
+}
+
+function ApiKeys() {
+  const [keys, setKeys] = useState([]);
+  const [name, setName] = useState("");
+  const [newKey, setNewKey] = useState(null);   // {name, api_key} — shown once
+  const [msg, setMsg] = useState(null);
+  const load = () => api.listApiKeys().then(setKeys).catch(() => setKeys([]));
+  useEffect(() => { load(); }, []);
+
+  async function create(e) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setMsg(null);
+    try {
+      const r = await api.createApiKey(name.trim());
+      setNewKey(r);
+      setName("");
+      await load();
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function revoke(id) {
+    if (!confirm("Revoke this API key? Any integration using it will stop working.")) return;
+    try { await api.revokeApiKey(id); await load(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        API keys let external systems (your <b>CRM, WhatsApp bot, voice agent, or any website</b>) call the
+        engine. Send the key as an <code>X-API-Key</code> header. A key acts within <b>your organization only</b>.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      {newKey && (
+        <div className="alert alert-ok">
+          <b>New key "{newKey.name}"</b> — copy it now, it won't be shown again:
+          <div className="apikey-reveal">
+            <code>{newKey.api_key}</code>
+            <button type="button" className="btn btn-sm" onClick={() => navigator.clipboard?.writeText(newKey.api_key)}>Copy</button>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setNewKey(null)}>Done</button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={create}>
+        <div className="calc-fields">
+          <label className="field"><span>Key name (e.g. "CRM integration")</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="CRM integration" required />
+          </label>
+        </div>
+        <button className="btn btn-primary">Create key</button>
+      </form>
+
+      <div className="table-wrap" style={{ marginTop: 16 }}>
+        <table className="data-table">
+          <thead><tr><th>Name</th><th>Key</th><th>Last used</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            {keys.map((k) => (
+              <tr key={k.id}>
+                <td>{k.name}</td>
+                <td className="muted"><code>{k.prefix}…</code></td>
+                <td className="muted">{k.last_used_at ? String(k.last_used_at).slice(0, 10) : "—"}</td>
+                <td className="muted">{k.created_at ? String(k.created_at).slice(0, 10) : "—"}</td>
+                <td><button className="btn btn-ghost btn-danger" onClick={() => revoke(k.id)}>Revoke</button></td>
+              </tr>
+            ))}
+            {keys.length === 0 && <tr><td colSpan="5" className="muted">No API keys yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

@@ -230,6 +230,39 @@ def not_available_block(title: str = "Result") -> dict:
     }
 
 
+def blocks_to_text(blocks: list[dict], voice: bool = False) -> str:
+    """Flatten answer blocks into a plain-text answer for non-UI consumers
+    (CRM inline, WhatsApp, voice). `voice=True` strips Markdown and keeps it short."""
+    lines: list[str] = []
+    for b in blocks or []:
+        t = b.get("type")
+        if t == "paragraph":
+            if b.get("text"):
+                lines.append(b["text"])
+        elif t == "table":
+            cols = b.get("columns", [])
+            for row in b.get("rows", []):
+                head = str(row[0]) if row else ""
+                rest = ", ".join(f"{c}: {v}" for c, v in zip(cols[1:], row[1:]))
+                lines.append(f"{head} — {rest}" if head and rest else (head or rest))
+        elif t == "card":
+            for c in b.get("cards", []):
+                head, items = c.get("heading", ""), c.get("items", [])
+                lines.append(f"{head}: " + "; ".join(str(i) for i in items) if items else head)
+        elif t == "checklist":
+            lines.extend(f"- {it}" for it in b.get("items", []))
+        elif t == "timeline":
+            lines.extend(f"{e.get('label')}: {e.get('value')}" for e in b.get("events", []))
+    text = "\n".join(x for x in lines if x and str(x).strip())
+    if voice:
+        text = re.sub(r"[*_#`>|]", "", text)
+        text = re.sub(r"(?m)^\s*[-•]\s*", "", text)
+        text = " ".join(text.split())
+        if len(text) > 600:
+            text = text[:600].rsplit(". ", 1)[0] + "."
+    return text
+
+
 DB_BLOCK_BUILDERS = {
     "price": price_block,
     "payment_plan": payment_plan_block,

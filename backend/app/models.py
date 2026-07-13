@@ -357,6 +357,25 @@ class AuditLog(Base):
 
 
 # --------------------------------------------------------------------------
+# API keys — machine-to-machine credentials for external integrations
+# (CRM, WhatsApp bot, voice agent, other sites). Org-scoped; a request made
+# with a key acts as the admin who created it, so tenant scoping still applies.
+# --------------------------------------------------------------------------
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    name: Mapped[str] = mapped_column(String)                  # label, e.g. "CRM integration"
+    prefix: Mapped[str] = mapped_column(String)                # e.g. "px_ab12cd" (shown in UI)
+    key_hash: Mapped[str] = mapped_column(String, index=True)  # sha256 of the full key
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --------------------------------------------------------------------------
 # Runtime settings (server-side config, e.g. LLM provider + key).
 # Keys NEVER leave the server; the frontend only sees masked status (§19).
 # --------------------------------------------------------------------------

@@ -6,6 +6,22 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-07-12
+
+### Added — API-first integration layer (V2 · Phase 1)
+The engine can now be connected to external systems — your **CRM, a WhatsApp
+bot, a voice agent, or any website** — via a stable, documented API.
+
+- **API keys** — Admin → **API Keys** lets an org admin create permanent,
+  revocable keys (the full key is shown once). Send `X-API-Key: px_...` on any
+  endpoint. A key is **tenant-scoped** (only ever sees its own organization's
+  data) and acts as its admin creator — no 8-hour token expiry to manage.
+- **Query response formats** — `POST /v1/query` accepts `format`: `blocks`
+  (rich, default), `text` (plain), or `voice` (short, spoken, no Markdown).
+  Every response now includes a ready-to-use **`answer_text`** string.
+- **Integration guide** — `INTEGRATION.md` documents auth, the query endpoint,
+  formats and examples; the full auto-generated reference stays at `/docs`.
+
 ## [1.23.0] — 2026-07-12
 
 ### Security / multi-tenancy

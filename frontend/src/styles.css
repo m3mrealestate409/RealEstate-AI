@@ -166,6 +166,9 @@ a { color: inherit; text-decoration: none; }
 .check { color: var(--green); font-weight: 800; margin-right: 6px; }
 .para { margin: 0; }
 .char-count { text-align: right; font-size: 12px; margin: 0 6px 4px; }
+.apikey-reveal { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.apikey-reveal code { background: var(--surface-2, #eef1f6); padding: 6px 10px; border-radius: 6px;
+  font-size: 13px; word-break: break-all; }
 
 /* Rendered LLM markdown (summary / general-knowledge answers). */
 .markdown-body { font-size: 14.5px; line-height: 1.65; color: var(--text); }

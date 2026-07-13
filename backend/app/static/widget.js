@@ -123,7 +123,7 @@
     var open = panel.classList.toggle("open");
     btn.style.background = open ? BG_CLOSE : BG_CHAT;
     if (open) {
-      if (!msgs.dataset.greeted) { addBot(GREETING); msgs.dataset.greeted = "1"; renderChips(DEFAULT_CHIPS); }
+      if (!msgs.dataset.greeted) { addBot(GREETING); msgs.dataset.greeted = "1"; }
       input.focus();
     }
   };
@@ -188,8 +188,8 @@
   function addLoader() { var d = document.createElement("div"); d.className = "px-bubble px-bot"; d.innerHTML = '<span class="px-dots"><i></i><i></i><i></i></span>'; msgs.appendChild(d); scroll(); return d; }
   function scroll() { msgs.scrollTop = msgs.scrollHeight; }
 
-  // Quick-reply chips (ephemeral — not saved to history).
-  var DEFAULT_CHIPS = ["Price", "Payment plan", "Amenities", "Book a visit"];
+  // Quick-reply chips (ephemeral — not saved to history). Shown only AFTER an
+  // answer (from the engine's suggestions), never under the first greeting.
   function clearChips() { var c = msgs.querySelector(".px-chips"); if (c) c.remove(); }
   function renderChips(list) {
     clearChips();
@@ -198,11 +198,7 @@
     list.slice(0, 4).forEach(function (t) {
       var b = document.createElement("button"); b.className = "px-chip"; b.type = "button";
       b.textContent = t;
-      b.onclick = function () {
-        if (busy) return;
-        if (t === "Book a visit") { openLeadForm(); return; }  // open form, don't query
-        input.value = t; send();
-      };
+      b.onclick = function () { if (busy) return; input.value = t; send(); };
       wrap.appendChild(b);
     });
     msgs.appendChild(wrap); scroll();

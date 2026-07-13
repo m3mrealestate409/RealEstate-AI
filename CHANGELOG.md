@@ -6,6 +6,13 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.3.1] — 2026-07-13
+
+### Changed
+- **Widget quick-reply chips** no longer appear under the first greeting — they
+  now show only after an answer (from the 2nd message on), using the engine's
+  context-aware suggestions.
+
 ## [2.3.0] — 2026-07-13
 
 ### Added — Abuse protection for the public chat widget

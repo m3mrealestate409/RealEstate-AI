@@ -56,6 +56,11 @@ def init_db() -> None:
         # Rise type + launch price (shown on the project page).
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS rise_type TEXT"))
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS launch_price NUMERIC"))
+        # Editable chat-widget greeting + org-wide assistant persona.
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_greeting TEXT"))
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_persona TEXT"))
+        # CRM webhook — captured leads are POSTed here.
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS crm_webhook_url TEXT"))
     logger.info("Database initialised.")
 
 

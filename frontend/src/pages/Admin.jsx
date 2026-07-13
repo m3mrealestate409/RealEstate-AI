@@ -3,6 +3,7 @@ import { api, fetchBlobUrl } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 import AiSettings from "./AiSettings.jsx";
 import AiImport from "./AiImport.jsx";
+import Integrations from "./Integrations.jsx";
 import { StatusPill } from "./Knowledge.jsx";
 
 // Open a protected PDF (brochure/cost sheet) in a new tab via authed blob fetch.
@@ -36,7 +37,10 @@ export default function Admin() {
         <button className={`tab ${tab === "doctypes" ? "tab-active" : ""}`} onClick={() => setTab("doctypes")}>Doc Types</button>
         <button className={`tab ${tab === "import" ? "tab-active" : ""}`} onClick={() => setTab("import")}>Import CSV</button>
         <button className={`tab ${tab === "users" ? "tab-active" : ""}`} onClick={() => setTab("users")}>Users</button>
+        <button className={`tab ${tab === "insights" ? "tab-active" : ""}`} onClick={() => setTab("insights")}>📊 Insights</button>
+        <button className={`tab ${tab === "leads" ? "tab-active" : ""}`} onClick={() => setTab("leads")}>📇 Leads</button>
         <button className={`tab ${tab === "apikeys" ? "tab-active" : ""}`} onClick={() => setTab("apikeys")}>🔌 API Keys</button>
+        <button className={`tab ${tab === "integrations" ? "tab-active" : ""}`} onClick={() => setTab("integrations")}>🧩 Integrations</button>
         <button className={`tab ${tab === "audit" ? "tab-active" : ""}`} onClick={() => setTab("audit")}>Audit Log</button>
       </div>
       {tab === "ai" && isSuper && <AiSettings />}
@@ -49,7 +53,10 @@ export default function Admin() {
       {tab === "doctypes" && <DocTypes />}
       {tab === "import" && <ImportCsv />}
       {tab === "users" && <Users />}
+      {tab === "insights" && <Insights />}
+      {tab === "leads" && <Leads />}
       {tab === "apikeys" && <ApiKeys />}
+      {tab === "integrations" && <Integrations />}
       {tab === "audit" && <AuditLog />}
     </div>
   );
@@ -1075,6 +1082,151 @@ function Users() {
                 <td><button className="btn btn-ghost" onClick={() => toggle(u.id)}>Toggle</button></td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Insights() {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { api.dashboard().then(setD).catch((e) => setErr(e.message)); }, []);
+
+  if (err) return <div className="alert alert-error">{err}</div>;
+  if (!d) return <div className="muted">Loading insights…</div>;
+
+  const maxDaily = Math.max(1, ...d.daily.map((x) => x.count));
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        What people are asking the assistant — and, most importantly, <b>the questions it couldn't answer</b>.
+        Each missed question tells you exactly which data or brochure to add next.
+      </div>
+
+      <div className="kpi-row">
+        <div className="kpi-card"><div className="kpi-num">{d.total_queries}</div><div className="kpi-label">Total questions</div></div>
+        <div className="kpi-card"><div className="kpi-num">{d.queries_today}</div><div className="kpi-label">Today</div></div>
+        <div className="kpi-card"><div className={`kpi-num ${d.miss_rate > 20 ? "kpi-warn" : ""}`}>{d.miss_rate}%</div><div className="kpi-label">Unanswered rate</div></div>
+        <div className="kpi-card"><div className="kpi-num">{d.avg_latency_ms} ms</div><div className="kpi-label">Avg. response</div></div>
+      </div>
+
+      <div className="insight-grid">
+        <div className="insight-box">
+          <div className="block-title">🚨 Top unanswered questions</div>
+          <p className="muted small" style={{ marginTop: 0 }}>Add this data/brochure to close the gap.</p>
+          {(d.top_missed || []).length === 0 ? (
+            <div className="muted">Nothing missed yet — great coverage! 🎉</div>
+          ) : (
+            <table className="data-table">
+              <thead><tr><th>Question</th><th style={{ width: 60 }}>Times</th></tr></thead>
+              <tbody>
+                {d.top_missed.map((m, i) => (
+                  <tr key={i}><td>{m.query}</td><td><span className="conf-badge conf-mid">{m.count}×</span></td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="insight-box">
+          <div className="block-title">🔥 Most-asked projects</div>
+          {(d.top_projects || []).length === 0 ? (
+            <div className="muted">No project questions yet.</div>
+          ) : (
+            <table className="data-table">
+              <thead><tr><th>Project</th><th style={{ width: 60 }}>Asks</th></tr></thead>
+              <tbody>
+                {d.top_projects.map((p, i) => (
+                  <tr key={i}><td>{p.project}</td><td>{p.count}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <div className="insight-box" style={{ marginTop: 16 }}>
+        <div className="block-title">📈 Questions — last 7 days</div>
+        <div className="mini-bars">
+          {d.daily.map((x, i) => (
+            <div className="mini-bar-col" key={i}>
+              <div className="mini-bar" style={{ height: `${Math.round((x.count / maxDaily) * 100)}%` }} title={`${x.count}`}></div>
+              <div className="mini-bar-x">{x.date.slice(5)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const LEAD_STATUSES = ["new", "contacted", "qualified", "closed"];
+
+function Leads() {
+  const [rows, setRows] = useState([]);
+  const [webhook, setWebhook] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const load = () => api.listLeads().then(setRows).catch(() => setRows([]));
+  useEffect(() => {
+    load();
+    api.getCrmConfig().then((c) => setWebhook(c.crm_webhook_url || "")).catch(() => {});
+  }, []);
+
+  async function saveWebhook() {
+    setSaving(true); setMsg(null);
+    try {
+      const r = await api.setCrmConfig(webhook.trim());
+      setWebhook(r.crm_webhook_url || "");
+      setMsg({ ok: true, text: "CRM webhook saved — new leads will be pushed there." });
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setSaving(false); }
+  }
+  async function changeStatus(id, status) {
+    try { await api.updateLeadStatus(id, status); await load(); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+  }
+
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        Prospects captured by the assistant (website widget, CRM, WhatsApp). Optionally push every new lead to
+        your own CRM via a <b>webhook</b> — the engine POSTs the lead's details there in real time.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      <div className="tier-limits-box">
+        <div className="block-title">CRM webhook (optional)</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          Paste a URL that accepts a POST with JSON. We send: name, phone, email, message, project_interest, source, created_at.
+        </div>
+        <div className="ecr-inline" style={{ maxWidth: 640 }}>
+          <input style={{ flex: 1 }} placeholder="https://your-crm.com/webhooks/leads" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
+          <button className="btn btn-primary" onClick={saveWebhook} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+
+      <div className="table-wrap" style={{ marginTop: 18 }}>
+        <table className="data-table">
+          <thead><tr><th>When</th><th>Name</th><th>Phone</th><th>Message</th><th>Source</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map((l) => (
+              <tr key={l.id}>
+                <td className="muted">{l.created_at ? String(l.created_at).slice(0, 16).replace("T", " ") : "—"}</td>
+                <td>{l.name || "—"}</td>
+                <td>{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : (l.email || "—")}</td>
+                <td>{l.message || l.project_interest || "—"}</td>
+                <td><span className="status-chip chip-gray">{l.source}</span></td>
+                <td>
+                  <select value={l.status} onChange={(e) => changeStatus(l.id, e.target.value)}>
+                    {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan="6" className="muted">No leads yet. They'll appear here as the assistant captures them.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -58,6 +58,15 @@ class Organization(Base):
     # Per-employee daily query limits for each tier (org-admin configurable).
     basic_daily_limit: Mapped[int] = mapped_column(Integer, default=25)
     advanced_daily_limit: Mapped[int] = mapped_column(Integer, default=100)
+    # Editable greeting shown by the website chat widget (teaser + first message).
+    widget_greeting: Mapped[str | None] = mapped_column(String)
+    # Org-wide assistant persona/master prompt — applied to EVERY channel
+    # (web app, website widget, CRM, WhatsApp). Controls voice/tone only; the
+    # grounding rules (never invent facts) always stay on top.
+    assistant_persona: Mapped[str | None] = mapped_column(Text)
+    # Optional CRM/webhook URL — every captured lead is POSTed here (best-effort)
+    # so the company's own CRM receives it in real time. Provider-agnostic.
+    crm_webhook_url: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="organizations")
@@ -372,6 +381,28 @@ class ApiKey(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --------------------------------------------------------------------------
+# Leads — a captured prospect from any channel (website widget, CRM, WhatsApp).
+# The chatbot's whole point is to turn a conversation into a sales lead; this is
+# where that contact lands. Org-scoped; optionally pushed to the org's CRM.
+# --------------------------------------------------------------------------
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    name: Mapped[str | None] = mapped_column(String)
+    phone: Mapped[str | None] = mapped_column(String)
+    email: Mapped[str | None] = mapped_column(String)
+    message: Mapped[str | None] = mapped_column(Text)             # what they asked / notes
+    project_interest: Mapped[str | None] = mapped_column(String)  # project they were viewing
+    source: Mapped[str] = mapped_column(String, default="widget") # widget | crm | whatsapp | app
+    page_url: Mapped[str | None] = mapped_column(String)          # where they were on the site
+    session_id: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="new")    # new | contacted | qualified | closed
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

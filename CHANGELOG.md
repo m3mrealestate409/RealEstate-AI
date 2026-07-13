@@ -6,6 +6,51 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-07-13
+
+### Added — Lead capture, CRM push & Insights
+The assistant now turns conversations into **sales leads** and shows admins
+what customers are actually asking.
+
+- **Lead capture** — the website chat widget has a **📞 Callback** button that
+  collects a prospect's name, phone and message. Leads are stored per-org and
+  can arrive from any channel via `POST /v1/leads` (API key auth).
+- **CRM webhook** — Admin → **Leads** lets an org set a webhook URL; every new
+  lead is POSTed there in real time (best-effort, non-blocking) so it lands in
+  the company's own CRM. Provider-agnostic — works with any endpoint.
+- **Leads tab** — Admin → **📇 Leads** lists captured prospects with clickable
+  phone links and a status pipeline (new → contacted → qualified → closed).
+- **Insights dashboard** — Admin → **📊 Insights** shows total/today/unanswered
+  KPIs, the **top unanswered questions grouped by frequency** (so you know
+  exactly which data or brochure to add next), most-asked projects, and a
+  7-day question trend.
+
+### Added — Assistant persona & conversation memory
+- **Org-wide assistant persona** — Admin → **Integrations** lets an org set a
+  master prompt (identity, voice, style) applied to **every channel** (web app,
+  website widget, CRM, WhatsApp). It changes tone only; the grounding rules
+  (never invent facts) always stay on top.
+- **Per-session conversation memory** — the assistant now remembers the last
+  few turns (question **and** answer) so it can reference earlier context
+  naturally ("summarise what we discussed"). Memory is scoped to the
+  authenticated user/session; facts are still re-fetched, never cached as truth.
+- **Widget session continuity** — the chat widget keeps one session across page
+  navigations and restores the visible conversation, so follow-ups work as the
+  visitor browses the site.
+
+### Added — Embeddable chat widget & integration guides
+- **Embeddable widget** — `‹script src=".../static/widget.js"›` drops a themed
+  chat bubble on any site (WordPress, custom). Configured via data-attributes
+  (title, accent, API key); served with `no-cache` so updates roll out live.
+- **Editable widget greeting** — org admins can set the teaser/first-message
+  greeting; the widget picks it up with no code change.
+- **Integrations tab** — Admin → **🧩 Integrations** gives step-by-step setup
+  guides per channel (WordPress, Website/CRM API), extensible as channels grow.
+
+### Fixed
+- Widget loading indicator now shows animated typing dots instead of literal
+  escaped HTML.
+
 ## [2.0.0] — 2026-07-12
 
 ### Added — API-first integration layer (V2 · Phase 1)

@@ -109,13 +109,30 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(require_role("
         .limit(8).all()
     ]
 
+    # Top MISSED questions, grouped — the same question asked 20 times is one
+    # row with count=20. This is the actionable signal: it tells the admin
+    # exactly which data/brochure is missing from the knowledge base.
+    miss_counts: dict[str, dict] = {}
+    for (qtext,) in (
+        q().with_entities(QueryLog.query)
+        .filter(QueryLog.not_available.is_(True)).all()
+    ):
+        norm = (qtext or "").strip().lower()
+        if not norm:
+            continue
+        slot = miss_counts.setdefault(norm, {"query": (qtext or "").strip(), "count": 0})
+        slot["count"] += 1
+    top_missed = sorted(miss_counts.values(), key=lambda x: -x["count"])[:10]
+
     return {
         "total_queries": total,
         "queries_today": today,
+        "misses": misses,
         "miss_rate": round(misses / total * 100, 1) if total else 0.0,
         "avg_latency_ms": round(float(avg_latency), 1) if avg_latency is not None else 0.0,
         "daily": daily,
         "top_intents": [{"intent": k, "count": v} for k, v in top_intents],
         "top_projects": top_projects,
         "recent_misses": recent_misses,
+        "top_missed": top_missed,
     }

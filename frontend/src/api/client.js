@@ -184,8 +184,22 @@ export const api = {
   getDocTypes: () => request("/v1/admin/document-types"),
   setDocTypes: (types) => request("/v1/admin/document-types", { method: "PUT", body: { types } }),
 
+  // Chat widget config (editable greeting)
+  getWidgetConfig: () => request("/v1/admin/widget-config"),
+  setWidgetConfig: (greeting) => request("/v1/admin/widget-config", { method: "PUT", body: { greeting } }),
+
+  // Assistant persona (org-wide — website, CRM, WhatsApp, app)
+  getAssistantConfig: () => request("/v1/admin/assistant-config"),
+  setAssistantConfig: (persona) => request("/v1/admin/assistant-config", { method: "PUT", body: { persona } }),
+
   // API keys (external integrations)
   listApiKeys: () => request("/v1/admin/api-keys"),
   createApiKey: (name) => request("/v1/admin/api-keys", { method: "POST", body: { name } }),
   revokeApiKey: (id) => request(`/v1/admin/api-keys/${id}`, { method: "DELETE" }),
+
+  // Leads (captured prospects) + CRM webhook
+  listLeads: () => request("/v1/admin/leads"),
+  updateLeadStatus: (id, status) => request(`/v1/admin/leads/${id}`, { method: "PATCH", body: { status } }),
+  getCrmConfig: () => request("/v1/admin/crm-config"),
+  setCrmConfig: (crm_webhook_url) => request("/v1/admin/crm-config", { method: "PUT", body: { crm_webhook_url } }),
 };

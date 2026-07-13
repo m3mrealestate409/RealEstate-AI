@@ -54,16 +54,29 @@ class _MemoryStore:
             self._fallback[self._key(session_id)] = raw
 
     def remember_turn(
-        self, session_id: str, *, query: str, intents: list[str], project_ids: list[int]
+        self,
+        session_id: str,
+        *,
+        query: str,
+        intents: list[str],
+        project_ids: list[int],
+        answer: str | None = None,
     ) -> None:
         state = self.get(session_id)
-        state["turns"].append({"query": query, "intents": intents})
+        turn = {"query": query, "intents": intents}
+        if answer:
+            turn["answer"] = answer[:400]  # short snippet for conversation context
+        state["turns"].append(turn)
         if project_ids:
             state["last_project_ids"] = project_ids  # for follow-up entity resolution
         self.save(session_id, state)
 
     def last_project_ids(self, session_id: str) -> list[int]:
         return self.get(session_id).get("last_project_ids", [])
+
+    def recent_dialogue(self, session_id: str, max_turns: int = 4) -> list[dict]:
+        """The last few (query, answer) turns, oldest first — for LLM context."""
+        return self.get(session_id).get("turns", [])[-max_turns:]
 
 
 session_store = _MemoryStore()

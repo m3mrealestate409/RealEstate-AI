@@ -48,6 +48,89 @@ SYSTEM_PROMPT = (
 )
 
 
+SMALLTALK_SYSTEM = (
+    "You are a real-estate company's chat assistant talking to a website visitor. The user sent a "
+    "greeting or small talk, not a data question. Reply warmly and briefly (1-2 sentences) in the "
+    "user's language (English/Hindi/Hinglish), and gently invite them to ask about a project (price, "
+    "payment plan, amenities) or to compare projects. NEVER invent prices, dates or figures. You may "
+    "mention the listed project names."
+)
+
+_SMALLTALK = {
+    "hi", "hii", "hello", "helo", "hey", "yo", "hola", "namaste", "namaskar", "hey there",
+    "good morning", "good evening", "good afternoon", "how are you", "hows it going", "kaise ho",
+    "kaise hain", "kya haal", "kaisa hai", "whats up", "sup", "thanks", "thank you", "thankyou",
+    "dhanyavad", "dhanyawad", "shukriya", "ty", "ok", "okay", "okk", "theek hai", "thik hai",
+    "achha", "acha", "great", "nice", "cool", "good", "bye", "goodbye", "alvida", "see you",
+    "help", "madad", "who are you", "tum kaun ho", "aap kaun ho", "what can you do",
+    "kya kar sakte ho", "what do you do",
+}
+_GREET_STARTS = {"hi", "hii", "hello", "helo", "hey", "namaste", "namaskar", "thanks", "thank",
+                 "bye", "help", "madad", "good"}
+
+
+def _is_smalltalk(query: str) -> bool:
+    q = " ".join(query.lower().split()).strip(" ?!.,")
+    if q in _SMALLTALK:
+        return True
+    words = q.split()
+    return bool(words) and len(words) <= 3 and words[0] in _GREET_STARTS
+
+
+def _system_with_persona(base: str, persona: str | None) -> str:
+    """Prepend the org's persona (voice/style) — the grounding rules in `base`
+    always stay on top, so tone changes but facts never get invented."""
+    if persona:
+        return "PERSONA — adopt this identity, voice and style in every reply:\n" + persona.strip() + "\n\n" + base
+    return base
+
+
+def _get_persona(db: Session, org_id: int | None) -> str | None:
+    if not org_id:
+        return None
+    from app.models import Organization
+
+    org = db.get(Organization, org_id)
+    return org.assistant_persona if org and org.assistant_persona else None
+
+
+def _dialogue_context(mem_key: str, max_turns: int = 4) -> str:
+    """Recent conversation as a compact transcript for the LLM, so replies can
+    reference earlier turns naturally (per-session memory). Facts still come
+    only from the grounded CONTEXT — this is for continuity, not truth."""
+    lines: list[str] = []
+    for t in session_store.recent_dialogue(mem_key, max_turns):
+        q = (t.get("query") or "").strip()
+        a = (t.get("answer") or "").strip()
+        if q:
+            lines.append("User: " + q)
+        if a:
+            lines.append("Assistant: " + a)
+    return "\n".join(lines)
+
+
+def _persona_smalltalk(query: str, persona: str | None, names: list[str], history: str = "") -> str:
+    from app.services.runtime_config import get_llm_config
+
+    if get_llm_config().get("provider") == "mock":
+        msg = "Hi! I can help with our projects — ask about price, payment plan, amenities, or compare two."
+        return msg + (" For example: " + ", ".join(names[:3]) + "." if names else "")
+    ctx = ("Known projects: " + ", ".join(names)) if names else "No projects are listed yet."
+    user_content = ""
+    if history:
+        user_content += "RECENT CONVERSATION (for context, not facts):\n" + history + "\n\n"
+    user_content += "CONTEXT: " + ctx + "\n\nUser said: " + query
+    try:
+        resp = get_llm_provider().complete(
+            system=_system_with_persona(SMALLTALK_SYSTEM, persona),
+            messages=[Message(role="user", content=user_content)],
+            max_tokens=256,
+        )
+        return (resp.text or "").strip() or "Hi! How can I help you with our projects?"
+    except Exception:
+        return "Hi! How can I help you with our projects?"
+
+
 def _confidence_for_db() -> float:
     return 0.98  # deterministic SQL fact
 
@@ -64,12 +147,14 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     org_id = org_scope_id(user) if user is not None else None
     user_id = getattr(user, "id", None)
     today = date.today().isoformat()
+    persona = _get_persona(db, org_id)  # org-wide voice/style for every channel
 
     # H1 — session memory is keyed to the authenticated user, NOT just the
     # client-supplied session_id, so one user can never inherit another user's
     # (or another tenant's) conversation context by guessing/fixing a session id.
     mem_key = f"u{user_id}:{session_id}" if user_id is not None else session_id
     prior_projects = session_store.last_project_ids(mem_key)
+    prior_dialogue = _dialogue_context(mem_key)  # recent turns → natural multi-turn replies
 
     ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
 
@@ -88,6 +173,29 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         ir.project_ids = [p for p in ir.project_ids if p in owned]
         ir.matched_projects = [m for m in ir.matched_projects if m["id"] in owned]
 
+    # Small talk / greeting → a warm persona chat reply (no factual claims). Makes
+    # the assistant feel like an agent instead of a search box.
+    if _is_smalltalk(query) and not ir.project_ids and not ir.db_intents and not ir.rag_intents and not ir.needs_llm:
+        from app.models import Project
+
+        pq = db.query(Project).order_by(Project.name)
+        if org_id is not None:
+            pq = pq.filter(Project.organization_id == org_id)
+        names = [p.name for p in pq.all()]
+        reply = _persona_smalltalk(query, persona, names, history=prior_dialogue)
+        env = _envelope(
+            blocks=[renderer.paragraph_block("", reply)],
+            citations=[], handlers=["assistant"], session_id=session_id,
+            not_available=False, confidence=0.6, intent=ir, suggestions=names[:4],
+        )
+        if user is not None:
+            quota.consume_quota(user, today, org_id)
+        session_store.remember_turn(mem_key, query=query, intents=ir.intents,
+                                    project_ids=ir.project_ids, answer=reply)
+        _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
+                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+        return env
+
     # A project was named but doesn't exist in our data. We never reuse the
     # previous project's data (§8), but we CAN offer an unverified general-
     # knowledge answer + suggest the known projects.
@@ -98,7 +206,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         if org_id is not None:
             pq = pq.filter(Project.organization_id == org_id)
         names = [p.name for p in pq.all()]
-        fb = _internet_fallback(query)
+        fb = _internet_fallback(query, persona, history=prior_dialogue)
         if fb:
             env = _envelope(
                 blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
@@ -134,7 +242,10 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                 hit = dict(hit)
                 hit["cached"] = True
                 hit["session_id"] = session_id
-                session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
+                session_store.remember_turn(
+                    mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids,
+                    answer=renderer.blocks_to_text(hit.get("content", {}).get("blocks", [])),
+                )
                 _log_query(db, session_id=session_id, query=query, ir=ir, envelope=hit,
                            latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
                 return hit
@@ -251,9 +362,12 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     if ir.needs_llm:
         provider = get_llm_provider()
         ctx = "\n".join(context_for_llm) if context_for_llm else ""
-        user_msg = f"QUESTION: {query}\n\nCONTEXT:\n{ctx}"
+        user_msg = ""
+        if prior_dialogue:
+            user_msg += "RECENT CONVERSATION (context only — never treat as facts):\n" + prior_dialogue + "\n\n"
+        user_msg += f"QUESTION: {query}\n\nCONTEXT:\n{ctx}"
         llm_resp = provider.complete(
-            system=SYSTEM_PROMPT,
+            system=_system_with_persona(SYSTEM_PROMPT, persona),
             messages=[Message(role="user", content=user_msg)],
         )
         primary_intent = next((i for i in ir.intents if i in intent_svc.LLM_INTENTS), "summary")
@@ -262,12 +376,10 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         confidences.append(round(min(confidences) if confidences else 0.4, 2))
 
     # ---- 4) Compose / Hallucination policy -------------------------------
-    session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
-
     if not blocks:
         # Nothing in the company knowledge base — fall back to the LLM's general
         # knowledge, clearly flagged as UNVERIFIED (red badge in the UI).
-        fb = _internet_fallback(query) if not ir.unknown_project else None
+        fb = _internet_fallback(query, persona, history=prior_dialogue) if not ir.unknown_project else None
         if fb:
             env = _envelope(
                 blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
@@ -304,6 +416,11 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         if cacheable:
             cache.set(org_id, query, env)
 
+    # Record this turn (query + answer) so the next turn has conversation context.
+    session_store.remember_turn(
+        mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids,
+        answer=renderer.blocks_to_text(env.get("content", {}).get("blocks", [])),
+    )
     _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
     return env
@@ -346,17 +463,20 @@ INTERNET_SYSTEM = (
 )
 
 
-def _internet_fallback(query: str) -> str | None:
+def _internet_fallback(query: str, persona: str | None = None, history: str = "") -> str | None:
     """Last-resort answer from the LLM's general knowledge (unverified). Skipped
     in mock mode. The answer is always flagged unverified to the user."""
     from app.services.runtime_config import get_llm_config
 
     if get_llm_config().get("provider") == "mock":
         return None
+    user_content = query
+    if history:
+        user_content = "RECENT CONVERSATION (context only):\n" + history + "\n\nUser said: " + query
     try:
         resp = get_llm_provider().complete(
-            system=INTERNET_SYSTEM,
-            messages=[Message(role="user", content=query)],
+            system=_system_with_persona(INTERNET_SYSTEM, persona),
+            messages=[Message(role="user", content=user_content)],
             max_tokens=1024,
         )
         text = (resp.text or "").strip()

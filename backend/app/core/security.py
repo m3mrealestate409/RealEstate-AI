@@ -84,6 +84,9 @@ def get_current_user(
         user = resolve_api_key(db, x_api_key)
         if user is None:
             raise cred_exc
+        # Mark the request as coming from an external channel (widget/CRM/etc.),
+        # not a logged-in employee — used to auto-capture prospect phone numbers.
+        user._via_api_key = True
         return user
 
     # 2) Otherwise, a JWT bearer token (the web app).

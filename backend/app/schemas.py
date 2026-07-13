@@ -68,6 +68,10 @@ class QueryResponse(BaseModel):
     limit_reached: bool = False
     cached: bool = False
     unverified: bool = False
+    # Chat-channel UI signals: nudge/open the callback form, or acknowledge a
+    # lead that was just auto-captured from a phone number in the message.
+    suggest_callback: bool = False
+    lead_captured: bool = False
     # Ready-to-use plain-text answer (for CRM inline, WhatsApp, voice, etc.).
     answer_text: str = ""
 

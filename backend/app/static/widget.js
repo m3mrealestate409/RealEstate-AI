@@ -54,6 +54,11 @@
     ".px-dots{display:inline-block}.px-dots i{display:inline-block;width:6px;height:6px;margin:0 1px;border-radius:50%;background:#b3b8c8;animation:pxb 1s infinite}" +
     ".px-dots i:nth-child(2){animation-delay:.2s}.px-dots i:nth-child(3){animation-delay:.4s}" +
     "@keyframes pxb{0%,60%,100%{opacity:.3}30%{opacity:1}}" +
+    // Quick-reply chips.
+    ".px-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 2px}" +
+    ".px-chip{border:1px solid " + ACCENT + ";color:" + ACCENT + ";background:#fff;border-radius:15px;" +
+    "padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;transition:.12s;font-family:inherit}" +
+    ".px-chip:hover{background:" + ACCENT + ";color:#fff}" +
     ".px-teaser{position:fixed;right:24px;bottom:92px;max-width:250px;background:#fff;color:#1a1a1a;" +
     "border:1px solid #e6e8ef;border-radius:14px;border-bottom-right-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,.18);" +
     "padding:12px 30px 12px 14px;font-size:14px;line-height:1.45;z-index:2147482999;cursor:pointer;display:none}" +
@@ -118,7 +123,7 @@
     var open = panel.classList.toggle("open");
     btn.style.background = open ? BG_CLOSE : BG_CHAT;
     if (open) {
-      if (!msgs.dataset.greeted) { addBot(GREETING); msgs.dataset.greeted = "1"; }
+      if (!msgs.dataset.greeted) { addBot(GREETING); msgs.dataset.greeted = "1"; renderChips(DEFAULT_CHIPS); }
       input.focus();
     }
   };
@@ -131,10 +136,13 @@
   // ---- Lead capture (callback) form ----------------------------------------
   var lead = panel.querySelector(".px-lead");
   var leadStatus = panel.querySelector(".px-lead-status");
-  panel.querySelector("[data-cb]").onclick = function () {
+  function openLeadForm() {
+    if (leadStatus.classList.contains("px-lead-ok")) return; // already submitted this round
     leadStatus.textContent = ""; leadStatus.className = "px-lead-status";
-    lead.classList.add("show"); panel.querySelector(".px-lead-name").focus();
-  };
+    lead.classList.add("show"); scroll();
+    panel.querySelector(".px-lead-name").focus();
+  }
+  panel.querySelector("[data-cb]").onclick = openLeadForm;
   panel.querySelector("[data-lead-cancel]").onclick = function () { lead.classList.remove("show"); };
   panel.querySelector("[data-lead-send]").onclick = submitLead;
 
@@ -176,6 +184,42 @@
   function addLoader() { var d = document.createElement("div"); d.className = "px-bubble px-bot"; d.innerHTML = '<span class="px-dots"><i></i><i></i><i></i></span>'; msgs.appendChild(d); scroll(); return d; }
   function scroll() { msgs.scrollTop = msgs.scrollHeight; }
 
+  // Quick-reply chips (ephemeral — not saved to history).
+  var DEFAULT_CHIPS = ["Price", "Payment plan", "Amenities", "Book a visit"];
+  function clearChips() { var c = msgs.querySelector(".px-chips"); if (c) c.remove(); }
+  function renderChips(list) {
+    clearChips();
+    if (!list || !list.length) return;
+    var wrap = document.createElement("div"); wrap.className = "px-chips";
+    list.slice(0, 4).forEach(function (t) {
+      var b = document.createElement("button"); b.className = "px-chip"; b.type = "button";
+      b.textContent = t;
+      b.onclick = function () {
+        if (busy) return;
+        if (t === "Book a visit") { openLeadForm(); return; }  // open form, don't query
+        input.value = t; send();
+      };
+      wrap.appendChild(b);
+    });
+    msgs.appendChild(wrap); scroll();
+  }
+
+  // Cosmetic "typing" reveal (feels like streaming). Purely visual and safe:
+  // the full answer is rendered by the caller FIRST, so nothing depends on this
+  // finishing — if the tab is backgrounded (timers throttled) it just snaps to
+  // the full text on the next tick.
+  function typewriter(el, full) {
+    var plain = (full || "").replace(/\*\*/g, "");
+    var tokens = plain.match(/\S+\s*/g) || [];
+    if (plain.length > 350 || tokens.length < 2 || document.hidden) return; // skip: long/hidden
+    var i = 0, start = Date.now(); el.textContent = "";
+    (function step() {
+      if (i >= tokens.length || Date.now() - start > 1500) { el.innerHTML = md(full); scroll(); return; }
+      el.textContent += tokens[i]; i++; scroll();
+      setTimeout(step, 18);
+    })();
+  }
+
   // Persist the visible conversation for this browsing session so it survives
   // page navigations/reloads (restored when the widget loads on the next page).
   function saveHistory() {
@@ -203,6 +247,7 @@
   function send() {
     var q = input.value.trim();
     if (!q || busy) return;
+    clearChips();
     input.value = ""; addUser(q); busy = true; sendBtn.disabled = true;
     var loader = addLoader();
     fetch(API_URL + "/v1/query", {
@@ -211,7 +256,18 @@
       body: JSON.stringify({ query: q, session_id: SESSION, format: "text" }),
     })
       .then(function (r) { if (!r.ok) throw new Error(r.status === 401 ? "Auth failed — check the API key." : "Request failed"); return r.json(); })
-      .then(function (d) { loader.innerHTML = md(d.answer_text || "Information not available."); scroll(); saveHistory(); })
+      .then(function (d) {
+        var full = d.answer_text || "Information not available.";
+        // Render the full answer + run all logic IMMEDIATELY (not gated on the
+        // cosmetic typewriter, so it works even if the tab is backgrounded).
+        loader.innerHTML = md(full); scroll(); saveHistory();
+        // Offer relevant follow-ups as tappable chips.
+        if (d.suggestions && d.suggestions.length) renderChips(d.suggestions);
+        // A phone number was just auto-captured, or the visitor asked to be
+        // contacted → surface the callback form at the right moment.
+        if (d.suggest_callback && !d.lead_captured) openLeadForm();
+        typewriter(loader, full); // cosmetic reveal, best-effort
+      })
       .catch(function (e) { loader.innerHTML = esc(e.message || "Something went wrong."); saveHistory(); })
       .finally(function () { busy = false; sendBtn.disabled = false; input.focus(); });
   }

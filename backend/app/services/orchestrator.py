@@ -10,6 +10,8 @@ Every factual block carries a citation (§9).
 """
 from __future__ import annotations
 
+import logging
+import re
 import time
 from datetime import date
 
@@ -75,6 +77,68 @@ def _is_smalltalk(query: str) -> bool:
         return True
     words = q.split()
     return bool(words) and len(words) <= 3 and words[0] in _GREET_STARTS
+
+
+logger = logging.getLogger(__name__)
+
+# A 10-digit Indian mobile (optionally +91 / 0 prefixed, with spaces/dashes).
+_PHONE_RE = re.compile(r"(?:(?:\+?91|0)[\s-]?)?([6-9]\d{4}[\s-]?\d{5})")
+# Phrases that signal the visitor wants a human to reach out.
+_CALLBACK_WORDS = (
+    "call me", "callback", "call back", "phone me", "contact me", "reach me",
+    "site visit", "book a visit", "book visit", "schedule a visit", "visit karna",
+    "call karo", "call kijiye", "contact karo", "baat karni", "baat karna",
+    "talk to someone", "talk to agent", "speak to", "sales team", "connect me",
+)
+
+
+def _extract_phone(query: str) -> str | None:
+    """Return a normalised 10-digit phone if the text clearly contains one."""
+    m = _PHONE_RE.search(query or "")
+    if not m:
+        return None
+    digits = re.sub(r"\D", "", m.group(1))
+    return digits if len(digits) == 10 else None
+
+
+def _wants_callback(query: str) -> bool:
+    q = (query or "").lower()
+    return any(w in q for w in _CALLBACK_WORDS)
+
+
+def _create_chat_lead(db, org_id, *, phone, query, session_id, project_name):
+    """Auto-capture a lead when a website visitor drops their number in chat.
+    Best-effort: a failure here must never break the answer."""
+    from app.models import Lead, Organization
+
+    try:
+        lead = Lead(
+            organization_id=org_id, phone=phone, message=query[:500],
+            project_interest=project_name, source="widget", session_id=session_id,
+        )
+        db.add(lead)
+        db.commit()
+        db.refresh(lead)
+        org = db.get(Organization, org_id) if org_id else None
+        if org and org.crm_webhook_url:
+            _push_lead_to_crm(org.crm_webhook_url, {
+                "id": lead.id, "phone": phone, "message": query[:500],
+                "project_interest": project_name, "source": "widget",
+            })
+        return lead
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto chat-lead capture failed: %s", exc)
+        db.rollback()
+        return None
+
+
+def _push_lead_to_crm(url: str, payload: dict) -> None:
+    try:
+        import httpx
+
+        httpx.post(url, json=payload, timeout=8.0)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("CRM webhook push failed: %s", exc)
 
 
 def _system_with_persona(base: str, persona: str | None) -> str:
@@ -155,6 +219,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     mem_key = f"u{user_id}:{session_id}" if user_id is not None else session_id
     prior_projects = session_store.last_project_ids(mem_key)
     prior_dialogue = _dialogue_context(mem_key)  # recent turns → natural multi-turn replies
+    wants_cb = _wants_callback(query)  # visitor asked to be contacted / book a visit
 
     ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
 
@@ -172,6 +237,36 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         }
         ir.project_ids = [p for p in ir.project_ids if p in owned]
         ir.matched_projects = [m for m in ir.matched_projects if m["id"] in owned]
+
+    # Website visitor dropped their phone number in chat → capture a lead right
+    # away and reply warmly. Only for external channels (API key) — a logged-in
+    # employee (JWT) typing a number must NOT create a lead.
+    if getattr(user, "_via_api_key", False) and org_id is not None:
+        phone = _extract_phone(query)
+        if phone:
+            pname = None
+            if prior_projects:
+                p = dbsvc.get_project(db, prior_projects[0])
+                pname = p.name if p else None
+            _create_chat_lead(db, org_id, phone=phone, query=query,
+                               session_id=session_id, project_name=pname)
+            msg = ("Thank you! 🙌 I've noted your number"
+                   + (f" — and your interest in **{pname}**" if pname else "")
+                   + ". Our team will call you back shortly. Meanwhile, feel free to ask me "
+                   "anything about our projects — price, payment plan, or amenities.")
+            env = _envelope(
+                blocks=[renderer.paragraph_block("", msg)],
+                citations=[], handlers=["assistant"], session_id=session_id,
+                not_available=False, confidence=0.9, intent=ir, suggestions=[],
+            )
+            env["lead_captured"] = True
+            if user is not None:
+                quota.consume_quota(user, today, org_id)
+            session_store.remember_turn(mem_key, query=query, intents=ir.intents,
+                                        project_ids=ir.project_ids, answer=msg)
+            _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
+                       latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+            return env
 
     # Small talk / greeting → a warm persona chat reply (no factual claims). Makes
     # the assistant feel like an agent instead of a search box.
@@ -226,6 +321,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                 blocks=[block], citations=[], handlers=["none"], session_id=session_id,
                 not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
             )
+        env["suggest_callback"] = bool(wants_cb or env.get("not_available"))
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
         return env
@@ -412,9 +508,15 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
             intent=ir,
             suggestions=_suggestions(ir),
         )
-        # Cache a fresh, self-contained expensive answer for repeat queries.
-        if cacheable:
-            cache.set(org_id, query, env)
+
+    # Offer a callback when the visitor asked to be contacted, or when we
+    # couldn't answer (a natural moment to hand off to the sales team). Set
+    # BEFORE caching so a cache hit preserves the flag.
+    env["suggest_callback"] = bool(wants_cb or env.get("not_available"))
+
+    # Cache a fresh, self-contained expensive answer for repeat queries.
+    if blocks and cacheable:
+        cache.set(org_id, query, env)
 
     # Record this turn (query + answer) so the next turn has conversation context.
     session_store.remember_turn(
@@ -558,4 +660,8 @@ def _envelope(*, blocks, citations, handlers, session_id, not_available, confide
         "suggestions": suggestions or [],
         "cached": False,
         "unverified": False,
+        # UI signals for chat channels: whether to nudge/open the callback form,
+        # and whether this reply already captured a lead.
+        "suggest_callback": False,
+        "lead_captured": False,
     }

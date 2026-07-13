@@ -6,6 +6,29 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-07-13
+
+### Added — Smarter chat experience (website widget)
+- **Auto-lead from chat** — when a website visitor types their phone number in
+  the chat, the engine captures a lead instantly (with the project they were
+  discussing) and replies with a warm confirmation. Only external channels
+  (API key) trigger this — a logged-in employee typing a number never creates a
+  lead.
+- **Callback form auto-opens** — when the visitor asks to be contacted / book a
+  visit (or when we couldn't answer), the callback form surfaces automatically.
+  A `suggest_callback` signal drives it; the persona verbally offers, the UI
+  opens the form.
+- **Quick-reply chips** — the widget shows tappable chips: default ones after
+  the greeting (Price / Payment plan / Amenities / Book a visit) and
+  context-aware follow-ups (from the engine's `suggestions`) after each answer.
+- **Typing reveal** — bot answers stream in word-by-word for a live feel. It's
+  purely cosmetic and decoupled from logic, so chips/forms still work instantly
+  even if the tab is backgrounded.
+
+### API
+- `POST /v1/query` responses now include `suggest_callback` and `lead_captured`
+  flags (for any chat channel to react to).
+
 ## [2.1.1] — 2026-07-13
 
 ### Fixed

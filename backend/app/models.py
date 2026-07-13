@@ -18,6 +18,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -407,6 +408,36 @@ class Lead(Base):
     page_url: Mapped[str | None] = mapped_column(String)          # where they were on the site
     session_id: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="new")    # new | contacted | qualified | closed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --------------------------------------------------------------------------
+# Live chat — the agent-takeover feature. Every widget conversation is a
+# ChatSession; each message (visitor, AI, or human agent) is a ChatMessage.
+# When mode == "human", the AI stays silent and an employee handles the chat.
+# --------------------------------------------------------------------------
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    session_id: Mapped[str] = mapped_column(String, index=True)  # the widget's session id
+    mode: Mapped[str] = mapped_column(String, default="ai")      # ai | human
+    agent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # who took over
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("organization_id", "session_id", name="uq_chat_org_session"),)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_pk: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String)   # user | ai | agent | system
+    text: Mapped[str] = mapped_column(Text)
+    agent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

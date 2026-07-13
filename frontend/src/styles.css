@@ -491,6 +491,40 @@ a { color: inherit; text-decoration: none; }
   .insight-grid { grid-template-columns: 1fr; }
 }
 
+/* ---- Live chat (agent takeover) ---- */
+.live-wrap { display: grid; grid-template-columns: 300px 1fr; gap: 14px; margin-top: 14px;
+  height: 560px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.live-list { border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface-2); }
+.live-item { display: block; width: 100%; text-align: left; border: none; border-bottom: 1px solid var(--border);
+  background: transparent; padding: 10px 12px; cursor: pointer; }
+.live-item:hover { background: var(--surface); }
+.live-item-active { background: var(--surface); box-shadow: inset 3px 0 0 var(--primary); }
+.live-item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.live-id { font-size: 12px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-mode { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); white-space: nowrap; }
+.live-mode-human { background: var(--green-soft); color: var(--green); }
+.live-item-last { font-size: 12px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-item-time { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.live-convo { display: flex; flex-direction: column; min-width: 0; }
+.live-empty { padding: 24px; }
+.live-convo-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 700; }
+.live-msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.live-msg { max-width: 78%; padding: 8px 11px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; }
+.live-msg .live-role { display: block; font-size: 10.5px; font-weight: 700; opacity: .6; margin-bottom: 2px; }
+.live-user { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); }
+.live-ai { align-self: flex-end; background: var(--primary-soft); color: var(--text); }
+.live-agent { align-self: flex-end; background: var(--green-soft); color: #065f36; }
+.live-system { align-self: center; background: transparent; }
+.live-sys { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.live-actions { padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+.live-composer { display: flex; gap: 8px; }
+.live-composer input { flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; font-size: 14px; outline: none; }
+@media (max-width: 760px) {
+  .live-wrap { grid-template-columns: 1fr; height: auto; }
+  .live-list { max-height: 180px; }
+}
+
 /* ---- Assistant identity (name + avatar) ---- */
 .persona-id-row { display: flex; gap: 14px; align-items: center; margin: 10px 0 6px; }
 .persona-avatar { width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0;

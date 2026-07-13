@@ -6,6 +6,25 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-07-13
+
+### Added — Live chat with human takeover (Phase 1)
+An employee can now watch website conversations in real time and jump in.
+
+- **Live Chat console** — Admin → **💬 Live Chat**: an inbox of active website
+  conversations (auto-refreshing), each showing the live transcript (visitor +
+  AI). Click **Take over** to reply as a human — the AI pauses for that visitor
+  until you hand it back with **Return to AI**.
+- **Widget takeover UX** — when an agent takes over, the visitor sees
+  "You're now chatting with {agent}", the agent's replies appear inline, and
+  their own messages go straight to the agent (the AI stays silent). When the
+  agent releases, "the assistant is back" and the AI resumes.
+- **Every widget conversation is recorded** (`ChatSession` + `ChatMessage`),
+  powering the console and polled by the widget (~3s) for near-real-time
+  delivery — no WebSocket needed.
+
+_Phase 2 (new-visitor notifications) coming next._
+
 ## [2.4.0] — 2026-07-13
 
 ### Added — Premium widget identity

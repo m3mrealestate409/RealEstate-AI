@@ -214,6 +214,13 @@ export const api = {
   createApiKey: (name) => request("/v1/admin/api-keys", { method: "POST", body: { name } }),
   revokeApiKey: (id) => request(`/v1/admin/api-keys/${id}`, { method: "DELETE" }),
 
+  // Live chat (agent takeover)
+  liveSessions: () => request("/v1/admin/live/sessions"),
+  liveTranscript: (sid) => request(`/v1/admin/live/sessions/${encodeURIComponent(sid)}`),
+  liveTakeover: (sid) => request(`/v1/admin/live/sessions/${encodeURIComponent(sid)}/takeover`, { method: "POST" }),
+  liveSend: (sid, text) => request(`/v1/admin/live/sessions/${encodeURIComponent(sid)}/message`, { method: "POST", body: { text } }),
+  liveRelease: (sid) => request(`/v1/admin/live/sessions/${encodeURIComponent(sid)}/release`, { method: "POST" }),
+
   // Leads (captured prospects) + CRM webhook
   listLeads: () => request("/v1/admin/leads"),
   updateLeadStatus: (id, status) => request(`/v1/admin/leads/${id}`, { method: "PATCH", body: { status } }),

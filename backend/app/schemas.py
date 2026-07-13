@@ -72,6 +72,8 @@ class QueryResponse(BaseModel):
     # lead that was just auto-captured from a phone number in the message.
     suggest_callback: bool = False
     lead_captured: bool = False
+    # A human agent has taken over this chat — the AI stayed silent.
+    human_mode: bool = False
     # Ready-to-use plain-text answer (for CRM inline, WhatsApp, voice, etc.).
     answer_text: str = ""
 

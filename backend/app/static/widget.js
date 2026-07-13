@@ -54,6 +54,8 @@
     ".px-user{align-self:flex-end;background:" + ACCENT + ";color:#fff;border-bottom-right-radius:4px}" +
     ".px-bot{align-self:flex-start;background:#fff;color:#1a1a1a;border:1px solid #e6e8ef;border-bottom-left-radius:4px}" +
     ".px-bot strong{font-weight:700}" +
+    ".px-agent{background:#f0fdf4;border-color:#bbf7d0}" +
+    ".px-sys{align-self:center;text-align:center;max-width:92%;font-size:11.5px;color:#8a90a2;padding:2px 8px;font-style:italic}" +
     ".px-foot{display:flex;gap:8px;padding:10px;border-top:1px solid #eee;background:#fff}" +
     ".px-foot input{flex:1;padding:10px 12px;border:1px solid #d7dae5;border-radius:10px;font-size:14px;outline:none}" +
     ".px-foot button{background:" + ACCENT + ";color:#fff;border:none;border-radius:10px;padding:0 16px;cursor:pointer;font-weight:600}" +
@@ -205,8 +207,42 @@
   function md(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
   function addUser(t) { var d = document.createElement("div"); d.className = "px-bubble px-user"; d.textContent = t; msgs.appendChild(d); scroll(); saveHistory(); }
   function addBot(t) { var d = document.createElement("div"); d.className = "px-bubble px-bot"; d.innerHTML = md(t); msgs.appendChild(d); scroll(); saveHistory(); return d; }
+  function addAgent(t) { var d = document.createElement("div"); d.className = "px-bubble px-bot px-agent"; d.innerHTML = md(t); msgs.appendChild(d); scroll(); saveHistory(); return d; }
+  function addSystem(t) { var d = document.createElement("div"); d.className = "px-sys"; d.textContent = t; msgs.appendChild(d); scroll(); return d; }
   function addLoader() { var d = document.createElement("div"); d.className = "px-bubble px-bot"; d.innerHTML = '<span class="px-dots"><i></i><i></i><i></i></span>'; msgs.appendChild(d); scroll(); return d; }
   function scroll() { msgs.scrollTop = msgs.scrollHeight; }
+
+  // ---- Live chat polling (human-agent takeover) --------------------------
+  var polling = false, humanMode = false, agentAfter = 0;
+  try { agentAfter = parseInt(sessionStorage.getItem("pxAgentAfter") || "0", 10) || 0; } catch (e) {}
+  try { humanMode = sessionStorage.getItem("pxHuman") === "1"; } catch (e) {}
+
+  function startPolling() { if (polling) return; polling = true; poll(); setInterval(poll, 3000); }
+
+  function poll() {
+    fetch(API_URL + "/v1/widget/poll?session_id=" + encodeURIComponent(SESSION) + "&after=" + agentAfter,
+      { headers: { "X-API-Key": API_KEY } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        if (d.mode === "human" && !humanMode) {
+          humanMode = true; try { sessionStorage.setItem("pxHuman", "1"); } catch (e) {}
+          addSystem("🎧 You're now chatting with " + (d.agent_name || "our team") + ".");
+          input.placeholder = "Message " + (d.agent_name || "our team") + "…";
+        } else if (d.mode === "ai" && humanMode) {
+          humanMode = false; try { sessionStorage.setItem("pxHuman", "0"); } catch (e) {}
+          addSystem("🤖 The assistant is back.");
+          input.placeholder = "Type your question…";
+        }
+        (d.messages || []).forEach(function (m) {
+          if (m.id <= agentAfter) return;
+          if (m.role === "agent") addAgent(m.text);   // system notes are covered by the banner above
+          agentAfter = m.id;
+        });
+        try { sessionStorage.setItem("pxAgentAfter", String(agentAfter)); } catch (e) {}
+      })
+      .catch(function () {});
+  }
 
   // Quick-reply chips (ephemeral — not saved to history). Shown only AFTER an
   // answer (from the engine's suggestions), never under the first greeting.
@@ -269,6 +305,7 @@
     if (!q || busy) return;
     clearChips();
     input.value = ""; addUser(q); busy = true; sendBtn.disabled = true;
+    startPolling();  // begin watching for a human agent taking over
     var loader = addLoader();
     fetch(API_URL + "/v1/query", {
       method: "POST",
@@ -281,6 +318,9 @@
         return r.json();
       })
       .then(function (d) {
+        // A human agent is handling this chat — no AI answer; their reply
+        // arrives via polling. Just drop the loader.
+        if (d.human_mode) { loader.remove(); poll(); return; }
         var full = d.answer_text || "Information not available.";
         // Render the full answer + run all logic IMMEDIATELY (not gated on the
         // cosmetic typewriter, so it works even if the tab is backgrounded).

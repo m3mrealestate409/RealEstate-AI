@@ -7,9 +7,21 @@ from app.core.tenancy import org_scope_id
 from app.database import get_db
 from app.models import User
 from app.schemas import QueryRequest, QueryResponse
-from app.services import ratelimit
+from app.services import livechat, ratelimit
 from app.services.orchestrator import handle_query
 from app.services.renderer import blocks_to_text
+
+
+def _human_mode_envelope(session_id: str) -> dict:
+    """Returned when a human agent has taken over — the AI stays silent and the
+    visitor's message is just recorded; the agent replies via polling."""
+    return {
+        "answer_type": "text", "content": {"blocks": []}, "citations": [],
+        "handlers_used": ["human"], "session_id": session_id, "not_available": False,
+        "confidence": 1.0, "detected_intents": [], "resolved_from_memory": False,
+        "resolved_via": "", "resolution_note": None, "llm_provider": "human",
+        "suggestions": [], "human_mode": True, "answer_text": "",
+    }
 
 router = APIRouter(prefix="/v1", tags=["engine"])
 
@@ -35,9 +47,10 @@ def query(
     `format` to "blocks" (default), "text", or "voice" — `answer_text` is a
     ready-to-use plain-text answer for CRM/WhatsApp/voice consumers.
     """
-    # Anti-flood: only for the public widget (API key). Employees are trusted
-    # and already have per-user/per-org quotas.
-    if getattr(user, "_via_api_key", False):
+    is_widget = getattr(user, "_via_api_key", False)
+    cs = None
+    if is_widget:
+        # Anti-flood: only for the public widget. Employees are trusted.
         ok, retry = ratelimit.flood_check(org_scope_id(user), payload.session_id, client_ip(request))
         if not ok:
             raise HTTPException(
@@ -45,7 +58,16 @@ def query(
                 detail="You're sending messages too quickly. Please wait a moment and try again.",
                 headers={"Retry-After": str(retry)},
             )
+        # Record the visitor's message for the live-chat console. If a human has
+        # taken over this session, the AI stays silent (agent replies via poll).
+        cs = livechat.get_or_create_session(db, org_scope_id(user), payload.session_id or "anon")
+        livechat.add_message(db, cs, role="user", text=payload.query)
+        if cs.mode == "human":
+            return _human_mode_envelope(payload.session_id or "anon")
+
     env = handle_query(db, payload.query, payload.session_id, user)
     voice = (payload.format or "blocks").lower() == "voice"
     env["answer_text"] = blocks_to_text(env.get("content", {}).get("blocks", []), voice=voice)
+    if is_widget and cs is not None:
+        livechat.add_message(db, cs, role="ai", text=env.get("answer_text", ""))
     return env

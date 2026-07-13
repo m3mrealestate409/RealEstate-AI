@@ -16,18 +16,21 @@ from app.models import ChatMessage, ChatSession, User
 _MAX_TEXT = 4000
 
 
-def get_or_create_session(db: Session, org_id: int | None, session_id: str) -> ChatSession:
+def get_or_create_session(db: Session, org_id: int | None, session_id: str) -> tuple[ChatSession, bool]:
+    """Returns (session, created) — `created` is True on the visitor's first
+    message, which is when we fire a "new chat" notification."""
     cs = (
         db.query(ChatSession)
         .filter(ChatSession.organization_id == org_id, ChatSession.session_id == session_id)
         .first()
     )
-    if cs is None:
-        cs = ChatSession(organization_id=org_id, session_id=session_id, mode="ai")
-        db.add(cs)
-        db.commit()
-        db.refresh(cs)
-    return cs
+    if cs is not None:
+        return cs, False
+    cs = ChatSession(organization_id=org_id, session_id=session_id, mode="ai")
+    db.add(cs)
+    db.commit()
+    db.refresh(cs)
+    return cs, True
 
 
 def get_session(db: Session, org_id: int | None, session_id: str) -> ChatSession | None:

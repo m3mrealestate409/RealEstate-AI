@@ -120,6 +120,115 @@ function AssistantPersona() {
   );
 }
 
+function linesToHeaders(text) {
+  const out = {};
+  (text || "").split("\n").forEach((ln) => {
+    const i = ln.indexOf(":");
+    if (i > 0) { const k = ln.slice(0, i).trim(); const v = ln.slice(i + 1).trim(); if (k) out[k] = v; }
+  });
+  return out;
+}
+function headersToLines(obj) {
+  return Object.entries(obj || {}).map(([k, v]) => `${k}: ${v}`).join("\n");
+}
+
+const DEFAULT_BODY_TEMPLATE = '{"text": "{{text}}"}';
+
+function NotificationSettings() {
+  const [provider, setProvider] = useState("off");
+  const [cfg, setCfg] = useState({});
+  const [headersText, setHeadersText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    api.getNotifyConfig().then((r) => {
+      setProvider(r.provider || "off");
+      setCfg(r.config || {});
+      setHeadersText(headersToLines(r.config?.headers));
+    }).catch(() => {});
+  }, []);
+
+  const set = (k, v) => setCfg((s) => ({ ...s, [k]: v }));
+
+  async function save() {
+    setSaving(true); setMsg(null);
+    try {
+      const config = { ...cfg };
+      if (provider === "webhook") config.headers = linesToHeaders(headersText);
+      const r = await api.setNotifyConfig(provider, config);
+      setProvider(r.provider); setCfg(r.config || {});
+      setMsg({ ok: true, text: "Saved." });
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setSaving(false); }
+  }
+  async function test() {
+    setTesting(true); setMsg(null);
+    try { const r = await api.testNotifyConfig(); setMsg({ ok: true, text: "Test sent ✓ " + (r.detail || "") }); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setTesting(false); }
+  }
+
+  return (
+    <div className="int-greeting int-persona">
+      <b>🔔 New-chat notifications</b>
+      <p className="muted">
+        Get pinged the moment a new visitor starts chatting, so someone can jump in from Live Chat.
+        Works with <b>Telegram</b> (free, official) or any <b>webhook</b> — an unofficial WhatsApp service,
+        WhatsApp Cloud API, Zapier/Make, Slack, etc.
+      </p>
+
+      <label className="field" style={{ maxWidth: 280 }}><span>Notify via</span>
+        <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+          <option value="off">Off</option>
+          <option value="telegram">Telegram (recommended)</option>
+          <option value="webhook">Webhook (WhatsApp / any HTTP)</option>
+        </select>
+      </label>
+
+      {provider === "telegram" && (
+        <div className="calc-fields">
+          <label className="field"><span>Bot token</span>
+            <input value={cfg.bot_token || ""} onChange={(e) => set("bot_token", e.target.value)} placeholder="123456:ABC-DEF…" />
+          </label>
+          <label className="field"><span>Chat ID</span>
+            <input value={cfg.chat_id || ""} onChange={(e) => set("chat_id", e.target.value)} placeholder="-1001234567890 or your user id" />
+          </label>
+          <p className="muted small" style={{ gridColumn: "1 / -1", margin: 0 }}>
+            Create a bot with <b>@BotFather</b>, add it to your team group, then get the group's chat id
+            (e.g. via <b>@getidsbot</b>). Notifications land in that group.
+          </p>
+        </div>
+      )}
+
+      {provider === "webhook" && (
+        <>
+          <label className="field"><span>Webhook URL</span>
+            <input value={cfg.url || ""} onChange={(e) => set("url", e.target.value)} placeholder="https://your-service.com/send" />
+          </label>
+          <label className="field"><span>Body template (JSON, use <code>{"{{text}}"}</code>)</span>
+            <textarea rows={3} value={cfg.body_template || ""} onChange={(e) => set("body_template", e.target.value)} placeholder={DEFAULT_BODY_TEMPLATE} />
+          </label>
+          <label className="field"><span>Headers (optional, one <code>Key: Value</code> per line)</span>
+            <textarea rows={2} value={headersText} onChange={(e) => setHeadersText(e.target.value)} placeholder={"Authorization: Bearer xxxxx"} />
+          </label>
+          <p className="muted small" style={{ margin: 0 }}>
+            Match your service's shape. Unofficial WhatsApp: <code>{'{"number":"9198…","message":"{{text}}"}'}</code>.
+            WhatsApp Cloud API: point the URL at graph.facebook.com and add the <code>Authorization</code> header.
+          </p>
+        </>
+      )}
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        {provider !== "off" && <button type="button" className="btn btn-sm" onClick={test} disabled={testing}>{testing ? "Sending…" : "Send test"}</button>}
+        {msg && <span style={{ fontSize: 13, color: msg.ok ? "var(--muted)" : "#c0392b" }}>{msg.text}</span>}
+      </div>
+    </div>
+  );
+}
+
 function WidgetGreeting() {
   const [greeting, setGreeting] = useState("");
   const [def, setDef] = useState("");
@@ -235,6 +344,7 @@ export default function Integrations() {
         All integrations use an <b>API key</b> (🔌 API Keys tab) and stay scoped to your organisation.
       </div>
       <AssistantPersona />
+      <NotificationSettings />
       <div className="int-cards">
         {INTEGRATIONS.map((i) => (
           <button key={i.id} type="button"

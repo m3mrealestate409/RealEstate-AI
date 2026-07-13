@@ -1,13 +1,13 @@
 """The main engine endpoint — natural-language query in, structured answer out."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
 from app.core.tenancy import org_scope_id
 from app.database import get_db
-from app.models import User
+from app.models import Organization, User
 from app.schemas import QueryRequest, QueryResponse
-from app.services import livechat, ratelimit
+from app.services import livechat, notify, ratelimit
 from app.services.orchestrator import handle_query
 from app.services.renderer import blocks_to_text
 
@@ -38,6 +38,7 @@ def client_ip(request: Request) -> str:
 def query(
     payload: QueryRequest,
     request: Request,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -60,8 +61,16 @@ def query(
             )
         # Record the visitor's message for the live-chat console. If a human has
         # taken over this session, the AI stays silent (agent replies via poll).
-        cs = livechat.get_or_create_session(db, org_scope_id(user), payload.session_id or "anon")
+        org_id = org_scope_id(user)
+        cs, created = livechat.get_or_create_session(db, org_id, payload.session_id or "anon")
         livechat.add_message(db, cs, role="user", text=payload.query)
+        # First message of a new visitor → fire a "new chat" notification
+        # (best-effort, in the background so the reply isn't delayed).
+        if created and org_id is not None:
+            org = db.get(Organization, org_id)
+            if org and (org.notify_provider or "off") != "off":
+                msg = notify.build_new_chat_message(payload.query, payload.page_url)
+                background.add_task(notify.send, org.notify_provider, dict(org.notify_config or {}), msg)
         if cs.mode == "human":
             return _human_mode_envelope(payload.session_id or "anon")
 

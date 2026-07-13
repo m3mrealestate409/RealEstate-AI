@@ -43,6 +43,8 @@ class QueryRequest(BaseModel):
     # Response shape for the caller: "blocks" (rich, for UIs), "text" (plain
     # markdown answer), or "voice" (short, spoken, TTS-friendly).
     format: str = "blocks"
+    # Where the visitor is chatting from (widget) — used in new-chat notifications.
+    page_url: str | None = None
 
 
 class Citation(BaseModel):

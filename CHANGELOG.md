@@ -6,6 +6,23 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.6.0] — 2026-07-13
+
+### Added — New-chat notifications (Live Chat Phase 2), provider-agnostic
+Get pinged the moment a new visitor starts chatting, so someone can jump in.
+
+- **One system, any provider** — Admin → Integrations → **New-chat notifications**:
+  - **Telegram** (recommended) — free, official, no ban risk: paste a bot token
+    + chat id.
+  - **Webhook** — POST to ANY URL with a caller-defined JSON body (with a
+    `{{text}}` placeholder) + custom headers. Covers an unofficial WhatsApp HTTP
+    service, the WhatsApp Cloud API (graph URL + Bearer header), Zapier/Make/n8n,
+    Slack/Discord — anything. Switch provider anytime without code changes.
+- **Fires once per new visitor** — on their first message only, not follow-ups.
+- **Best-effort + non-blocking** — sent in the background; a notification
+  failure never affects the visitor's chat.
+- **Send test** button to verify the setup instantly.
+
 ## [2.5.1] — 2026-07-13
 
 ### Changed — Live Chat access control

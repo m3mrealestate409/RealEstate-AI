@@ -72,6 +72,12 @@ class Organization(Base):
     # Optional CRM/webhook URL — every captured lead is POSTed here (best-effort)
     # so the company's own CRM receives it in real time. Provider-agnostic.
     crm_webhook_url: Mapped[str | None] = mapped_column(String)
+    # New-chat notifications (provider-agnostic): "off" | "telegram" | "webhook".
+    # notify_config holds the provider's settings (token/chat_id, or url/headers/
+    # body_template) so Telegram, WhatsApp Cloud API, or an unofficial WhatsApp
+    # HTTP service can all be driven from one place.
+    notify_provider: Mapped[str] = mapped_column(String, default="off")
+    notify_config: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="organizations")

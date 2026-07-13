@@ -66,6 +66,9 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_avatar TEXT"))
         # Per-employee Live Chat (takeover) access.
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS can_live_chat BOOLEAN DEFAULT false"))
+        # New-chat notification provider + config (Telegram / webhook / etc.).
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notify_provider TEXT DEFAULT 'off'"))
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notify_config JSONB"))
     logger.info("Database initialised.")
 
 

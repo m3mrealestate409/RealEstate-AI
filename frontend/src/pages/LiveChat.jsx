@@ -59,7 +59,10 @@ export default function LiveChat() {
             <button key={s.session_id} className={`live-item ${active === s.session_id ? "live-item-active" : ""}`}
               onClick={() => setActive(s.session_id)}>
               <div className="live-item-top">
-                <span className="live-id">{s.session_id}</span>
+                <span className="live-id">
+                  <span className={`live-dot ${s.online ? "" : "live-dot-off"}`} title={s.online ? "Online" : "Offline"}></span>
+                  {s.session_id}
+                </span>
                 <span className={`live-mode ${s.mode === "human" ? "live-mode-human" : ""}`}>{s.mode === "human" ? (s.agent ? s.agent : "Human") : "AI"}</span>
               </div>
               <div className="live-item-last">{s.last_message || "—"}</div>
@@ -73,7 +76,10 @@ export default function LiveChat() {
           {active && convo && (
             <>
               <div className="live-convo-head">
-                <span>{active}</span>
+                <span>
+                  <span className={`live-dot ${convo.online ? "" : "live-dot-off"}`}></span>
+                  {active} · <span className="muted small">{convo.online ? "online" : "offline"}</span>
+                </span>
                 <span className={`live-mode ${isHuman ? "live-mode-human" : ""}`}>{isHuman ? `Human · ${convo.agent || "you"}` : "AI"}</span>
               </div>
               <div className="live-msgs" ref={scrollRef}>
@@ -87,7 +93,10 @@ export default function LiveChat() {
               </div>
               <div className="live-actions">
                 {!isHuman
-                  ? <button className="btn btn-primary" onClick={takeover} disabled={busy}>Take over this chat</button>
+                  ? <button className="btn btn-primary" onClick={takeover} disabled={busy || !convo.online}
+                      title={convo.online ? "" : "Visitor has left — can't take over"}>
+                      {convo.online ? "Take over this chat" : "Visitor offline — can't take over"}
+                    </button>
                   : (
                     <form className="live-composer" onSubmit={send}>
                       <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your reply to the visitor…" />

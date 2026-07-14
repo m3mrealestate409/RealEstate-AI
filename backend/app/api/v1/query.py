@@ -64,6 +64,7 @@ def query(
         org_id = org_scope_id(user)
         cs, created = livechat.get_or_create_session(db, org_id, payload.session_id or "anon")
         livechat.add_message(db, cs, role="user", text=payload.query)
+        livechat.touch_seen(db, cs)  # visitor is clearly online right now
         # First message of a new visitor → fire a "new chat" notification
         # (best-effort, in the background so the reply isn't delayed).
         if created and org_id is not None:

@@ -500,7 +500,10 @@ a { color: inherit; text-decoration: none; }
 .live-item:hover { background: var(--surface); }
 .live-item-active { background: var(--surface); box-shadow: inset 3px 0 0 var(--primary); }
 .live-item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.live-id { font-size: 12px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-id { font-size: 12px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(34,197,94,.25); display: inline-block; }
+.live-dot-off { background: #cbd5e1; box-shadow: none; }
+.live-actions .btn:disabled { opacity: .5; cursor: not-allowed; }
 .live-mode { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); white-space: nowrap; }
 .live-mode-human { background: var(--green-soft); color: var(--green); }
 .live-item-last { font-size: 12px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

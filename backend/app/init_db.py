@@ -69,6 +69,8 @@ def init_db() -> None:
         # New-chat notification provider + config (Telegram / webhook / etc.).
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notify_provider TEXT DEFAULT 'off'"))
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notify_config JSONB"))
+        # Live-chat presence heartbeat.
+        conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT now()"))
     logger.info("Database initialised.")
 
 

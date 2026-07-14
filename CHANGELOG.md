@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.6.1] — 2026-07-13
+
+### Added — Live Chat visitor presence
+- **Online indicator** — a green dot shows which website visitors are currently
+  on the page (grey when they've left), in the inbox and the conversation header.
+  Driven by the widget's ~3s poll heartbeat (online = seen in the last 30s).
+- **Take over disabled when the visitor left** — the button fades to
+  "Visitor offline — can't take over" once they're gone, so agents don't try to
+  jump into a dead chat.
+
 ## [2.6.0] — 2026-07-13
 
 ### Added — New-chat notifications (Live Chat Phase 2), provider-agnostic

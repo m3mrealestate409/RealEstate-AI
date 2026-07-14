@@ -435,6 +435,9 @@ class ChatSession(Base):
     agent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # who took over
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Heartbeat: updated on every widget poll / visitor message → drives the
+    # "online" (green dot) indicator in the console.
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (UniqueConstraint("organization_id", "session_id", name="uq_chat_org_session"),)
 

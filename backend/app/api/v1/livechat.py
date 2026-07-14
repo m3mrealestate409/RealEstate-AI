@@ -38,6 +38,7 @@ def widget_poll(
     cs = livechat.get_session(db, org_id, session_id)
     if cs is None:
         return {"mode": "ai", "agent_name": None, "messages": []}
+    livechat.touch_seen(db, cs)  # heartbeat → visitor is online
     msgs = livechat.messages_after(db, cs, after_id=after, roles=["agent", "system"])
     agent_name = None
     if cs.agent_id:
@@ -76,6 +77,7 @@ def get_transcript(session_id: str, user: User = Depends(require_live_chat), db:
         agent_name = (agent.name or agent.email) if agent else None
     return {
         "session_id": cs.session_id, "mode": cs.mode, "agent": agent_name,
+        "online": livechat.is_online(cs),
         "messages": [
             {"id": m.id, "role": m.role, "text": m.text,
              "at": m.created_at.isoformat() if m.created_at else None}

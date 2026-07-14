@@ -14,6 +14,28 @@ from sqlalchemy.orm import Session
 from app.models import ChatMessage, ChatSession, User
 
 _MAX_TEXT = 4000
+# A visitor counts as "online" if their widget has polled within this window
+# (the widget heartbeats every ~3s; generous enough to tolerate jitter).
+ONLINE_SECONDS = 30
+
+
+def _aware(dt):
+    """Treat naive DB timestamps as UTC so comparisons never crash."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def is_online(cs: "ChatSession") -> bool:
+    seen = _aware(cs.last_seen_at)
+    if seen is None:
+        return False
+    return (datetime.now(timezone.utc) - seen).total_seconds() < ONLINE_SECONDS
+
+
+def touch_seen(db: Session, cs: "ChatSession") -> None:
+    cs.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 def get_or_create_session(db: Session, org_id: int | None, session_id: str) -> tuple[ChatSession, bool]:
@@ -91,5 +113,6 @@ def list_active(db: Session, org_id: int | None, minutes: int = 120) -> list[dic
             "last_message": (last.text[:80] if last else ""),
             "last_role": (last.role if last else None),
             "last_activity": cs.last_activity_at.isoformat() if cs.last_activity_at else None,
+            "online": is_online(cs),
         })
     return out

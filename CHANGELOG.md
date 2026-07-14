@@ -6,6 +6,24 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.6.2] — 2026-07-14
+
+### Changed — Premium Live Chat console UI
+Full visual redesign of the Live Chat page for a polished, luxury feel.
+
+- **Inbox** — visitors get friendly names ("Visitor 5FDK") with colorful
+  gradient avatars (consistent per visitor), presence dot with a soft pulse,
+  relative times ("2m ago"), message previews, AI/agent pills, and a
+  "Conversations" header with a live count badge.
+- **Conversation** — chat-app style: avatars beside every bubble (visitor /
+  ✦ AI / agent initial), soft gradient bubbles with per-role colors, timestamps
+  under each message, elegant divider lines for system notes, and a refined
+  header (avatar + name + "Online now" pulse).
+- **Actions** — gradient "🎧 Take over this chat" button (greyed when the
+  visitor left), pill composer with a circular gradient send button, and a
+  subtle "↩ Return to AI" link.
+- Beautiful empty states for both panels.
+
 ## [2.6.1] — 2026-07-13
 
 ### Added — Live Chat visitor presence

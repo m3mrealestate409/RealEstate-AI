@@ -6,6 +6,13 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.6.3] — 2026-07-14
+
+### Fixed — Live Chat fits the screen
+- The console now sizes itself to the viewport instead of a fixed height, so
+  the **Take over / reply bar is always visible on screen** — no page scrolling
+  needed. Only the message list scrolls (like a real chat app).
+
 ## [2.6.2] — 2026-07-14
 
 ### Changed — Premium Live Chat console UI

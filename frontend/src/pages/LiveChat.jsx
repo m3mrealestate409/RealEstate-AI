@@ -90,7 +90,7 @@ export default function LiveChat() {
 
   const isHuman = convo?.mode === "human";
   return (
-    <div className="page">
+    <div className="page live-page">
       <div className="page-head">
         <h2>💬 Live Chat</h2>
         <p className="muted">Watch website conversations in real time and take over from the AI when needed.</p>

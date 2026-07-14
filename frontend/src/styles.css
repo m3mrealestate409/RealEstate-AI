@@ -492,13 +492,16 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ---- Live chat (agent takeover) — premium ---- */
-.live-wrap { display: grid; grid-template-columns: 330px 1fr; margin-top: 16px;
-  height: 620px; border: 1px solid var(--border); border-radius: 20px; overflow: hidden;
-  background: var(--surface); box-shadow: 0 18px 50px rgba(26, 24, 75, .10); }
+/* The page fills the viewport so the console (and its take-over/composer bar)
+   is always fully on screen — only the messages scroll, never the page. */
+.live-page { display: flex; flex-direction: column; height: 100%; }
+.live-wrap { display: grid; grid-template-columns: 330px 1fr; grid-template-rows: minmax(0, 1fr);
+  margin-top: 16px; flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 20px;
+  overflow: hidden; background: var(--surface); box-shadow: 0 18px 50px rgba(26, 24, 75, .10); }
 
 /* Inbox */
 .live-list { border-right: 1px solid var(--border); overflow-y: auto; background: #fbfbfe;
-  display: flex; flex-direction: column; }
+  display: flex; flex-direction: column; min-height: 0; }
 .live-list-head { position: sticky; top: 0; z-index: 1; background: #fbfbfe;
   padding: 16px 18px 10px; display: flex; justify-content: space-between; align-items: center;
   font-size: 11.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
@@ -535,7 +538,7 @@ a { color: inherit; text-decoration: none; }
 .live-mode-human { background: var(--green-soft); color: var(--green); }
 
 /* Conversation panel */
-.live-convo { display: flex; flex-direction: column; min-width: 0; background: var(--surface); }
+.live-convo { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); }
 .live-convo-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px;
   border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #fff 0%, #fafaff 100%); }
 .live-head-left { display: flex; gap: 12px; align-items: center; min-width: 0; }
@@ -546,7 +549,7 @@ a { color: inherit; text-decoration: none; }
 .live-status i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: currentColor; }
 
 /* Messages */
-.live-msgs { flex: 1; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;
+.live-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;
   background: linear-gradient(180deg, #f7f8fd 0%, #f2f3fa 100%); }
 .live-row { display: flex; gap: 10px; align-items: flex-end; max-width: 76%; }
 .live-row-visitor { align-self: flex-start; }
@@ -603,9 +606,10 @@ a { color: inherit; text-decoration: none; }
 .live-return:hover { background: var(--surface-2); color: var(--text); }
 
 @media (max-width: 760px) {
-  .live-wrap { grid-template-columns: 1fr; height: auto; }
+  .live-page { height: auto; }
+  .live-wrap { grid-template-columns: 1fr; flex: none; min-height: 0; height: auto; }
   .live-list { max-height: 230px; }
-  .live-msgs { min-height: 300px; }
+  .live-msgs { min-height: 300px; max-height: 55vh; }
 }
 
 /* ---- Assistant identity (name + avatar) ---- */

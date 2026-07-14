@@ -6,6 +6,26 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-07-14
+
+### Changed — Premium dashboard UI
+A full visual refresh across the whole backend so every page feels like a
+polished, luxury dashboard.
+
+- **Design system** — richer palette + gradient accent, layered soft shadows,
+  larger radii, and a subtle app-background gradient. Applied through shared
+  classes, so **every page** (Ask, Projects, Calculators, Insights, Health,
+  etc.) upgrades at once.
+- **Sidebar** — glassy translucent panel, gradient brand mark, active items get
+  a gradient chip + accent indicator bar.
+- **Components** — gradient primary buttons with hover lift, refined inputs,
+  premium tables (uppercase headers + row hover), hover-lifting KPI/stat cards
+  with gradient numbers, pill tabs.
+- **Admin, reorganised** — the long row of ~14 tabs is now grouped into
+  **categories** (Growth · Projects & Data · Knowledge · Team · Integrations ·
+  System) with a two-level nav: pick a category, then its sub-tabs. Much easier
+  to scan and navigate.
+
 ## [2.7.0] — 2026-07-14
 
 ### Added — Chat retention + visitor-demand analytics

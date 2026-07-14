@@ -19,30 +19,61 @@ async function openDoc(path) {
 export default function Admin() {
   const { user } = useAuth();
   const isSuper = user?.is_super_admin === true;
-  const [tab, setTab] = useState(isSuper ? "ai" : "import-ai");
+
+  // Tabs grouped into premium categories (two-level nav).
+  const CATS = [
+    { id: "growth", label: "Growth", ico: "📈", tabs: [
+      { id: "insights", label: "Insights" }, { id: "leads", label: "Leads" },
+    ] },
+    { id: "projects", label: "Projects & Data", ico: "📦", tabs: [
+      { id: "project", label: "New Project" }, { id: "data", label: "Manage Data" },
+      { id: "builders", label: "Developers" }, { id: "doctypes", label: "Doc Types" },
+      { id: "import", label: "Import CSV" },
+    ] },
+    { id: "knowledge", label: "Knowledge", ico: "📚", tabs: [
+      { id: "import-ai", label: "AI Import" }, { id: "document", label: "Upload Brochure" },
+      { id: "documents", label: "Documents" },
+    ] },
+    { id: "team", label: "Team", ico: "👥", tabs: [
+      { id: "users", label: "Users" },
+    ] },
+    { id: "connect", label: "Integrations", ico: "🔌", tabs: [
+      { id: "integrations", label: "Integrations" }, { id: "apikeys", label: "API Keys" },
+    ] },
+    { id: "system", label: "System", ico: "⚙️", tabs: [
+      ...(isSuper ? [{ id: "ai", label: "AI Settings" }] : []),
+      { id: "audit", label: "Audit Log" },
+    ] },
+  ];
+
+  const [cat, setCat] = useState("growth");
+  const [tab, setTab] = useState("insights");
+  const activeCat = CATS.find((c) => c.id === cat) || CATS[0];
+
+  function pickCat(c) { setCat(c.id); setTab(c.tabs[0].id); }
+
   return (
     <div className="page">
       <div className="page-head">
         <h2>Admin</h2>
-        <p className="muted">Manage projects, upload brochures, review the audit trail.</p>
+        <p className="muted">Manage projects, knowledge, growth and your team — all in one place.</p>
       </div>
-      <div className="calc-tabs">
-        {isSuper && <button className={`tab ${tab === "ai" ? "tab-active" : ""}`} onClick={() => setTab("ai")}>🤖 AI Settings</button>}
-        <button className={`tab ${tab === "import-ai" ? "tab-active" : ""}`} onClick={() => setTab("import-ai")}>🪄 AI Import</button>
-        <button className={`tab ${tab === "project" ? "tab-active" : ""}`} onClick={() => setTab("project")}>New Project</button>
-        <button className={`tab ${tab === "data" ? "tab-active" : ""}`} onClick={() => setTab("data")}>Manage Data</button>
-        <button className={`tab ${tab === "document" ? "tab-active" : ""}`} onClick={() => setTab("document")}>Upload Brochure</button>
-        <button className={`tab ${tab === "documents" ? "tab-active" : ""}`} onClick={() => setTab("documents")}>Documents</button>
-        <button className={`tab ${tab === "builders" ? "tab-active" : ""}`} onClick={() => setTab("builders")}>Developers</button>
-        <button className={`tab ${tab === "doctypes" ? "tab-active" : ""}`} onClick={() => setTab("doctypes")}>Doc Types</button>
-        <button className={`tab ${tab === "import" ? "tab-active" : ""}`} onClick={() => setTab("import")}>Import CSV</button>
-        <button className={`tab ${tab === "users" ? "tab-active" : ""}`} onClick={() => setTab("users")}>Users</button>
-        <button className={`tab ${tab === "insights" ? "tab-active" : ""}`} onClick={() => setTab("insights")}>📊 Insights</button>
-        <button className={`tab ${tab === "leads" ? "tab-active" : ""}`} onClick={() => setTab("leads")}>📇 Leads</button>
-        <button className={`tab ${tab === "apikeys" ? "tab-active" : ""}`} onClick={() => setTab("apikeys")}>🔌 API Keys</button>
-        <button className={`tab ${tab === "integrations" ? "tab-active" : ""}`} onClick={() => setTab("integrations")}>🧩 Integrations</button>
-        <button className={`tab ${tab === "audit" ? "tab-active" : ""}`} onClick={() => setTab("audit")}>Audit Log</button>
+
+      <div className="admin-cats">
+        {CATS.map((c) => (
+          <button key={c.id} className={`admin-cat ${cat === c.id ? "admin-cat-active" : ""}`} onClick={() => pickCat(c)}>
+            <span className="admin-cat-ico">{c.ico}</span> {c.label}
+          </button>
+        ))}
       </div>
+      <div className="admin-subtabs">
+        {activeCat.tabs.map((t) => (
+          <button key={t.id} className={`admin-subtab ${tab === t.id ? "admin-subtab-active" : ""}`} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {tab === "ai" && isSuper && <AiSettings />}
       {tab === "import-ai" && <AiImport />}
       {tab === "project" && <NewProject />}

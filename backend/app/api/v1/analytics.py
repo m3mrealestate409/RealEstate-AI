@@ -109,6 +109,33 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(require_role("
         .limit(8).all()
     ]
 
+    # Visitor demand — WEBSITE visitors only (source='widget'), last 30 days:
+    # which projects they ask about and what they want to know (intents).
+    # Powers recommendations even though raw chat transcripts are purged.
+    demand: dict[int, dict] = {}
+    since30 = date.today() - timedelta(days=30)
+    for pids, its in (
+        q().with_entities(QueryLog.project_ids, QueryLog.intents)
+        .filter(QueryLog.source == "widget", func.date(QueryLog.created_at) >= since30)
+        .all()
+    ):
+        for pid in (pids or []):
+            slot = demand.setdefault(pid, {"count": 0, "intents": {}})
+            slot["count"] += 1
+            for it in (its or []):
+                slot["intents"][it] = slot["intents"].get(it, 0) + 1
+    visitor_demand = [
+        {
+            "project": id_to_name.get(pid, f"#{pid}"),
+            "count": v["count"],
+            "intents": sorted(
+                ({"intent": k, "count": c} for k, c in v["intents"].items()),
+                key=lambda x: -x["count"],
+            )[:3],
+        }
+        for pid, v in sorted(demand.items(), key=lambda kv: -kv[1]["count"])[:6]
+    ]
+
     # Top MISSED questions, grouped — the same question asked 20 times is one
     # row with count=20. This is the actionable signal: it tells the admin
     # exactly which data/brochure is missing from the knowledge base.
@@ -135,4 +162,5 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(require_role("
         "top_projects": top_projects,
         "recent_misses": recent_misses,
         "top_missed": top_missed,
+        "visitor_demand": visitor_demand,
     }

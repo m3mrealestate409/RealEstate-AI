@@ -477,6 +477,9 @@ class QueryLog(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     session_id: Mapped[str | None] = mapped_column(String)
+    # Where the query came from: "app" (staff) or "widget" (website visitor).
+    # Lets analytics separate real customer demand from internal usage.
+    source: Mapped[str | None] = mapped_column(String, default="app")
     query: Mapped[str] = mapped_column(Text)
     intents: Mapped[dict | None] = mapped_column(JSONB)
     project_ids: Mapped[dict | None] = mapped_column(JSONB)

@@ -1157,6 +1157,36 @@ function Insights() {
       </div>
 
       <div className="insight-box" style={{ marginTop: 16 }}>
+        <div className="block-title">🎯 Visitor demand — what website visitors want (last 30 days)</div>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          From website-chat intent only (staff usage excluded). Raw chats are auto-deleted after 15 days —
+          this demand data is kept.
+        </p>
+        {(d.visitor_demand || []).length === 0 ? (
+          <div className="muted">No website-visitor questions yet — data starts collecting as visitors chat.</div>
+        ) : (
+          <table className="data-table">
+            <thead><tr><th>Project</th><th style={{ width: 70 }}>Asks</th><th>They want to know</th></tr></thead>
+            <tbody>
+              {d.visitor_demand.map((v, i) => (
+                <tr key={i}>
+                  <td><b>{v.project}</b></td>
+                  <td><span className="conf-badge conf-high">{v.count}×</span></td>
+                  <td>
+                    {v.intents.map((it) => (
+                      <span key={it.intent} className="chip chip-sm" style={{ marginRight: 6 }}>
+                        {it.intent.replace(/_/g, " ")} ×{it.count}
+                      </span>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="insight-box" style={{ marginTop: 16 }}>
         <div className="block-title">📈 Questions — last 7 days</div>
         <div className="mini-bars">
           {d.daily.map((x, i) => (

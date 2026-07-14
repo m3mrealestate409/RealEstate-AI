@@ -17,6 +17,10 @@ _MAX_TEXT = 4000
 # A visitor counts as "online" if their widget has polled within this window
 # (the widget heartbeats every ~3s; generous enough to tolerate jitter).
 ONLINE_SECONDS = 30
+# Raw chat transcripts are kept only this long (privacy + storage). The intent
+# data that powers analytics/recommendations lives in query_log and is NOT
+# touched by this; captured leads live in the leads table and are kept too.
+RETENTION_DAYS = 15
 
 
 def _aware(dt):
@@ -38,6 +42,43 @@ def touch_seen(db: Session, cs: "ChatSession") -> None:
     db.commit()
 
 
+def purge_old(db: Session, days: int = RETENTION_DAYS) -> int:
+    """Delete chat transcripts older than the retention window. Messages go with
+    their sessions via the DB's ON DELETE CASCADE. Returns sessions removed."""
+    import logging
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        n = (
+            db.query(ChatSession)
+            .filter(ChatSession.last_activity_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        if n:
+            logging.getLogger(__name__).info("Live chat retention: purged %s session(s) older than %sd.", n, days)
+        return n
+    except Exception:  # noqa: BLE001 — cleanup must never break chat
+        db.rollback()
+        return 0
+
+
+def _maybe_purge(db: Session) -> None:
+    """Run the retention purge at most once per hour (Redis-throttled; if Redis
+    is down we just run it — the DELETE is cheap on a 15-day table)."""
+    try:
+        import redis
+
+        from app.config import settings
+
+        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        if not r.set("livechat:purge-lock", "1", nx=True, ex=3600):
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    purge_old(db)
+
+
 def get_or_create_session(db: Session, org_id: int | None, session_id: str) -> tuple[ChatSession, bool]:
     """Returns (session, created) — `created` is True on the visitor's first
     message, which is when we fire a "new chat" notification."""
@@ -52,6 +93,7 @@ def get_or_create_session(db: Session, org_id: int | None, session_id: str) -> t
     db.add(cs)
     db.commit()
     db.refresh(cs)
+    _maybe_purge(db)  # opportunistic retention cleanup (throttled)
     return cs, True
 
 

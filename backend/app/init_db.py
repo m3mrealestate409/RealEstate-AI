@@ -71,6 +71,8 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS notify_config JSONB"))
         # Live-chat presence heartbeat.
         conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT now()"))
+        # Query source (app = staff, widget = website visitor) for demand analytics.
+        conn.execute(text("ALTER TABLE query_log ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'app'"))
     logger.info("Database initialised.")
 
 

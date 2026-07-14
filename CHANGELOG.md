@@ -6,6 +6,24 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-07-14
+
+### Added — Chat retention + visitor-demand analytics
+Raw visitor chats are now short-lived; the *intent* behind them is kept and
+turned into recommendations for the admin.
+
+- **15-day chat retention** — website chat transcripts (`chat_sessions` /
+  `chat_messages`) are auto-deleted after 15 days (on startup + hourly,
+  best-effort). Privacy-friendly (DPDP-aligned) and keeps storage flat.
+  **Leads and intent analytics are never touched.**
+- **Query source tagging** — every query is tagged `widget` (website visitor)
+  or `app` (staff), so analytics can separate real customer demand from
+  internal usage.
+- **🎯 Visitor demand panel** (Admin → Insights) — from website-visitor intent
+  only, last 30 days: which projects people ask about and what they want to
+  know (e.g. "Golf Hills — 56 asks → price ×40, amenities ×10"). Works even
+  after the raw chats are purged.
+
 ## [2.6.3] — 2026-07-14
 
 ### Fixed — Live Chat fits the screen

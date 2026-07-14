@@ -101,6 +101,22 @@ def _widget_js():
 app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 
+@app.on_event("startup")
+def _chat_retention_purge():
+    """Apply the live-chat retention policy once at boot (cheap, best-effort)."""
+    try:
+        from app.database import SessionLocal
+        from app.services.livechat import purge_old
+
+        db = SessionLocal()
+        try:
+            purge_old(db)
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 — never block startup on cleanup
+        pass
+
+
 @app.get("/health", tags=["system"])
 def health():
     from app.services.runtime_config import public_llm_config

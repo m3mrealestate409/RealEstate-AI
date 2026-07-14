@@ -222,6 +222,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     mem_key = f"u{user_id}:{session_id}" if user_id is not None else session_id
     prior_projects = session_store.last_project_ids(mem_key)
     prior_dialogue = _dialogue_context(mem_key)  # recent turns → natural multi-turn replies
+    src = "widget" if getattr(user, "_via_api_key", False) else "app"  # for demand analytics
     wants_cb = _wants_callback(query)  # visitor asked to be contacted / book a visit
 
     ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
@@ -268,7 +269,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
             session_store.remember_turn(mem_key, query=query, intents=ir.intents,
                                         project_ids=ir.project_ids, answer=msg)
             _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                       latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                       latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
             return env
 
     # Small talk / greeting → a warm persona chat reply (no factual claims). Makes
@@ -291,7 +292,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         session_store.remember_turn(mem_key, query=query, intents=ir.intents,
                                     project_ids=ir.project_ids, answer=reply)
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
         return env
 
     # A project was named but doesn't exist in our data. We never reuse the
@@ -326,7 +327,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
             )
         env["suggest_callback"] = bool(wants_cb or env.get("not_available"))
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
         return env
 
     # ---- CACHE + QUOTA: only EXPENSIVE (LLM/RAG) queries; SQL look-ups are free.
@@ -347,7 +348,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                     answer=renderer.blocks_to_text(hit.get("content", {}).get("blocks", [])),
                 )
                 _log_query(db, session_id=session_id, query=query, ir=ir, envelope=hit,
-                           latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                           latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
                 return hit
 
         # 2) Budget. The public widget (API key) uses its OWN daily LLM budget,
@@ -378,7 +379,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                 )
                 env["limit_reached"] = True
                 _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                           latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                           latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
                 return env
             quota.consume_quota(user, today, org_id)  # count this expensive query
 
@@ -503,7 +504,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         env["suggest_callback"] = True
         session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+                   latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
         return env
     if not blocks:
         # Nothing in the company knowledge base — fall back to the LLM's general
@@ -557,7 +558,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         answer=renderer.blocks_to_text(env.get("content", {}).get("blocks", [])),
     )
     _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
-               latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id)
+               latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
     return env
 
 
@@ -636,13 +637,14 @@ def _suggestions(ir: intent_svc.IntentResult) -> list[str]:
     return [label for key, label in pool if key not in asked][:4]
 
 
-def _log_query(db: Session, *, session_id, query, ir, envelope, latency_ms, org_id=None, user_id=None) -> None:
+def _log_query(db: Session, *, session_id, query, ir, envelope, latency_ms, org_id=None, user_id=None, source="app") -> None:
     try:
         db.add(
             QueryLog(
                 user_id=user_id,
                 organization_id=org_id,
                 session_id=session_id,
+                source=source,
                 query=query,
                 intents=ir.intents,
                 project_ids=ir.project_ids,

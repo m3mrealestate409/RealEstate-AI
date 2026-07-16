@@ -6,6 +6,28 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.10.0] — 2026-07-16
+
+### Added — Read-only API keys (least privilege)
+Until now **every** API key acted as its admin creator — so a key handed to a
+CRM (or embedded in a public website widget) could reach ~56 admin endpoints:
+create/delete users and projects, mint more API keys, change AI settings. Far
+more power than any integration needs.
+
+- **API keys now carry an access scope** — set in Admin → Integrations →
+  API Keys when creating a key, or switched on an existing key:
+  - **🔓 Full access** — acts as its admin creator (legacy default, so existing
+    keys are unaffected).
+  - **🔒 Read-only** — may ask questions (`POST /v1/query`) and read (`GET`),
+    but **cannot modify anything**; every write returns `403`.
+- Enforced centrally in `get_current_user`, so no endpoint — including ones
+  added later — can accidentally be left writable for a read-only key.
+
+### Changed — CRM webhook retries only what can succeed later (v2.9.4)
+- `2xx` = delivered · `4xx` = permanent, fail fast and log as rejected (no
+  retry storm on a bad payload/secret) · `5xx` + network errors = retried with
+  backoff.
+
 ## [2.9.3] — 2026-07-16
 
 ### Added — Idempotency key on the CRM lead webhook

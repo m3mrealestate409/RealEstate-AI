@@ -905,6 +905,7 @@ function ApiKeys() {
   const [keys, setKeys] = useState([]);
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("website");
+  const [scope, setScope] = useState("full");
   const [newKey, setNewKey] = useState(null);   // {name, api_key} — shown once
   const [msg, setMsg] = useState(null);
   const load = () => api.listApiKeys().then(setKeys).catch(() => setKeys([]));
@@ -915,11 +916,20 @@ function ApiKeys() {
     if (!name.trim()) return;
     setMsg(null);
     try {
-      const r = await api.createApiKey(name.trim(), channel);
+      const r = await api.createApiKey(name.trim(), channel, scope);
       setNewKey(r);
       setName("");
       await load();
     } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function switchScope(k) {
+    const next = k.scope === "read_only" ? "full" : "read_only";
+    const warn = next === "read_only"
+      ? "Make this key read-only? It will be able to ask questions and read data, but not modify anything."
+      : "Give this key full access? It will act with its creator's admin rights.";
+    if (!confirm(warn)) return;
+    try { await api.setApiKeyScope(k.id, next); await load(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
   }
   async function switchChannel(k) {
     const next = k.channel === "website" ? "internal" : "website";
@@ -970,13 +980,19 @@ function ApiKeys() {
               <option value="internal">🏢 Internal tool — CRM / back-office</option>
             </select>
           </label>
+          <label className="field"><span>Access</span>
+            <select value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="full">🔓 Full access</option>
+              <option value="read_only">🔒 Read-only — ask &amp; read, never modify</option>
+            </select>
+          </label>
         </div>
         <button className="btn btn-primary">Create key</button>
       </form>
 
       <div className="table-wrap" style={{ marginTop: 16 }}>
         <table className="data-table">
-          <thead><tr><th>Name</th><th>Used for</th><th>Key</th><th>Last used</th><th>Created</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Used for</th><th>Access</th><th>Key</th><th>Last used</th><th>Created</th><th></th></tr></thead>
           <tbody>
             {keys.map((k) => (
               <tr key={k.id}>
@@ -987,13 +1003,19 @@ function ApiKeys() {
                     {k.channel === "internal" ? "🏢 Internal tool" : "🌐 Website"}
                   </button>
                 </td>
+                <td>
+                  <button className={`btn btn-sm ${k.scope === "read_only" ? "btn-primary" : ""}`}
+                    onClick={() => switchScope(k)} title="Click to switch">
+                    {k.scope === "read_only" ? "🔒 Read-only" : "🔓 Full"}
+                  </button>
+                </td>
                 <td className="muted"><code>{k.prefix}…</code></td>
                 <td className="muted">{k.last_used_at ? String(k.last_used_at).slice(0, 10) : "—"}</td>
                 <td className="muted">{k.created_at ? String(k.created_at).slice(0, 10) : "—"}</td>
                 <td><button className="btn btn-ghost btn-danger" onClick={() => revoke(k.id)}>Revoke</button></td>
               </tr>
             ))}
-            {keys.length === 0 && <tr><td colSpan="6" className="muted">No API keys yet.</td></tr>}
+            {keys.length === 0 && <tr><td colSpan="7" className="muted">No API keys yet.</td></tr>}
           </tbody>
         </table>
       </div>

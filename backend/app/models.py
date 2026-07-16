@@ -400,6 +400,12 @@ class ApiKey(Base):
     #                phone auto-leads, tight public rate limit + budget.
     #   "internal" → CRM / back-office tool: none of the above, trusted limits.
     channel: Mapped[str] = mapped_column(String, default="website")
+    # What this key is ALLOWED to do (least privilege):
+    #   "full"      → acts as its admin creator (legacy default).
+    #   "read_only" → may ask questions (POST /v1/query) and read (GET), but can
+    #                 never modify anything — safe to hand to an integration that
+    #                 only consumes data.
+    scope: Mapped[str] = mapped_column(String, default="full")
     prefix: Mapped[str] = mapped_column(String)                # e.g. "px_ab12cd" (shown in UI)
     key_hash: Mapped[str] = mapped_column(String, index=True)  # sha256 of the full key
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

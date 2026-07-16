@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -46,10 +46,33 @@ def resolve_api_key(db: Session, raw_key: str) -> User | None:
         return None
     row.last_used_at = datetime.now(timezone.utc)
     db.commit()
-    # The key itself declares what it's plugged into (website vs internal tool).
-    # Carrying it here means the caller can never spoof the channel.
+    # The key itself declares what it's plugged into (website vs internal tool)
+    # and what it may do. Carrying them here means the caller can never spoof.
     user._api_key_channel = (row.channel or "website").lower()
+    user._api_key_scope = (row.scope or "full").lower()
     return user
+
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# Asking a question is a POST, but it only ever READS the knowledge base — so a
+# read-only key is still allowed to use the engine.
+READ_ONLY_POST_PATHS = {"/v1/query"}
+
+
+def enforce_key_scope(user: User, request) -> None:
+    """Least privilege for API keys: a read-only key may ask questions and read,
+    but never modify. Enforced centrally in get_current_user, so a new endpoint
+    can never accidentally be left writable."""
+    if getattr(user, "_api_key_scope", "full") != "read_only":
+        return
+    if request.method in SAFE_METHODS:
+        return
+    if request.method == "POST" and request.url.path.rstrip("/") in READ_ONLY_POST_PATHS:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="This API key is read-only: it can ask questions and read data, but not modify anything.",
+    )
 
 
 def hash_password(password: str) -> str:
@@ -72,6 +95,7 @@ def create_access_token(subject: str, role: str) -> str:
 
 
 def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     x_api_key: str | None = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_db),
@@ -90,6 +114,7 @@ def get_current_user(
         # Mark the request as coming from an external channel (widget/CRM/etc.),
         # not a logged-in employee — used to auto-capture prospect phone numbers.
         user._via_api_key = True
+        enforce_key_scope(user, request)   # read-only keys can't modify anything
         return user
 
     # 2) Otherwise, a JWT bearer token (the web app).

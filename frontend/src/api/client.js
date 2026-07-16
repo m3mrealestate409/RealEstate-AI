@@ -212,8 +212,9 @@ export const api = {
 
   // API keys (external integrations)
   listApiKeys: () => request("/v1/admin/api-keys"),
-  createApiKey: (name, channel) => request("/v1/admin/api-keys", { method: "POST", body: { name, channel } }),
+  createApiKey: (name, channel, scope) => request("/v1/admin/api-keys", { method: "POST", body: { name, channel, scope } }),
   setApiKeyChannel: (id, channel) => request(`/v1/admin/api-keys/${id}/channel`, { method: "POST", body: { channel } }),
+  setApiKeyScope: (id, scope) => request(`/v1/admin/api-keys/${id}/scope`, { method: "POST", body: { scope } }),
   revokeApiKey: (id) => request(`/v1/admin/api-keys/${id}`, { method: "DELETE" }),
 
   // Live chat (agent takeover)

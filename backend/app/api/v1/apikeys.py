@@ -21,6 +21,7 @@ router = APIRouter(prefix="/v1/admin/api-keys", tags=["api-keys"])
 
 
 CHANNELS = {"website", "internal"}
+SCOPES = {"full", "read_only"}
 
 
 class ApiKeyCreate(BaseModel):
@@ -28,6 +29,9 @@ class ApiKeyCreate(BaseModel):
     # "website" = public chat widget (live chat, new-visitor alerts, auto-leads)
     # "internal" = CRM / back-office tool (no alerts, no live chat, trusted limits)
     channel: str = "website"
+    # "full" = acts as its admin creator; "read_only" = may ask questions and
+    # read, but can never modify anything (least privilege for integrations).
+    scope: str = "full"
 
 
 def _out(k: ApiKey) -> dict:
@@ -35,6 +39,7 @@ def _out(k: ApiKey) -> dict:
         "id": k.id,
         "name": k.name,
         "channel": (k.channel or "website"),
+        "scope": (k.scope or "full"),
         "prefix": k.prefix,
         "is_active": k.is_active,
         "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
@@ -57,11 +62,15 @@ def create_key(
     channel = (payload.channel or "website").lower()
     if channel not in CHANNELS:
         raise HTTPException(422, f"channel must be one of {sorted(CHANNELS)}")
+    scope = (payload.scope or "full").lower()
+    if scope not in SCOPES:
+        raise HTTPException(422, f"scope must be one of {sorted(SCOPES)}")
     raw = "px_" + secrets.token_urlsafe(32)   # the full key — shown once
     key = ApiKey(
         organization_id=admin.organization_id,
         name=payload.name.strip() or "Integration",
         channel=channel,
+        scope=scope,
         prefix=raw[:11],
         key_hash=hash_api_key(raw),
         created_by=admin.id,
@@ -69,12 +78,35 @@ def create_key(
     db.add(key)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="api_keys",
-                 entity_id=key.id, after={"name": key.name, "channel": channel})
+                 entity_id=key.id, after={"name": key.name, "channel": channel, "scope": scope})
     db.commit()
     return {
-        "id": key.id, "name": key.name, "channel": key.channel, "api_key": raw,
-        "note": "Save this key now — it will not be shown again.",
+        "id": key.id, "name": key.name, "channel": key.channel, "scope": key.scope,
+        "api_key": raw, "note": "Save this key now — it will not be shown again.",
     }
+
+
+class ScopeIn(BaseModel):
+    scope: str
+
+
+@router.post("/{key_id}/scope")
+def set_scope(
+    key_id: int, payload: ScopeIn,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Tighten (or restore) what a key may do — e.g. make a CRM key read-only."""
+    scope = (payload.scope or "").lower()
+    if scope not in SCOPES:
+        raise HTTPException(422, f"scope must be one of {sorted(SCOPES)}")
+    key = db.get(ApiKey, key_id)
+    if not key or (not admin.is_super_admin and key.organization_id != admin.organization_id):
+        raise HTTPException(404, "API key not found")
+    key.scope = scope
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="api_keys",
+                 entity_id=key.id, after={"scope": scope})
+    db.commit()
+    return _out(key)
 
 
 class ChannelIn(BaseModel):

@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.9.3] — 2026-07-16
+
+### Added — Idempotency key on the CRM lead webhook
+- Every lead push now carries **`X-Idempotency-Key: rag-lead-<id>`**, derived
+  from the lead's id inside `push_lead()` — so both capture paths get it and a
+  retry always reuses the same key.
+- This gives a lead one **stable identity across push *and* pull**: a CRM that
+  also reconciles via `GET /v1/admin/leads` can key off `rag-lead-<id>` and
+  never create a duplicate.
+
 ## [2.9.2] — 2026-07-16
 
 ### Fixed / Added — CRM lead webhook is now a dependable contract

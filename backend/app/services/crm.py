@@ -22,6 +22,8 @@ _TIMEOUT = 8.0
 _ATTEMPTS = 3
 _BACKOFF = (2, 5)          # seconds to wait before retry 2 and 3
 DEFAULT_SECRET_HEADER = "X-Webhook-Secret"
+IDEMPOTENCY_HEADER = "X-Idempotency-Key"
+IDEMPOTENCY_PREFIX = "rag-lead-"
 
 
 def lead_payload(lead) -> dict:
@@ -50,9 +52,21 @@ def webhook_headers(org) -> dict:
     return {name: secret}
 
 
+def idempotency_key(lead_id) -> str:
+    """Stable identity for a lead, so a CRM can de-duplicate it the same way
+    whether it arrived via our push (incl. a retry) or was pulled later from
+    GET /v1/admin/leads during a reconcile."""
+    return f"{IDEMPOTENCY_PREFIX}{lead_id}"
+
+
 def push_lead(url: str, payload: dict, headers: dict | None = None) -> bool:
     """POST the lead, retrying on network errors AND non-2xx. Returns success."""
-    h = {"Content-Type": "application/json", **(headers or {})}
+    h = {
+        "Content-Type": "application/json",
+        # Same key on every attempt — a retry can never create a duplicate.
+        IDEMPOTENCY_HEADER: idempotency_key(payload.get("id")),
+        **(headers or {}),
+    }
     detail = "unknown"
     for attempt in range(_ATTEMPTS):
         try:

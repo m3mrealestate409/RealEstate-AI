@@ -228,7 +228,7 @@ export const api = {
   updateLeadStatus: (id, status) => request(`/v1/admin/leads/${id}`, { method: "PATCH", body: { status } }),
   deleteLead: (id) => request(`/v1/admin/leads/${id}`, { method: "DELETE" }),
   getCrmConfig: () => request("/v1/admin/crm-config"),
-  setCrmConfig: (crm_webhook_url) => request("/v1/admin/crm-config", { method: "PUT", body: { crm_webhook_url } }),
+  setCrmConfig: (data) => request("/v1/admin/crm-config", { method: "PUT", body: data }),
 
   // New-chat notifications (Telegram / webhook / etc.)
   getNotifyConfig: () => request("/v1/admin/notify-config"),

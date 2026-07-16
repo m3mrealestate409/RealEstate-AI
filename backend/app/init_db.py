@@ -75,6 +75,9 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE query_log ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'app'"))
         # What each API key is plugged into: website (public widget) | internal (CRM…).
         conn.execute(text("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'website'"))
+        # Optional shared secret header for the CRM lead webhook.
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS crm_webhook_header TEXT"))
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS crm_webhook_secret TEXT"))
     logger.info("Database initialised.")
 
 

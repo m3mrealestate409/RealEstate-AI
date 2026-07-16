@@ -72,6 +72,10 @@ class Organization(Base):
     # Optional CRM/webhook URL — every captured lead is POSTed here (best-effort)
     # so the company's own CRM receives it in real time. Provider-agnostic.
     crm_webhook_url: Mapped[str | None] = mapped_column(String)
+    # Optional shared secret sent with every lead push, so the CRM can verify
+    # the request really came from us (header name defaults to X-Webhook-Secret).
+    crm_webhook_header: Mapped[str | None] = mapped_column(String)
+    crm_webhook_secret: Mapped[str | None] = mapped_column(String)
     # New-chat notifications (provider-agnostic): "off" | "telegram" | "webhook".
     # notify_config holds the provider's settings (token/chat_id, or url/headers/
     # body_template) so Telegram, WhatsApp Cloud API, or an unofficial WhatsApp

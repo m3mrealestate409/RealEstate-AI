@@ -13,7 +13,6 @@ pushed to it in real time (best-effort, non-blocking).
 """
 import logging
 
-import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -23,21 +22,12 @@ from app.core.security import get_current_user, require_role
 from app.core.tenancy import org_scope_id
 from app.database import get_db
 from app.models import Lead, Organization, User
-from app.services import ratelimit
+from app.services import crm, ratelimit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["leads"])
 
 VALID_STATUS = {"new", "contacted", "qualified", "closed"}
-
-
-def _push_to_crm(url: str, payload: dict) -> None:
-    """Fire the lead at the org's CRM webhook. Best-effort: a CRM that is down
-    must never break lead capture, so all errors are swallowed (just logged)."""
-    try:
-        httpx.post(url, json=payload, timeout=8.0)
-    except Exception as exc:  # noqa: BLE001 — deliberately non-fatal
-        logger.warning("CRM webhook push failed for %s: %s", url, exc)
 
 
 class LeadIn(BaseModel):
@@ -91,12 +81,8 @@ def capture_lead(
     # Push to the org's CRM webhook if one is configured (non-blocking).
     org = db.get(Organization, org_id) if org_id else None
     if org and org.crm_webhook_url:
-        background.add_task(_push_to_crm, org.crm_webhook_url, {
-            "id": lead.id, "name": lead.name, "phone": lead.phone, "email": lead.email,
-            "message": lead.message, "project_interest": lead.project_interest,
-            "source": lead.source, "page_url": lead.page_url,
-            "created_at": lead.created_at.isoformat() if lead.created_at else None,
-        })
+        background.add_task(crm.push_lead, org.crm_webhook_url,
+                            crm.lead_payload(lead), crm.webhook_headers(org))
 
     return {"ok": True, "id": lead.id}
 
@@ -158,12 +144,19 @@ def delete_lead(
 # ---- CRM webhook config (org admin) ----------------------------------------
 class CrmCfgIn(BaseModel):
     crm_webhook_url: str | None = None
+    crm_webhook_header: str | None = None
+    crm_webhook_secret: str | None = None
 
 
 @router.get("/v1/admin/crm-config")
 def get_crm_config(admin: User = Depends(require_role("admin")), db: Session = Depends(get_db)):
     org = db.get(Organization, admin.organization_id) if admin.organization_id else None
-    return {"crm_webhook_url": (org.crm_webhook_url if org else None)}
+    return {
+        "crm_webhook_url": (org.crm_webhook_url if org else None),
+        "crm_webhook_header": (org.crm_webhook_header if org else None),
+        "crm_webhook_secret": (org.crm_webhook_secret if org else None),
+        "default_header": crm.DEFAULT_SECRET_HEADER,
+    }
 
 
 @router.put("/v1/admin/crm-config")
@@ -177,7 +170,14 @@ def set_crm_config(
         raise HTTPException(422, "Webhook URL must start with http:// or https://")
     org = db.get(Organization, admin.organization_id)
     org.crm_webhook_url = url
+    org.crm_webhook_header = (payload.crm_webhook_header or "").strip() or None
+    org.crm_webhook_secret = (payload.crm_webhook_secret or "").strip() or None
     record_audit(db, user_id=admin.id, action="UPDATE", entity="organizations",
-                 entity_id=org.id, after={"crm_webhook_url_set": bool(url)})
+                 entity_id=org.id, after={"crm_webhook_url_set": bool(url),
+                                          "crm_webhook_secret_set": bool(org.crm_webhook_secret)})
     db.commit()
-    return {"crm_webhook_url": org.crm_webhook_url}
+    return {
+        "crm_webhook_url": org.crm_webhook_url,
+        "crm_webhook_header": org.crm_webhook_header,
+        "crm_webhook_secret": org.crm_webhook_secret,
+    }

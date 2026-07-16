@@ -22,7 +22,7 @@ from app.core.tenancy import org_scope_id
 from app.models import QueryLog
 from app.services import database_service as dbsvc
 from app.services import intent as intent_svc
-from app.services import cache, nlparse, quota, ratelimit, recommend, renderer
+from app.services import cache, crm, nlparse, quota, ratelimit, recommend, renderer
 from app.services.llm import get_llm_provider
 from app.services.llm.base import Message
 from app.services.rag import retrieve as rag_retrieve
@@ -124,24 +124,14 @@ def _create_chat_lead(db, org_id, *, phone, query, session_id, project_name):
         db.refresh(lead)
         org = db.get(Organization, org_id) if org_id else None
         if org and org.crm_webhook_url:
-            _push_lead_to_crm(org.crm_webhook_url, {
-                "id": lead.id, "phone": phone, "message": query[:500],
-                "project_interest": project_name, "source": "widget",
-            })
+            # Same payload + retries as a form lead, on a background thread so
+            # the visitor's reply is never delayed by a slow CRM.
+            crm.push_lead_async(org.crm_webhook_url, crm.lead_payload(lead), crm.webhook_headers(org))
         return lead
     except Exception as exc:  # noqa: BLE001
         logger.warning("Auto chat-lead capture failed: %s", exc)
         db.rollback()
         return None
-
-
-def _push_lead_to_crm(url: str, payload: dict) -> None:
-    try:
-        import httpx
-
-        httpx.post(url, json=payload, timeout=8.0)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("CRM webhook push failed: %s", exc)
 
 
 def _system_with_persona(base: str, persona: str | None) -> str:

@@ -6,6 +6,25 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.9.2] — 2026-07-16
+
+### Fixed / Added — CRM lead webhook is now a dependable contract
+Hardened the lead push so a CRM can integrate against it safely.
+
+- **Consistent payload** — leads captured from the callback form and from a
+  phone number typed in chat now send the **same 10 fields**
+  (`id, name, phone, email, message, project_interest, source, page_url,
+  status, created_at`). Previously the chat auto-lead sent a shorter payload
+  missing `name`, `email`, `page_url` and `created_at`.
+- **Retries** — a push is retried up to 3× with backoff, and non-2xx responses
+  now count as failures (previously any HTTP error was silently ignored). The
+  lead is always saved locally first, so a down CRM only means it missed a push
+  — it can reconcile via `GET /v1/admin/leads`.
+- **Optional shared secret** — send a configurable header (default
+  `X-Webhook-Secret`) so the CRM can verify the call really came from us.
+  Set it in Admin → Leads.
+- Pushes never block the reply (background thread / task).
+
 ## [2.9.1] — 2026-07-14
 
 ### Changed — The API key itself declares what it's plugged into

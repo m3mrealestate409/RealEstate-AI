@@ -60,7 +60,10 @@ def idempotency_key(lead_id) -> str:
 
 
 def push_lead(url: str, payload: dict, headers: dict | None = None) -> bool:
-    """POST the lead, retrying on network errors AND non-2xx. Returns success."""
+    """POST the lead. Retries ONLY what can plausibly succeed later — network
+    errors and 5xx. A 4xx is the CRM telling us the request itself is wrong
+    (bad payload / bad secret): retrying would just burn calls and log noise,
+    so we fail fast and log it as a rejection. Returns success."""
     h = {
         "Content-Type": "application/json",
         # Same key on every attempt — a retry can never create a duplicate.
@@ -74,7 +77,11 @@ def push_lead(url: str, payload: dict, headers: dict | None = None) -> bool:
             if r.status_code < 300:
                 return True
             detail = f"HTTP {r.status_code}: {r.text[:150]}"
-        except Exception as exc:  # noqa: BLE001 — network hiccup, retry
+            if r.status_code < 500:
+                logger.warning("CRM webhook REJECTED lead id=%s (permanent, not retried): %s",
+                               payload.get("id"), detail)
+                return False
+        except Exception as exc:  # noqa: BLE001 — network hiccup, worth a retry
             detail = str(exc)
         if attempt < _ATTEMPTS - 1:
             time.sleep(_BACKOFF[attempt])

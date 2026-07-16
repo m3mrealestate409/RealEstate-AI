@@ -901,6 +901,27 @@ function AddPlan({ projectId }) {
   );
 }
 
+// Where this engine is reachable. Built from the same base the app itself uses,
+// so after deployment these show the real domain automatically — nobody has to
+// remember or hand-edit a URL.
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
+
+function CopyField({ label, value, hint, mono = true }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="conn-row">
+      <div className="conn-label">{label}</div>
+      <div className="conn-value">
+        <code className={mono ? "conn-code" : ""}>{value}</code>
+        <button type="button" className="btn btn-sm" onClick={() => {
+          navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500);
+        }}>{copied ? "Copied ✓" : "Copy"}</button>
+      </div>
+      {hint && <div className="conn-hint">{hint}</div>}
+    </div>
+  );
+}
+
 function ApiKeys() {
   const [keys, setKeys] = useState([]);
   const [name, setName] = useState("");
@@ -959,15 +980,45 @@ function ApiKeys() {
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
       {newKey && (
-        <div className="alert alert-ok">
-          <b>New key "{newKey.name}"</b> — copy it now, it won't be shown again:
-          <div className="apikey-reveal">
-            <code>{newKey.api_key}</code>
-            <button type="button" className="btn btn-sm" onClick={() => navigator.clipboard?.writeText(newKey.api_key)}>Copy</button>
+        <div className="conn-card conn-card-new">
+          <div className="conn-card-head">
+            <b>✅ Key created — "{newKey.name}"</b>
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => setNewKey(null)}>Done</button>
+          </div>
+          <p className="muted small" style={{ margin: "2px 0 12px" }}>
+            Everything needed to connect, in one place. <b>The key is shown only once</b> — copy it now.
+          </p>
+          <CopyField label="Endpoint URL (ask questions)" value={`${API_BASE}/v1/query`} hint="Method: POST" />
+          <CopyField label="Auth header name" value="X-API-Key" />
+          <CopyField label="API key" value={newKey.api_key} hint="Store it safely — we can't show it again." />
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => {
+              navigator.clipboard?.writeText(
+                `Endpoint: ${API_BASE}/v1/query\nMethod: POST\nHeader: X-API-Key: ${newKey.api_key}\nBody: {"query": "Golf Hills price", "session_id": "user-1", "format": "text"}\n\nRead leads: GET ${API_BASE}/v1/admin/leads (same header)\nAPI reference: ${API_BASE}/docs`
+              );
+              setMsg({ ok: true, text: "Setup details copied — paste them to whoever is connecting." });
+            }}>📋 Copy all setup details</button>
           </div>
         </div>
       )}
+
+      <div className="conn-card">
+        <div className="conn-card-head"><b>🔗 Your connection details</b></div>
+        <p className="muted small" style={{ margin: "2px 0 12px" }}>
+          Give these to anyone connecting a website, CRM or bot. They update automatically if the
+          engine moves to a new address — no need to remember them.
+        </p>
+        <CopyField label="Ask a question" value={`${API_BASE}/v1/query`} hint="POST · send the key as an X-API-Key header" />
+        <CopyField label="Read leads (for CRM sync)" value={`${API_BASE}/v1/admin/leads`} hint="GET · same header" />
+        <CopyField label="Website chat widget script" value={`${API_BASE}/static/widget.js`} hint="Setup steps: Integrations → WordPress" />
+        <div className="conn-hint" style={{ marginTop: 8 }}>
+          Full API reference: <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">{API_BASE}/docs</a>
+          {API_BASE.includes("localhost") && (
+            <> · <b>Local testing:</b> if the tool connecting to you also runs in Docker, swap
+            <code> localhost </code> for <code> host.docker.internal</code>.</>
+          )}
+        </div>
+      </div>
 
       <form onSubmit={create}>
         <div className="calc-fields">

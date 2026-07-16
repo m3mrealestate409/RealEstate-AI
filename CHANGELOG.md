@@ -6,6 +6,24 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.11.0] — 2026-07-16
+
+### Added — Connection details in the UI (no developer needed)
+Handing someone an API key used to mean also telling them, from memory, which
+URL to call — and every one of those URLs changes the day the engine is
+deployed to a real domain.
+
+- **🔗 Your connection details** panel (Admin → Integrations → API Keys) shows
+  the live endpoints with one-click **Copy**: ask-a-question, read-leads (CRM
+  sync) and the widget script — plus a link to the API reference.
+- **On key creation**, everything needed is shown together — endpoint, header
+  name and the key — each copyable, with **📋 Copy all setup details** that
+  puts a ready-to-paste block (endpoint, method, header, sample body) on the
+  clipboard to hand to whoever is connecting.
+- URLs are built from the app's own API base, so **after deployment they show
+  the real domain automatically** — nothing to remember or hand-edit. While
+  running locally, a hint explains the `host.docker.internal` swap.
+
 ## [2.10.0] — 2026-07-16
 
 ### Added — Read-only API keys (least privilege)

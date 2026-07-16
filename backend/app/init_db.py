@@ -73,6 +73,8 @@ def init_db() -> None:
         conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT now()"))
         # Query source (app = staff, widget = website visitor) for demand analytics.
         conn.execute(text("ALTER TABLE query_log ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'app'"))
+        # What each API key is plugged into: website (public widget) | internal (CRM…).
+        conn.execute(text("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'website'"))
     logger.info("Database initialised.")
 
 

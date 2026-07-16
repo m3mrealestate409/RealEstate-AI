@@ -20,14 +20,21 @@ from app.models import ApiKey, User
 router = APIRouter(prefix="/v1/admin/api-keys", tags=["api-keys"])
 
 
+CHANNELS = {"website", "internal"}
+
+
 class ApiKeyCreate(BaseModel):
     name: str
+    # "website" = public chat widget (live chat, new-visitor alerts, auto-leads)
+    # "internal" = CRM / back-office tool (no alerts, no live chat, trusted limits)
+    channel: str = "website"
 
 
 def _out(k: ApiKey) -> dict:
     return {
         "id": k.id,
         "name": k.name,
+        "channel": (k.channel or "website"),
         "prefix": k.prefix,
         "is_active": k.is_active,
         "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
@@ -47,10 +54,14 @@ def list_keys(db: Session = Depends(get_db), admin: User = Depends(require_role(
 def create_key(
     payload: ApiKeyCreate, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))
 ):
+    channel = (payload.channel or "website").lower()
+    if channel not in CHANNELS:
+        raise HTTPException(422, f"channel must be one of {sorted(CHANNELS)}")
     raw = "px_" + secrets.token_urlsafe(32)   # the full key — shown once
     key = ApiKey(
         organization_id=admin.organization_id,
         name=payload.name.strip() or "Integration",
+        channel=channel,
         prefix=raw[:11],
         key_hash=hash_api_key(raw),
         created_by=admin.id,
@@ -58,12 +69,36 @@ def create_key(
     db.add(key)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="api_keys",
-                 entity_id=key.id, after={"name": key.name})
+                 entity_id=key.id, after={"name": key.name, "channel": channel})
     db.commit()
     return {
-        "id": key.id, "name": key.name, "api_key": raw,
+        "id": key.id, "name": key.name, "channel": key.channel, "api_key": raw,
         "note": "Save this key now — it will not be shown again.",
     }
+
+
+class ChannelIn(BaseModel):
+    channel: str
+
+
+@router.post("/{key_id}/channel")
+def set_channel(
+    key_id: int, payload: ChannelIn,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Switch what a key is plugged into — e.g. flip an existing CRM key from
+    'website' to 'internal' so it stops raising new-visitor alerts."""
+    channel = (payload.channel or "").lower()
+    if channel not in CHANNELS:
+        raise HTTPException(422, f"channel must be one of {sorted(CHANNELS)}")
+    key = db.get(ApiKey, key_id)
+    if not key or (not admin.is_super_admin and key.organization_id != admin.organization_id):
+        raise HTTPException(404, "API key not found")
+    key.channel = channel
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="api_keys",
+                 entity_id=key.id, after={"channel": channel})
+    db.commit()
+    return _out(key)
 
 
 @router.delete("/{key_id}")

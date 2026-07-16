@@ -53,13 +53,17 @@ def query(
     ready-to-use plain-text answer for CRM/WhatsApp/voice consumers.
     """
     via_key = getattr(user, "_via_api_key", False)
-    # Resolve the calling channel. A JWT is always the web app (staff); an API
-    # key declares itself via `source` (defaults to widget for old scripts).
-    source = (payload.source or "widget").lower()
-    if source not in VALID_SOURCES:
-        source = "api"
+    # Resolve the calling channel. A JWT is always the web app (staff). For an
+    # API key, the KEY decides (set by the admin when creating it) — the caller
+    # can't spoof it, and an internal tool can never look like the website.
     if not via_key:
         source = "app"
+    elif getattr(user, "_api_key_channel", "website") == "internal":
+        # Internal keys may refine the analytics tag, but never become "widget".
+        s = (payload.source or "crm").lower()
+        source = s if s in VALID_SOURCES - {"widget"} else "crm"
+    else:
+        source = "widget"
     # ONLY the public website widget gets live-chat recording, new-chat alerts,
     # auto-leads and the public budget. A CRM/WhatsApp/voice integration must
     # never show up as a "visitor" in the Live Chat console.

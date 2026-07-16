@@ -6,6 +6,22 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.9.1] — 2026-07-14
+
+### Changed — The API key itself declares what it's plugged into
+v2.9.0 let the *caller* declare its channel via `source`, which meant a CRM that
+didn't send it was still treated as the public website (and kept firing
+new-visitor alerts). Now the **key** carries it, decided by the admin:
+
+- **Admin → Integrations → API Keys** has a **"Used for"** choice when creating
+  a key — **🌐 Website chat widget** (public: Live Chat, new-visitor alerts,
+  auto-leads, tight public limits) or **🏢 Internal tool** (CRM / back-office:
+  no alerts, no Live Chat, no auto-leads, trusted limits + own budget).
+- Existing keys can be **switched anytime** from the keys table.
+- The integration no longer has to send anything — and **can't spoof it**: an
+  internal key that claims `source: "widget"` is still treated as internal.
+- Existing keys default to `website`, so the deployed widget is unaffected.
+
 ## [2.9.0] — 2026-07-14
 
 ### Added — Per-channel integrations (`source`), so a CRM isn't treated as a visitor

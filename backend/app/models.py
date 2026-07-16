@@ -390,6 +390,12 @@ class ApiKey(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     name: Mapped[str] = mapped_column(String)                  # label, e.g. "CRM integration"
+    # What this key is plugged into — decided by the admin, NOT by the caller,
+    # so an internal tool can never be mistaken for the public website:
+    #   "website"  → public chat widget: live-chat console, new-visitor alerts,
+    #                phone auto-leads, tight public rate limit + budget.
+    #   "internal" → CRM / back-office tool: none of the above, trusted limits.
+    channel: Mapped[str] = mapped_column(String, default="website")
     prefix: Mapped[str] = mapped_column(String)                # e.g. "px_ab12cd" (shown in UI)
     key_hash: Mapped[str] = mapped_column(String, index=True)  # sha256 of the full key
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -904,6 +904,7 @@ function AddPlan({ projectId }) {
 function ApiKeys() {
   const [keys, setKeys] = useState([]);
   const [name, setName] = useState("");
+  const [channel, setChannel] = useState("website");
   const [newKey, setNewKey] = useState(null);   // {name, api_key} — shown once
   const [msg, setMsg] = useState(null);
   const load = () => api.listApiKeys().then(setKeys).catch(() => setKeys([]));
@@ -914,11 +915,20 @@ function ApiKeys() {
     if (!name.trim()) return;
     setMsg(null);
     try {
-      const r = await api.createApiKey(name.trim());
+      const r = await api.createApiKey(name.trim(), channel);
       setNewKey(r);
       setName("");
       await load();
     } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  async function switchChannel(k) {
+    const next = k.channel === "website" ? "internal" : "website";
+    const warn = next === "website"
+      ? "Switch to Website? This key's chats will appear in Live Chat and will raise new-visitor alerts."
+      : "Switch to Internal tool? This key will stop raising new-visitor alerts and won't appear in Live Chat.";
+    if (!confirm(warn)) return;
+    try { await api.setApiKeyChannel(k.id, next); await load(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
   }
   async function revoke(id) {
     if (!confirm("Revoke this API key? Any integration using it will stop working.")) return;
@@ -929,8 +939,12 @@ function ApiKeys() {
   return (
     <div className="admin-form">
       <div className="settings-note">
-        API keys let external systems (your <b>CRM, WhatsApp bot, voice agent, or any website</b>) call the
-        engine. Send the key as an <code>X-API-Key</code> header. A key acts within <b>your organization only</b>.
+        API keys let external systems (your <b>website, CRM, WhatsApp bot or voice agent</b>) call the engine.
+        Send the key as an <code>X-API-Key</code> header. A key acts within <b>your organization only</b>.
+        <br /><br />
+        <b>Used for</b> tells the engine what the key is plugged into:
+        <b> 🌐 Website</b> = public chat widget — shows in Live Chat, raises new-visitor alerts, captures leads.
+        <b> 🏢 Internal tool</b> = CRM / back-office — <b>no alerts, no Live Chat</b>, higher rate limits.
       </div>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
@@ -950,24 +964,36 @@ function ApiKeys() {
           <label className="field"><span>Key name (e.g. "CRM integration")</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="CRM integration" required />
           </label>
+          <label className="field"><span>Used for</span>
+            <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="website">🌐 Website chat widget (public)</option>
+              <option value="internal">🏢 Internal tool — CRM / back-office</option>
+            </select>
+          </label>
         </div>
         <button className="btn btn-primary">Create key</button>
       </form>
 
       <div className="table-wrap" style={{ marginTop: 16 }}>
         <table className="data-table">
-          <thead><tr><th>Name</th><th>Key</th><th>Last used</th><th>Created</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Used for</th><th>Key</th><th>Last used</th><th>Created</th><th></th></tr></thead>
           <tbody>
             {keys.map((k) => (
               <tr key={k.id}>
                 <td>{k.name}</td>
+                <td>
+                  <button className="btn btn-sm" onClick={() => switchChannel(k)}
+                    title="Click to switch">
+                    {k.channel === "internal" ? "🏢 Internal tool" : "🌐 Website"}
+                  </button>
+                </td>
                 <td className="muted"><code>{k.prefix}…</code></td>
                 <td className="muted">{k.last_used_at ? String(k.last_used_at).slice(0, 10) : "—"}</td>
                 <td className="muted">{k.created_at ? String(k.created_at).slice(0, 10) : "—"}</td>
                 <td><button className="btn btn-ghost btn-danger" onClick={() => revoke(k.id)}>Revoke</button></td>
               </tr>
             ))}
-            {keys.length === 0 && <tr><td colSpan="5" className="muted">No API keys yet.</td></tr>}
+            {keys.length === 0 && <tr><td colSpan="6" className="muted">No API keys yet.</td></tr>}
           </tbody>
         </table>
       </div>

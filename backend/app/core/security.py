@@ -46,6 +46,9 @@ def resolve_api_key(db: Session, raw_key: str) -> User | None:
         return None
     row.last_used_at = datetime.now(timezone.utc)
     db.commit()
+    # The key itself declares what it's plugged into (website vs internal tool).
+    # Carrying it here means the caller can never spoof the channel.
+    user._api_key_channel = (row.channel or "website").lower()
     return user
 
 

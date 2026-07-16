@@ -20,11 +20,22 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Defaults — tune here (could later move to per-org settings).
-SESSION_LIMIT = 20     # messages per window, per chat session
+SESSION_LIMIT = 20     # messages per window, per chat session   (public widget)
 SESSION_WINDOW = 300   # 5 minutes
-IP_LIMIT = 40          # requests per window, per IP
+IP_LIMIT = 40          # requests per window, per IP             (public widget)
 IP_WINDOW = 300        # 5 minutes
-DAILY_LLM_CAP = 300    # expensive (LLM) widget queries per org per day
+# Trusted server integrations (CRM etc.) call from ONE server IP for the whole
+# team, so the per-IP widget limit would strangle them. They get a generous
+# per-org burst limit instead; the daily budget is their real cost guard.
+API_LIMIT = 120        # requests per window, per org
+API_WINDOW = 60        # 1 minute
+
+# Daily expensive-query (LLM) budget per org, per channel. The public widget is
+# capped tightly (anyone on the internet can hit it); trusted integrations get
+# a much larger, separate budget so widget abuse can never starve the CRM.
+DAILY_LLM_CAP = 300            # "widget"
+DAILY_CAPS = {"widget": DAILY_LLM_CAP}
+DAILY_CAP_DEFAULT = 2000       # crm / whatsapp / voice / api
 
 _redis = None
 _redis_tried = False
@@ -74,32 +85,53 @@ def flood_check(org_id: int | None, session_id: str | None, ip: str | None) -> t
     return True, 0
 
 
-def _day_key(org_id: int) -> str:
-    return f"rl:widgetday:{org_id}:{date.today().isoformat()}"
+def api_flood_check(org_id: int | None) -> tuple[bool, int]:
+    """Burst limit for trusted server integrations (CRM etc.), scoped to the org
+    rather than the IP — they all call from one server. Fail-open."""
+    r = _get_redis()
+    if r is None:
+        return True, 0
+    try:
+        ok, _ = _hit(r, f"rl:api:{org_id or 0}", API_LIMIT, API_WINDOW)
+        if not ok:
+            return False, API_WINDOW
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("api_flood_check failed (%s); allowing.", exc)
+    return True, 0
 
 
-def widget_daily_check(org_id: int | None) -> tuple[bool, int, int]:
-    """Layer 2/3. Is the org's widget under its daily LLM budget? (no consume)
-    Returns (allowed, used, limit). Fail-open."""
+def _cap_for(source: str) -> int:
+    return DAILY_CAPS.get((source or "").lower(), DAILY_CAP_DEFAULT)
+
+
+def _day_key(org_id: int, source: str) -> str:
+    return f"rl:day:{org_id}:{(source or 'api').lower()}:{date.today().isoformat()}"
+
+
+def daily_check(org_id: int | None, source: str = "widget") -> tuple[bool, int, int]:
+    """Layer 2/3. Is this org+channel under its daily LLM budget? (no consume)
+    Each channel has its OWN budget, so public widget abuse can never starve the
+    CRM (and vice-versa). Returns (allowed, used, limit). Fail-open."""
+    cap = _cap_for(source)
     r = _get_redis()
     if r is None or not org_id:
-        return True, 0, DAILY_LLM_CAP
+        return True, 0, cap
     try:
-        used = int(r.get(_day_key(org_id)) or 0)
+        used = int(r.get(_day_key(org_id, source)) or 0)
     except Exception:  # noqa: BLE001
-        return True, 0, DAILY_LLM_CAP
-    return used < DAILY_LLM_CAP, used, DAILY_LLM_CAP
+        return True, 0, cap
+    return used < cap, used, cap
 
 
-def widget_daily_consume(org_id: int | None) -> None:
-    """Count one expensive widget query against the org's OWN daily budget."""
+def daily_consume(org_id: int | None, source: str = "widget") -> None:
+    """Count one expensive query against this org+channel's own daily budget."""
     r = _get_redis()
     if r is None or not org_id:
         return
     try:
-        key = _day_key(org_id)
+        key = _day_key(org_id, source)
         c = r.incr(key)
         if c == 1:
             r.expire(key, 60 * 60 * 24)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("widget_daily_consume failed (%s).", exc)
+        logger.warning("daily_consume failed (%s).", exc)

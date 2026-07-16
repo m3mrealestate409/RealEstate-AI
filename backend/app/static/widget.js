@@ -310,7 +310,7 @@
     fetch(API_URL + "/v1/query", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
-      body: JSON.stringify({ query: q, session_id: SESSION, format: "text", page_url: location.href }),
+      body: JSON.stringify({ query: q, session_id: SESSION, format: "text", source: "widget", page_url: location.href }),
     })
       .then(function (r) {
         if (r.status === 429) throw new Error("You're sending messages too quickly — please wait a moment. 🙏");

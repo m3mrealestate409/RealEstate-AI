@@ -8,6 +8,7 @@ what the engine returns. Never long paragraphs when data is structured.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 
 def price_block(project_name: str, data: dict) -> dict:
@@ -230,32 +231,132 @@ def not_available_block(title: str = "Result") -> dict:
     }
 
 
+# --------------------------------------------------------------------------
+# Humanised plain-text (for the website CHAT WIDGET / WhatsApp / voice only).
+# The web app never uses this — it renders the structured blocks as tables.
+# So this can be as conversational as we like WITHOUT ever running the facts
+# through the LLM (numbers stay 100% accurate).
+# --------------------------------------------------------------------------
+def _group_inr(n: int) -> str:
+    """Indian digit grouping: 200000 -> 2,00,000."""
+    neg = n < 0
+    s = str(abs(int(n)))
+    if len(s) > 3:
+        last3, rest, parts = s[-3:], s[:-3], []
+        while len(rest) > 2:
+            parts.insert(0, rest[-2:]); rest = rest[:-2]
+        if rest:
+            parts.insert(0, rest)
+        s = ",".join(parts) + "," + last3
+    return ("-" if neg else "") + s
+
+
+def _n(v):
+    """Clean number: drop trailing .0, group Indian-style. Non-numbers pass through."""
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return str(v)
+    if isinstance(v, (int, float)):
+        if float(v).is_integer():
+            return _group_inr(int(v))
+        frac = f"{round(v - int(v), 2):.2f}"[1:]
+        return _group_inr(int(v)) + frac
+    return str(v)
+
+
+def _amt(v):
+    """Money with lakh/crore for readability: 200000 -> ₹2 lakh, 12500000 -> ₹1.25 crore."""
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return str(v)
+    n = float(v)
+    if n >= 1e7:
+        x = f"{n / 1e7:.2f}".rstrip("0").rstrip(".")
+        return f"₹{x} crore"
+    if n >= 1e5:
+        x = f"{n / 1e5:.2f}".rstrip("0").rstrip(".")
+        return f"₹{x} lakh"
+    return "₹" + _n(v)
+
+
+def _nice_date(v):
+    """2027-12-31 -> Dec 2027 (leaves anything unparseable as-is)."""
+    if not isinstance(v, str):
+        return v
+    try:
+        return datetime.strptime(v[:10], "%Y-%m-%d").strftime("%b %Y")
+    except (ValueError, TypeError):
+        return v
+
+
+_UNIT = {"per_sqft": "/sq ft", "total": " total"}
+
+
+def _price_lines(cols, rows) -> list[str]:
+    """Group a price table by configuration into one clean line each."""
+    idx = {c: i for i, c in enumerate(cols)}
+    ci, pi = idx.get("Configuration", 0), idx.get("Plan", 1)
+    bi, si = idx.get("Base Price", 2), idx.get("Size", 3)
+    ui, li, gi = idx.get("Unit", 4), idx.get("PLC", 5), idx.get("GST %", 6)
+    groups: dict[str, list] = {}
+    order: list[str] = []
+    for r in rows:
+        cfg = str(r[ci])
+        if cfg not in groups:
+            groups[cfg] = []; order.append(cfg)
+        groups[cfg].append(r)
+    out = []
+    for cfg in order:
+        rs = groups[cfg]
+        size = rs[0][si] if si < len(rs[0]) else None
+        plans = [f"{r[pi]} {_amt(r[bi])}{_UNIT.get(r[ui], '')}" for r in rs]
+        extras = []
+        if li < len(rs[0]) and rs[0][li]:
+            extras.append(f"PLC {_amt(rs[0][li])}")
+        if gi < len(rs[0]) and rs[0][gi]:
+            extras.append(f"GST {_n(rs[0][gi])}%")
+        line = f"**{cfg}**" + (f" ({_n(size)} sq ft)" if size else "") + ": " + ", ".join(plans)
+        if extras:
+            line += " · " + ", ".join(extras)
+        out.append(line)
+    return out
+
+
 def blocks_to_text(blocks: list[dict], voice: bool = False) -> str:
-    """Flatten answer blocks into a plain-text answer for non-UI consumers
-    (CRM inline, WhatsApp, voice). `voice=True` strips Markdown and keeps it short."""
+    """Flatten answer blocks into a warm, concise plain-text answer for the
+    website chat widget / WhatsApp / voice. Facts are formatted deterministically
+    (Indian numbers, natural phrasing) — never sent through the LLM."""
     lines: list[str] = []
     for b in blocks or []:
         t = b.get("type")
+        cols = b.get("columns", [])
         if t == "paragraph":
             if b.get("text"):
-                lines.append(b["text"])
+                lines.append(b["text"])  # LLM prose — leave as written
+        elif t == "table" and "Base Price" in cols and "GST %" in cols:
+            lines.extend(_price_lines(cols, b.get("rows", [])))  # price → grouped, clean
+        elif t == "table" and cols[:1] == ["Configuration"] and "Available" in cols:
+            for r in b.get("rows", []):
+                lines.append(f"**{r[0]}**: {_n(r[2])} of {_n(r[1])} units available")
         elif t == "table":
-            cols = b.get("columns", [])
             for row in b.get("rows", []):
                 head = str(row[0]) if row else ""
-                rest = ", ".join(f"{c}: {v}" for c, v in zip(cols[1:], row[1:]))
+                rest = ", ".join(f"{c}: {_n(v)}" for c, v in zip(cols[1:], row[1:]) if v not in (None, ""))
                 lines.append(f"{head} — {rest}" if head and rest else (head or rest))
+        elif t == "timeline":
+            parts = [f"{e.get('label')}: {_nice_date(e.get('value'))}" for e in b.get("events", []) if e.get("value")]
+            if parts:
+                lines.append(" · ".join(parts))
         elif t == "card":
             for c in b.get("cards", []):
                 head, items = c.get("heading", ""), c.get("items", [])
-                lines.append(f"{head}: " + "; ".join(str(i) for i in items) if items else head)
+                items = [str(i) for i in items if i not in (None, "")]
+                lines.append((f"**{head}** — " + ", ".join(items)) if items else head)
         elif t == "checklist":
-            lines.extend(f"- {it}" for it in b.get("items", []))
-        elif t == "timeline":
-            lines.extend(f"{e.get('label')}: {e.get('value')}" for e in b.get("events", []))
+            lines.extend(f"• {it}" for it in b.get("items", []))
     text = "\n".join(x for x in lines if x and str(x).strip())
     if voice:
-        text = re.sub(r"[*_#`>|]", "", text)
+        text = re.sub(r"[*_#`>|•·]", "", text)
         text = re.sub(r"(?m)^\s*[-•]\s*", "", text)
         text = " ".join(text.split())
         if len(text) > 600:

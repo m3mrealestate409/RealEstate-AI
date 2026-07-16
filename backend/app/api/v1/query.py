@@ -25,6 +25,10 @@ def _human_mode_envelope(session_id: str) -> dict:
 
 router = APIRouter(prefix="/v1", tags=["engine"])
 
+# Channels an API key may declare. Anything else is treated as a generic "api"
+# integration (never as the public widget).
+VALID_SOURCES = {"widget", "crm", "whatsapp", "voice", "api"}
+
 
 def client_ip(request: Request) -> str:
     """Real client IP — trust X-Forwarded-For's first entry when behind a proxy."""
@@ -48,17 +52,35 @@ def query(
     `format` to "blocks" (default), "text", or "voice" — `answer_text` is a
     ready-to-use plain-text answer for CRM/WhatsApp/voice consumers.
     """
-    is_widget = getattr(user, "_via_api_key", False)
+    via_key = getattr(user, "_via_api_key", False)
+    # Resolve the calling channel. A JWT is always the web app (staff); an API
+    # key declares itself via `source` (defaults to widget for old scripts).
+    source = (payload.source or "widget").lower()
+    if source not in VALID_SOURCES:
+        source = "api"
+    if not via_key:
+        source = "app"
+    # ONLY the public website widget gets live-chat recording, new-chat alerts,
+    # auto-leads and the public budget. A CRM/WhatsApp/voice integration must
+    # never show up as a "visitor" in the Live Chat console.
+    is_widget = via_key and source == "widget"
+
     cs = None
-    if is_widget:
-        # Anti-flood: only for the public widget. Employees are trusted.
-        ok, retry = ratelimit.flood_check(org_scope_id(user), payload.session_id, client_ip(request))
+    if via_key:
+        # Anti-flood. Public widget → per-session + per-IP. Trusted server
+        # integrations call from one IP for the whole team → per-org burst.
+        if is_widget:
+            ok, retry = ratelimit.flood_check(org_scope_id(user), payload.session_id, client_ip(request))
+        else:
+            ok, retry = ratelimit.api_flood_check(org_scope_id(user))
         if not ok:
             raise HTTPException(
                 status_code=429,
                 detail="You're sending messages too quickly. Please wait a moment and try again.",
                 headers={"Retry-After": str(retry)},
             )
+
+    if is_widget:
         # Record the visitor's message for the live-chat console. If a human has
         # taken over this session, the AI stays silent (agent replies via poll).
         org_id = org_scope_id(user)
@@ -75,7 +97,7 @@ def query(
         if cs.mode == "human":
             return _human_mode_envelope(payload.session_id or "anon")
 
-    env = handle_query(db, payload.query, payload.session_id, user)
+    env = handle_query(db, payload.query, payload.session_id, user, source=source)
     voice = (payload.format or "blocks").lower() == "voice"
     env["answer_text"] = blocks_to_text(env.get("content", {}).get("blocks", []), voice=voice)
     if is_widget and cs is not None:

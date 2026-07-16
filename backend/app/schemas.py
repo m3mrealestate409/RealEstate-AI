@@ -43,6 +43,12 @@ class QueryRequest(BaseModel):
     # Response shape for the caller: "blocks" (rich, for UIs), "text" (plain
     # markdown answer), or "voice" (short, spoken, TTS-friendly).
     format: str = "blocks"
+    # Which channel is calling: "widget" (public website chat), "crm",
+    # "whatsapp", "voice" or "api". Widget-only behaviour (live-chat recording,
+    # new-chat alerts, auto-leads, the public budget) runs ONLY for "widget";
+    # trusted server integrations get their own limits and analytics tag.
+    # Defaults to "widget" so already-deployed widget scripts keep working.
+    source: str = "widget"
     # Where the visitor is chatting from (widget) — used in new-chat notifications.
     page_url: str | None = None
 

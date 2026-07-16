@@ -208,7 +208,7 @@ def _confidence_for_rag(chunks) -> float:
     return round(min(0.95, max(c.similarity for c in chunks)), 2)
 
 
-def handle_query(db: Session, query: str, session_id: str | None, user=None) -> dict:
+def handle_query(db: Session, query: str, session_id: str | None, user=None, source: str = "app") -> dict:
     t0 = time.time()
     session_id = session_id or "anonymous"
     org_id = org_scope_id(user) if user is not None else None
@@ -222,7 +222,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
     mem_key = f"u{user_id}:{session_id}" if user_id is not None else session_id
     prior_projects = session_store.last_project_ids(mem_key)
     prior_dialogue = _dialogue_context(mem_key)  # recent turns → natural multi-turn replies
-    src = "widget" if getattr(user, "_via_api_key", False) else "app"  # for demand analytics
+    src = source or "app"  # channel tag for demand analytics (widget/crm/app…)
     wants_cb = _wants_callback(query)  # visitor asked to be contacted / book a visit
 
     ir = intent_svc.detect(db, query, org_id=org_id, session_project_ids=prior_projects)
@@ -243,9 +243,9 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
         ir.matched_projects = [m for m in ir.matched_projects if m["id"] in owned]
 
     # Website visitor dropped their phone number in chat → capture a lead right
-    # away and reply warmly. Only for external channels (API key) — a logged-in
-    # employee (JWT) typing a number must NOT create a lead.
-    if getattr(user, "_via_api_key", False) and org_id is not None:
+    # away and reply warmly. ONLY the public widget: a logged-in employee (JWT)
+    # or a CRM/back-office integration typing a number must NOT create a lead.
+    if src == "widget" and org_id is not None:
         phone = _extract_phone(query)
         if phone:
             pname = None
@@ -351,14 +351,15 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None) -> 
                            latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
                 return hit
 
-        # 2) Budget. The public widget (API key) uses its OWN daily LLM budget,
-        #    kept SEPARATE from employee quotas so abuse can't block real staff.
-        #    When its budget is spent we DEGRADE: skip the LLM/RAG but still
+        # 2) Budget. Each external channel (widget / crm / whatsapp …) has its
+        #    OWN daily LLM budget, kept SEPARATE from employee quotas — so public
+        #    widget abuse can never starve the CRM, nor block real staff. When a
+        #    channel's budget is spent we DEGRADE: skip the LLM/RAG but still
         #    answer from the database below (prices/plans stay available).
         if getattr(user, "_via_api_key", False):
-            w_ok, _, _ = ratelimit.widget_daily_check(org_id)
+            w_ok, _, _ = ratelimit.daily_check(org_id, src)
             if w_ok:
-                ratelimit.widget_daily_consume(org_id)
+                ratelimit.daily_consume(org_id, src)
             else:
                 suppress_llm = True
         # 3) Employees: existing per-employee tier limit AND company-wide quota.

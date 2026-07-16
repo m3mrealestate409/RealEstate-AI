@@ -6,6 +6,36 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.9.0] — 2026-07-14
+
+### Added — Per-channel integrations (`source`), so a CRM isn't treated as a visitor
+`POST /v1/query` now accepts **`source`**: `widget` | `crm` | `whatsapp` |
+`voice` | `api`. Previously *any* API-key caller was assumed to be the public
+website widget, which meant a CRM integration would have polluted the Live Chat
+console with fake "visitors", spammed new-chat alerts, created junk leads and
+shared the widget's public rate limit + budget.
+
+- **Widget-only behaviour** (live-chat recording, new-chat notifications,
+  phone auto-leads, the public 300/day budget) now runs **only** for
+  `source: "widget"`.
+- **Trusted server integrations** get their own per-org burst limit (120/min,
+  instead of the per-IP widget limit that would strangle a shared CRM server)
+  and their **own daily LLM budget** (2000), so widget abuse can never starve
+  the CRM — and vice-versa.
+- **Analytics** tag each query with its real channel, keeping "Visitor demand"
+  to genuine website visitors.
+- Backward-compatible: `source` defaults to `widget`, so already-deployed
+  widget scripts keep working unchanged.
+
+### Changed — Human, readable answers in the chat widget
+- The widget/WhatsApp/voice text is now formatted for people instead of dumping
+  raw columns — Indian number grouping, lakh/crore, clean dates, natural
+  phrasing (`2BHK (1,250 sq ft): BSP ₹8,900/sq ft, 50:50 ₹3,000/sq ft ·
+  PLC ₹2 lakh, GST 5%` instead of `Base Price: 8900.0, Unit: per_sqft…`).
+- Done **deterministically in code** — facts never pass through the LLM, so
+  figures stay exact (and stay free/instant).
+- **The web app is untouched**: staff still get the full structured tables.
+
 ## [2.8.0] — 2026-07-14
 
 ### Changed — Premium dashboard UI

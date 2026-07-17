@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from app.models import Organization, Plan, Subscription
+from app.models import Organization, Payment, Plan, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,11 @@ def effective_status(sub: Subscription | None, now: datetime | None = None) -> s
         return "past_due" if now <= ends + timedelta(days=GRACE_DAYS) else "suspended"
 
     return status
+
+
+def paid_until(sub: Subscription | None) -> datetime | None:
+    """How far the money currently reaches (ignores any trial)."""
+    return _aware(sub.current_period_end) if sub else None
 
 
 def expires_at(sub: Subscription | None) -> datetime | None:
@@ -164,6 +169,49 @@ def ensure_subscription(db: Session, org: Organization, *, trial: bool = True) -
     db.add(sub)
     db.flush()
     return sub
+
+
+METHODS = {"bank", "upi", "cash", "card", "other"}
+
+
+def payment_out(p: Payment) -> dict:
+    return {
+        "id": p.id,
+        "receipt_no": p.receipt_no,
+        "amount": float(p.amount or 0),
+        "currency": p.currency or "INR",
+        "plan": p.plan_name,
+        "method": p.method,
+        "reference": p.reference,
+        "period_start": p.period_start.isoformat() if p.period_start else None,
+        "period_end": p.period_end.isoformat() if p.period_end else None,
+        "note": p.note,
+        "paid_on": p.created_at.isoformat() if p.created_at else None,
+    }
+
+
+def record_payment(
+    db: Session, org: Organization, *, amount: float, period_start, period_end,
+    method: str | None = None, reference: str | None = None, note: str | None = None,
+    recorded_by: int | None = None,
+) -> Payment:
+    """Write the money down. Called whenever a payment is recorded, so the
+    history survives the next renewal overwriting `current_period_end`."""
+    p = Payment(
+        organization_id=org.id,
+        plan_id=org.plan_id,
+        plan_name=org.plan.name if org.plan else None,   # snapshot — see the model
+        amount=amount or 0,
+        period_start=period_start,
+        period_end=period_end,
+        method=(method or "").lower() if method else None,
+        reference=(reference or "").strip() or None,
+        note=(note or "").strip() or None,
+        recorded_by=recorded_by,
+    )
+    db.add(p)
+    db.flush()
+    return p
 
 
 def summary(db: Session, org: Organization | None) -> dict:

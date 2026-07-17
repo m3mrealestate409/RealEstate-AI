@@ -42,22 +42,37 @@ function BillingChip({ o }) {
         </div>
       )}
       {o.note && <div className="muted small" title={o.note}>{o.note.slice(0, 28)}</div>}
+      {o.requested_plan && (
+        <div className="muted small" style={{ marginTop: 3, color: "var(--amber)", fontWeight: 700 }}
+          title="This tenant asked to change plan — switch the Plan dropdown to action it.">
+          ↗ wants {o.requested_plan}
+        </div>
+      )}
     </>
   );
 }
 
-// The whole Phase-1 payment flow: someone paid, so record how far it covers.
+// The whole Phase-1 payment flow: someone paid, so record how far it covers —
+// and record the money itself, which `paid_till` alone would lose on renewal.
 function PaidTill({ o, onDone, onErr }) {
   const [date, setDate] = useState((o.expires_at || "").slice(0, 10));
   const [note, setNote] = useState(o.note || "");
+  const [amount, setAmount] = useState(o.price_monthly ?? "");
+  const [method, setMethod] = useState("upi");
+  const [ref, setRef] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function markPaid() {
     if (!date) return;
     setBusy(true);
     try {
-      await api.saSetSubscription(o.id, { paid_till: date, note });
+      const r = await api.saSetSubscription(o.id, {
+        paid_till: date, note, method, reference: ref,
+        amount: amount === "" ? null : Number(amount),
+      });
+      setRef("");
       onDone();
+      if (r.payment) onErr(null, `Recorded ${r.payment.receipt_no} — ₹${r.payment.amount.toLocaleString("en-IN")}`);
     } catch (e) { onErr(e.message); }
     finally { setBusy(false); }
   }
@@ -76,8 +91,18 @@ function PaidTill({ o, onDone, onErr }) {
 
   return (
     <div className="bill-cell">
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      <input placeholder="note (UPI ref…)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} title="Paid up to" />
+      <div className="bill-actions">
+        <input type="number" min="0" step="1" placeholder="amount" value={amount}
+          onChange={(e) => setAmount(e.target.value)} style={{ width: 78 }} title="Amount received" />
+        <select value={method} onChange={(e) => setMethod(e.target.value)} title="How it was paid">
+          <option value="upi">UPI</option><option value="bank">Bank</option>
+          <option value="cash">Cash</option><option value="card">Card</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <input placeholder="UPI ref / UTR" value={ref} onChange={(e) => setRef(e.target.value)} />
+      <input placeholder="note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="bill-actions">
         <button className="btn btn-sm btn-primary" onClick={markPaid} disabled={busy || !date}>
           {busy ? "…" : "Mark paid"}
@@ -107,8 +132,11 @@ function Organizations() {
       load(); setMsg({ ok: true, text: "Company created with its admin." });
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
+  // Goes through the subscription, not saUpdateOrg: that keeps the org's plan
+  // and its subscription in step, and answers any pending upgrade request.
   async function changePlan(id, plan_id) {
-    await api.saUpdateOrg(id, { plan_id: Number(plan_id) }); load();
+    try { await api.saSetSubscription(id, { plan_id: Number(plan_id) }); load(); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
   }
   async function toggleActive(o) {
     await api.saUpdateOrg(o.id, { is_active: !o.is_active }); load();
@@ -142,7 +170,10 @@ function Organizations() {
                 <td>{o.employees} / {o.max_employees}</td>
                 <td>{o.queries_today} / {o.daily_llm_quota}</td>
                 <td><BillingChip o={o} /></td>
-                <td><PaidTill o={o} onDone={load} onErr={(t) => setMsg({ ok: false, text: t })} /></td>
+                <td>
+                  <PaidTill o={o} onDone={load}
+                    onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
+                </td>
                 <td>
                   <button className={`status-chip ${o.is_active ? "chip-green" : "chip-gray"}`}
                     onClick={() => toggleActive(o)} style={{ cursor: "pointer", border: "none" }}

@@ -98,6 +98,26 @@ export async function fetchBlobUrl(path) {
   return URL.createObjectURL(await fetchBlob(path));
 }
 
+// Save a protected file to disk. A plain <a href> can't be used: these routes
+// need the Authorization header, which a browser navigation won't send.
+export async function downloadFile(path, filename) {
+  const url = URL.createObjectURL(await fetchBlob(path));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// Open a protected page in a new tab (same header problem as above).
+export async function openBlobTab(path) {
+  const url = await fetchBlobUrl(path);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 export const api = {
   login: (email, password) =>
     request("/v1/auth/login", { method: "POST", form: { username: email, password }, auth: false }),
@@ -195,8 +215,14 @@ export const api = {
   saSetSubscription: (id, data) =>
     request(`/v1/superadmin/organizations/${id}/subscription`, { method: "PUT", body: data }),
 
-  // Billing (org admin — read-only; money is recorded by the platform owner)
+  // Billing (org admin). Read-only except asking to change plan — money itself
+  // is recorded by the platform owner (Phase 1 has no self-serve checkout).
   myBilling: () => request("/v1/billing/me"),
+  myPayments: () => request("/v1/billing/payments"),
+  myPricing: () => request("/v1/billing/plans"),
+  requestUpgrade: (plan_id) =>
+    request("/v1/billing/upgrade-request", { method: "POST", body: { plan_id } }),
+  cancelUpgrade: () => request("/v1/billing/upgrade-request", { method: "DELETE" }),
 
   // Builders & document types
   listBuilders: () => request("/v1/admin/builders"),

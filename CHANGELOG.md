@@ -6,6 +6,42 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.15.0] — 2026-07-17
+
+### Added — Payments, receipts, pricing and plan-change requests
+Built **before** a payment provider, not after, for one reason: "Mark paid" was
+destructive. It overwrote `current_period_end` and the note, leaving no trace
+that money had ever changed hands — so every day run on Phase 1 was accruing
+revenue history that could never be reconstructed. The same table is what a
+provider's webhooks will write into later, so building it now cost nothing extra.
+
+- New **`payments`** table — the money's permanent record. Amount, service
+  period, method (bank/upi/cash/card), reference (UPI ref / UTR), who recorded
+  it. The plan name is **snapshot**, not joined: a plan can be renamed or
+  repriced, but what someone paid for in August must keep saying August's truth.
+- **Mark paid** now records a payment alongside the date, with amount, method and
+  reference. The service period is derived from where the org was previously
+  paid up to.
+- New **💳 Billing** category for org admins (Plan & Usage moved out of System):
+  - **Payments** — last transaction, full history, a printable **receipt** per
+    payment and a **CSV** of the lot. Both fetch with auth and save via a blob;
+    a plain link can't carry the Authorization header.
+  - **Pricing** — plan cards with what each includes, and **Request this plan**.
+    A request charges and grants nothing: it raises a flag ("↗ wants Advanced")
+    on the platform owner's list, since Phase 1 has no checkout.
+- Receipts are deliberately **payment receipts, not GST tax invoices** — no
+  invoice series, GSTIN or place of supply, and they say so. A document that
+  merely looks statutory is worse than none if someone claims input credit
+  against it. Tax invoices need a decision on GST registration first.
+- No PDF dependency added: the receipt is self-contained HTML with a print
+  button, and every browser prints to PDF.
+
+### Fixed — plan changes left the subscription behind
+The super-admin plan dropdown used the generic org update, which set
+`Organization.plan_id` but never `Subscription.plan_id`, and never cleared a
+pending upgrade request — so the two could drift apart and a request would hang
+around forever. Plan changes now go through the subscription endpoint.
+
 ## [2.14.0] — 2026-07-17
 
 ### Added — Subscriptions (Phase 1: billed by hand, no payment provider)

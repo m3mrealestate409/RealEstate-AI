@@ -77,13 +77,65 @@ class Subscription(Base):
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Free-text for the human who took the money ("UPI ref 4471, Aug invoice").
     note: Mapped[str | None] = mapped_column(Text)
+    # An org admin asking to move plan. Phase 1 has no self-serve checkout, so
+    # this is a flag the platform owner acts on — cleared once the plan changes.
+    requested_plan_id: Mapped[int | None] = mapped_column(ForeignKey("plans.id"))
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     organization: Mapped["Organization"] = relationship(back_populates="subscription")
-    plan: Mapped["Plan | None"] = relationship()
+    plan: Mapped["Plan | None"] = relationship(foreign_keys=[plan_id])
+    requested_plan: Mapped["Plan | None"] = relationship(foreign_keys=[requested_plan_id])
+
+
+class Payment(Base):
+    """One payment received from a tenant — the money's permanent record.
+
+    A subscription only knows how far it is paid up to; marking it again
+    overwrites that. This table is what actually accumulates, so the history
+    survives every renewal, and so a tenant can be shown what it has paid.
+
+    Amounts are stored as recorded, and the plan name is SNAPSHOT rather than
+    joined — a plan can be renamed or repriced later, but what someone paid for
+    in August must keep saying August's truth.
+
+    Phase 1 rows are entered by hand (`method` = bank/upi/cash). A payment
+    provider later writes rows here too, with the same shape.
+
+    NOT a GST tax invoice: no invoice series, GSTIN or place of supply. See
+    `receipt_no` — it is a reference, not a statutory invoice number.
+    """
+
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("plans.id"))
+    plan_name: Mapped[str | None] = mapped_column(String)     # snapshot, see above
+    amount: Mapped[float] = mapped_column(Numeric, default=0)
+    currency: Mapped[str] = mapped_column(String, default="INR")
+    # What this money bought — shown on the receipt as the service period.
+    period_start: Mapped[date | None] = mapped_column(Date)
+    period_end: Mapped[date | None] = mapped_column(Date)
+    method: Mapped[str | None] = mapped_column(String)        # bank | upi | cash | card | other
+    reference: Mapped[str | None] = mapped_column(String)     # UPI ref / UTR / provider payment id
+    note: Mapped[str | None] = mapped_column(Text)
+    recorded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    organization: Mapped["Organization"] = relationship()
+
+    @property
+    def receipt_no(self) -> str:
+        """Human reference for a receipt. Stable (derived from the row id) but
+        deliberately NOT a GST invoice number — gaps here carry no meaning."""
+        year = self.created_at.year if self.created_at else date.today().year
+        return f"PX-{year}-{self.id:05d}"
 
 
 class Organization(Base):

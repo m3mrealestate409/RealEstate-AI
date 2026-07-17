@@ -114,6 +114,10 @@ def list_orgs(db: Session = Depends(get_db), _: User = Depends(require_super_adm
             "note": sub.note if sub else None,
             "price_monthly": float(org.plan.price_monthly) if org.plan else None,
             "grace_days": billing.GRACE_DAYS,
+            # An upgrade the tenant asked for — Phase 1 has no self-serve
+            # checkout, so this is the platform owner's to-do.
+            "requested_plan": sub.requested_plan.name if sub and sub.requested_plan else None,
+            "requested_plan_id": sub.requested_plan_id if sub else None,
         })
     return out
 
@@ -175,6 +179,11 @@ class SubscriptionIn(BaseModel):
     trial_days: int | None = None
     plan_id: int | None = None
     note: str | None = None
+    # The payment itself. Recorded as a permanent row, because `paid_till` gets
+    # overwritten by the next renewal and would otherwise lose the history.
+    amount: float | None = None
+    method: str | None = None        # bank | upi | cash | card | other
+    reference: str | None = None     # UPI ref / UTR
 
 
 def _sub_out(db: Session, org: Organization) -> dict:
@@ -188,6 +197,8 @@ def _sub_out(db: Session, org: Organization) -> dict:
         "expires_at": expires.isoformat() if expires else None,
         "days_left": billing.days_left(sub),
         "note": sub.note if sub else None,
+        "requested_plan": sub.requested_plan.name if sub and sub.requested_plan else None,
+        "requested_plan_id": sub.requested_plan_id if sub else None,
     }
 
 
@@ -201,19 +212,42 @@ def set_subscription(org_id: int, payload: SubscriptionIn, db: Session = Depends
         raise HTTPException(404, "Organization not found")
     sub = billing.ensure_subscription(db, org)
 
+    if payload.method is not None and payload.method.lower() not in billing.METHODS:
+        raise HTTPException(422, f"method must be one of {sorted(billing.METHODS)}")
+
     if payload.plan_id is not None:
         if not db.get(Plan, payload.plan_id):
             raise HTTPException(422, "plan not found")
         org.plan_id = payload.plan_id
         sub.plan_id = payload.plan_id
+        # Whatever they asked for, this answers it.
+        sub.requested_plan_id = None
+        sub.requested_at = None
+        db.flush()
+        db.refresh(org)
 
+    payment = None
     if payload.paid_till is not None:
+        # The period this money covers: from where they were paid up to (or
+        # today for a first payment) to the new date.
+        prev_end = billing.paid_until(sub)
+        period_start = prev_end.date() if prev_end and prev_end.date() < payload.paid_till else date.today()
+
         # Store end-of-day so "paid till the 30th" includes the 30th.
         sub.current_period_end = datetime.combine(
             payload.paid_till, time.max, tzinfo=timezone.utc
         )
         sub.status = "active"
         sub.trial_ends_at = None
+
+        payment = billing.record_payment(
+            db, org,
+            amount=payload.amount if payload.amount is not None
+            else float(org.plan.price_monthly or 0) if org.plan else 0,
+            period_start=period_start, period_end=payload.paid_till,
+            method=payload.method, reference=payload.reference,
+            note=payload.note, recorded_by=admin.id,
+        )
 
     if payload.trial_days is not None:
         if payload.trial_days < 1:
@@ -235,7 +269,12 @@ def set_subscription(org_id: int, payload: SubscriptionIn, db: Session = Depends
                      "org": org.name, "status": sub.status,
                      "paid_till": str(payload.paid_till) if payload.paid_till else None,
                      "note": sub.note,
+                     "receipt_no": payment.receipt_no if payment else None,
+                     "amount": float(payment.amount) if payment else None,
                  })
     db.commit()
     db.refresh(org)
-    return _sub_out(db, org)
+    out = _sub_out(db, org)
+    if payment is not None:
+        out["payment"] = billing.payment_out(payment)
+    return out

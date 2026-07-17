@@ -93,6 +93,10 @@ def init_db() -> None:
                 "WHERE NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id)"
             )
         )
+        # Plan-change requests from org admins (create_all won't ALTER an
+        # existing subscriptions table).
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS requested_plan_id BIGINT"))
+        conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ"))
     logger.info("Database initialised.")
 
 

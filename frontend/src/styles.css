@@ -320,6 +320,19 @@ a { color: inherit; text-decoration: none; }
 .bill-bar span { display: block; height: 100%; background: var(--primary); border-radius: 4px; }
 .bill-bar-warn span { background: var(--amber); }
 
+/* ---- Pricing cards ---- */
+.price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 14px 0 16px; }
+.price-card { position: relative; border: 1px solid var(--border); border-radius: 14px; padding: 18px;
+  background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+.price-card-current { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.price-badge { position: absolute; top: -9px; right: 14px; background: var(--primary); color: #fff;
+  font-size: 10px; font-weight: 800; letter-spacing: .3px; padding: 3px 9px; border-radius: 999px; }
+.price-name { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.price-amt { font-size: 27px; font-weight: 800; line-height: 1.1; }
+.price-per { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.price-feats { list-style: none; padding: 0; margin: 2px 0 auto; font-size: 13px; line-height: 1.9; color: var(--muted); }
+.price-feats li::before { content: "✓ "; color: var(--green); font-weight: 800; }
+
 /* ---------- System Health ---------- */
 .health-banner { padding: 14px 16px; border-radius: 10px; font-weight: 700; margin-bottom: 16px; }
 .health-banner.ok { background: var(--green-soft); color: var(--green); }

@@ -31,17 +31,37 @@ payment plans, inventory and dates are always exact.
 
 ## Documentation map
 
+**Understand the system**
 | Document | Read it to… |
 |---|---|
-| [architecture.md](architecture.md) | Understand the components and the hybrid answer pipeline. |
+| [architecture.md](architecture.md) | Understand the components and the hybrid answer pipeline (diagrams). |
 | [rag-pipeline.md](rag-pipeline.md) | Learn exactly how a question becomes an answer (the "Golden Rule"). |
-| [data-model.md](data-model.md) | See the database schema and how multi-tenancy is enforced. |
+| [workflows.md](workflows.md) | See the cross-component flows (takeover, subscription lifecycle, billing) as diagrams. |
+| [data-model.md](data-model.md) | The database schema, ER diagram, and how multi-tenancy is enforced. |
+
+**Build & integrate**
+| Document | Read it to… |
+|---|---|
 | [api-reference.md](api-reference.md) | Call the REST API — endpoints, auth, examples. |
+| [frontend.md](frontend.md) | The React SPA — structure, routing, rendering, build. |
+| [integrations.md](integrations.md) | Embed the widget; connect a CRM, Telegram, or WhatsApp. |
+| [development.md](development.md) | Coding standards, migrations, extension points, recipes. |
+| [testing.md](testing.md) | The test suite, how to run it, conventions. |
+
+**Operate**
+| Document | Read it to… |
+|---|---|
 | [configuration.md](configuration.md) | Every environment variable and what it controls. |
 | [deployment.md](deployment.md) | Run it with Docker and harden it for production. |
-| [integrations.md](integrations.md) | Embed the widget; connect a CRM, Telegram, or WhatsApp. |
-| [admin-guide.md](admin-guide.md) | Day-to-day use: roles, projects, billing, live chat, import/export. |
+| [operations.md](operations.md) | Monitoring, backup, disaster recovery, scaling, performance. |
+| [troubleshooting.md](troubleshooting.md) | Fix the issues that actually come up. |
 | [security.md](security.md) | The authentication, authorization and abuse-protection model. |
+
+**Plan**
+| Document | Read it to… |
+|---|---|
+| [roadmap.md](roadmap.md) | Technical debt, in-progress hardening, and the product roadmap. |
+| [DOCUMENTATION_GAP_REPORT.md](DOCUMENTATION_GAP_REPORT.md) | The documentation audit: completeness score and gaps. |
 
 ### Related files in the repository root (not in `/docs`)
 - `README.md` — quick-start.

@@ -177,39 +177,26 @@ const BILLING_CHIP = {
   none: ["chip-gray", "—"],
 };
 
-function BillingChip({ o }) {
-  const [cls, label] = BILLING_CHIP[o.status] || BILLING_CHIP.none;
-  const d = o.days_left;
-  return (
-    <>
-      <span className={`status-chip ${cls}`}>{label}</span>
-      {d != null && (
-        <div className="muted small" style={{ marginTop: 3 }}>
-          {d >= 0 ? `${d} day${d === 1 ? "" : "s"} left` : `${Math.abs(d)} day${d === -1 ? "" : "s"} over`}
-        </div>
-      )}
-      {o.note && <div className="muted small" title={o.note}>{o.note.slice(0, 28)}</div>}
-      {o.requested_plan && (
-        <div className="muted small" style={{ marginTop: 3, color: "var(--amber)", fontWeight: 700 }}
-          title="This tenant asked to change plan — switch the Plan dropdown to action it.">
-          ↗ wants {o.requested_plan}
-        </div>
-      )}
-    </>
-  );
-}
-
-// The whole Phase-1 payment flow: someone paid, so record how far it covers —
-// and record the money itself, which `paid_till` alone would lose on renewal.
-function PaidTill({ o, onDone, onErr }) {
-  const [date, setDate] = useState((o.expires_at || "").slice(0, 10));
-  const [note, setNote] = useState(o.note || "");
+// Recording a payment is a small form, not a table cell. It used to be five
+// inputs stacked inside one column, which read as clutter and made a careful
+// job — money — feel careless. A dialog gives it room and a single Save.
+function PaymentDialog({ o, onClose, onDone, onErr }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState((o.expires_at || "").slice(0, 10) || today);
   const [amount, setAmount] = useState(o.price_monthly ?? "");
   const [method, setMethod] = useState("upi");
   const [ref, setRef] = useState("");
+  const [note, setNote] = useState(o.note || "");
   const [busy, setBusy] = useState(false);
 
-  async function markPaid() {
+  // Esc closes — a dialog you can only leave by aiming at an X is a trap.
+  useEffect(() => {
+    const key = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [onClose]);
+
+  async function save() {
     if (!date) return;
     setBusy(true);
     try {
@@ -217,46 +204,59 @@ function PaidTill({ o, onDone, onErr }) {
         paid_till: date, note, method, reference: ref,
         amount: amount === "" ? null : Number(amount),
       });
-      setRef("");
       onDone();
-      if (r.payment) onErr(null, `Recorded ${r.payment.receipt_no} — ₹${r.payment.amount.toLocaleString("en-IN")}`);
-    } catch (e) { onErr(e.message); }
-    finally { setBusy(false); }
-  }
-  async function setStatus(status) {
-    const warn = status === "suspended"
-      ? `Suspend ${o.name}? AI answers stop immediately. Their data, logins and leads stay untouched.`
-      : `Start a fresh 14-day trial for ${o.name}?`;
-    if (!confirm(warn)) return;
-    setBusy(true);
-    try {
-      await api.saSetSubscription(o.id, status === "trialing" ? { trial_days: 14 } : { status });
-      onDone();
-    } catch (e) { onErr(e.message); }
-    finally { setBusy(false); }
+      onClose();
+      if (r.payment) {
+        onErr(null, `Recorded ${r.payment.receipt_no} — ₹${r.payment.amount.toLocaleString("en-IN")} from ${o.name}.`);
+      }
+    } catch (e) { onErr(e.message); setBusy(false); }
   }
 
   return (
-    <div className="bill-cell">
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} title="Paid up to" />
-      <div className="bill-actions">
-        <input type="number" min="0" step="1" placeholder="amount" value={amount}
-          onChange={(e) => setAmount(e.target.value)} style={{ width: 78 }} title="Amount received" />
-        <select value={method} onChange={(e) => setMethod(e.target.value)} title="How it was paid">
-          <option value="upi">UPI</option><option value="bank">Bank</option>
-          <option value="cash">Cash</option><option value="card">Card</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <input placeholder="UPI ref / UTR" value={ref} onChange={(e) => setRef(e.target.value)} />
-      <input placeholder="note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-      <div className="bill-actions">
-        <button className="btn btn-sm btn-primary" onClick={markPaid} disabled={busy || !date}>
-          {busy ? "…" : "Mark paid"}
-        </button>
-        {o.status === "suspended"
-          ? <button className="btn btn-sm" onClick={() => setStatus("trialing")} disabled={busy}>Trial</button>
-          : <button className="btn btn-sm btn-ghost btn-danger" onClick={() => setStatus("suspended")} disabled={busy}>Suspend</button>}
+    <div className="modal-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" role="dialog" aria-label={`Record a payment from ${o.name}`}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-title">Record a payment</div>
+            <div className="muted small">{o.name} · {o.plan || "—"}</div>
+          </div>
+          <button className="modal-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="calc-fields">
+            <label className="field"><span>Paid up to</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label className="field"><span>Amount received (₹)</span>
+              <input type="number" min="0" step="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+                placeholder={String(o.price_monthly ?? 0)} />
+            </label>
+            <label className="field"><span>How they paid</span>
+              <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                <option value="upi">UPI</option><option value="bank">Bank transfer</option>
+                <option value="cash">Cash</option><option value="card">Card</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="field"><span>Reference (UPI ref / UTR)</span>
+              <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="optional" />
+            </label>
+          </div>
+          <label className="field"><span>Note</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional — e.g. August invoice" />
+          </label>
+          <div className="conn-hint">
+            This creates a receipt the customer can download, and extends their access to the date above.
+          </div>
+        </div>
+
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || !date}>
+            {busy ? "Saving…" : "Record payment"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -352,6 +352,7 @@ function Organizations() {
   const [orgs, setOrgs] = useState([]);
   const [plans, setPlans] = useState([]);
   const [msg, setMsg] = useState(null);
+  const [paying, setPaying] = useState(null);   // the org whose payment dialog is open
   const [f, setF] = useState({ name: "", slug: "", plan_id: "", admin_email: "", admin_password: "", admin_name: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const load = () => { api.saOrgs().then(setOrgs); api.saPlans().then(setPlans); };
@@ -372,7 +373,22 @@ function Organizations() {
     catch (e) { setMsg({ ok: false, text: e.message }); }
   }
   async function toggleActive(o) {
-    await api.saUpdateOrg(o.id, { is_active: !o.is_active }); load();
+    const warn = o.is_active
+      ? `Disable ${o.name} entirely? Nobody there will be able to log in. This is separate from billing — to only stop AI answers, use Suspend.`
+      : `Re-enable ${o.name}? Their logins start working again.`;
+    if (!confirm(warn)) return;
+    try { await api.saUpdateOrg(o.id, { is_active: !o.is_active }); load(); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+  }
+  async function setStatus(o, status) {
+    const warn = status === "suspended"
+      ? `Suspend ${o.name}? AI answers stop immediately. Their data, logins and leads stay untouched.`
+      : `Start a fresh 14-day trial for ${o.name}?`;
+    if (!confirm(warn)) return;
+    try {
+      await api.saSetSubscription(o.id, status === "trialing" ? { trial_days: 14 } : { status });
+      load();
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
   }
 
   return (
@@ -382,64 +398,167 @@ function Organizations() {
       <PendingRequests plans={plans} onDone={load} />
       <SeedProjects orgs={orgs} onDone={load} />
 
-      <div className="settings-note">
-        <b>Billing is recorded by hand.</b> Money arrives by bank transfer or UPI; you enter the date it
-        is paid up to. An expired org keeps working for <b>{orgs[0]?.grace_days ?? 7} days</b> (grace), then
-        AI answers stop — logins, data and leads are never withheld.
+      <StatTiles orgs={orgs} />
+
+      <div className="pf-hint">
+        Billing is recorded by hand — money arrives by bank transfer or UPI, you enter the date it's
+        paid up to. An expired company keeps working for <b>{orgs[0]?.grace_days ?? 7} days</b>, then AI
+        answers stop. Logins, data and leads are never withheld.
       </div>
 
-      <div className="table-wrap" style={{ marginBottom: 20 }}>
-        <table className="data-table">
-          <thead><tr>
-            <th>Company</th><th>Plan</th><th>Employees</th><th>Queries today</th>
-            <th>Billing</th><th>Paid till</th><th>Access</th>
-          </tr></thead>
-          <tbody>
-            {orgs.map((o) => (
-              <tr key={o.id}>
-                <td><b>{o.name}</b><div className="muted small">{o.slug}</div></td>
-                <td>
-                  <select value={o.plan_id || ""} onChange={(e) => changePlan(o.id, e.target.value)}>
-                    {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </td>
-                <td>{o.employees} / {o.max_employees}</td>
-                <td>{o.queries_today} / {o.daily_llm_quota}</td>
-                <td><BillingChip o={o} /></td>
-                <td>
-                  <PaidTill o={o} onDone={load}
-                    onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
-                </td>
-                <td>
-                  <button className={`status-chip ${o.is_active ? "chip-green" : "chip-gray"}`}
-                    onClick={() => toggleActive(o)} style={{ cursor: "pointer", border: "none" }}
-                    title="Disable the whole account (separate from billing)">
-                    {o.is_active ? "enabled" : "disabled"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="tenant-grid">
+        {orgs.map((o) => (
+          <TenantCard key={o.id} o={o} plans={plans}
+            onPlan={(v) => changePlan(o.id, v)}
+            onToggle={() => toggleActive(o)}
+            onPay={() => setPaying(o)}
+            onStatus={(s) => setStatus(o, s)} />
+        ))}
+        {orgs.length === 0 && <div className="muted">No companies yet.</div>}
       </div>
 
-      <div className="block-title">Add a company (tenant)</div>
-      <form onSubmit={createOrg}>
-        <div className="calc-fields">
-          <label className="field"><span>Company name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
-          <label className="field"><span>Slug (unique)</span><input value={f.slug} onChange={(e) => set("slug", e.target.value)} required /></label>
-          <label className="field"><span>Plan</span>
-            <select value={f.plan_id} onChange={(e) => set("plan_id", e.target.value)} required>
-              <option value="">Select…</option>
-              {plans.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.max_employees} emp · {p.daily_llm_quota} q/day)</option>)}
-            </select>
-          </label>
-          <label className="field"><span>Admin name</span><input value={f.admin_name} onChange={(e) => set("admin_name", e.target.value)} /></label>
-          <label className="field"><span>Admin email</span><input type="email" value={f.admin_email} onChange={(e) => set("admin_email", e.target.value)} required /></label>
-          <label className="field"><span>Admin password</span><input type="password" value={f.admin_password} onChange={(e) => set("admin_password", e.target.value)} required /></label>
+      <details className="seed-box" style={{ marginTop: 18 }}>
+        <summary>➕ Add a company (tenant)</summary>
+        <p className="muted small" style={{ margin: "8px 0 12px" }}>
+          Creates the company and its one admin account. They start on a 14-day trial — record a
+          payment to put them on a paid period. Give them a starter set of projects above so their
+          assistant isn't empty on day one.
+        </p>
+        <form onSubmit={createOrg}>
+          <div className="calc-fields">
+            <label className="field"><span>Company name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} required /></label>
+            <label className="field"><span>Slug (unique)</span><input value={f.slug} onChange={(e) => set("slug", e.target.value)} required /></label>
+            <label className="field"><span>Plan</span>
+              <select value={f.plan_id} onChange={(e) => set("plan_id", e.target.value)} required>
+                <option value="">Select…</option>
+                {plans.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.max_employees} emp · {p.daily_llm_quota} q/day)</option>)}
+              </select>
+            </label>
+            <label className="field"><span>Admin name</span><input value={f.admin_name} onChange={(e) => set("admin_name", e.target.value)} /></label>
+            <label className="field"><span>Admin email</span><input type="email" value={f.admin_email} onChange={(e) => set("admin_email", e.target.value)} required /></label>
+            <label className="field"><span>Admin password</span><input type="password" value={f.admin_password} onChange={(e) => set("admin_password", e.target.value)} required /></label>
+          </div>
+          <button className="btn btn-primary">Create company</button>
+        </form>
+      </details>
+
+      {paying && (
+        <PaymentDialog o={paying} onClose={() => setPaying(null)} onDone={load}
+          onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
+      )}
+    </div>
+  );
+}
+
+const inr = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
+
+// The four numbers you'd want if someone asked "how's the business?" — and the
+// one that matters most, money at risk, sits where you can't miss it.
+function StatTiles({ orgs }) {
+  const active = orgs.filter((o) => o.status === "active").length;
+  const trial = orgs.filter((o) => o.status === "trialing").length;
+  const risk = orgs.filter((o) => ["past_due", "suspended"].includes(o.status));
+  const mrr = orgs
+    .filter((o) => o.status === "active")
+    .reduce((s, o) => s + (o.price_monthly || 0), 0);
+  const riskMrr = risk.reduce((s, o) => s + (o.price_monthly || 0), 0);
+
+  return (
+    <div className="pf-stats">
+      <div className="pf-stat">
+        <div className="pf-stat-v">{orgs.length}</div>
+        <div className="pf-stat-l">Companies</div>
+      </div>
+      <div className="pf-stat">
+        <div className="pf-stat-v">{active}<span className="pf-stat-sub">{trial ? ` +${trial} trial` : ""}</span></div>
+        <div className="pf-stat-l">Paid &amp; active</div>
+      </div>
+      <div className={`pf-stat ${risk.length ? "pf-stat-risk" : ""}`}>
+        <div className="pf-stat-v">{risk.length}</div>
+        <div className="pf-stat-l">
+          Needs chasing{risk.length ? ` · ${inr(riskMrr)} at risk` : ""}
         </div>
-        <button className="btn btn-primary">Create company</button>
-      </form>
+      </div>
+      <div className="pf-stat pf-stat-hero">
+        <div className="pf-stat-v">{inr(mrr)}</div>
+        <div className="pf-stat-l">Monthly recurring</div>
+      </div>
+    </div>
+  );
+}
+
+function Meter({ used, cap, label }) {
+  const pct = cap ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  return (
+    <div className="tc-meter">
+      <div className="tc-meter-top">
+        <span className="muted small">{label}</span>
+        <span className="tc-meter-n">{used}<span className="muted"> / {cap ?? "∞"}</span></span>
+      </div>
+      <div className={`bill-bar ${pct > 80 ? "bill-bar-warn" : ""}`}><span style={{ width: `${pct}%` }} /></div>
+    </div>
+  );
+}
+
+function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus }) {
+  const [cls, label] = BILLING_CHIP[o.status] || BILLING_CHIP.none;
+  const d = o.days_left;
+  const paidTill = o.expires_at
+    ? new Date(o.expires_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+    : null;
+
+  return (
+    <div className={`tenant-card ${["past_due", "suspended"].includes(o.status) ? "tenant-card-risk" : ""}`}>
+      <div className="tc-head">
+        <div className="tc-avatar">{(o.name || "?")[0].toUpperCase()}</div>
+        <div className="tc-id">
+          <div className="tc-name">{o.name}</div>
+          <div className="muted small">{o.slug}</div>
+        </div>
+        <span className={`status-chip ${cls}`}>{label}</span>
+      </div>
+
+      {o.requested_plan && (
+        <div className="tc-flag">↗ Asked to move to <b>{o.requested_plan}</b></div>
+      )}
+
+      <div className="tc-meters">
+        <Meter used={o.employees} cap={o.max_employees} label="Employees" />
+        <Meter used={o.queries_today} cap={o.daily_llm_quota} label="AI questions today" />
+      </div>
+
+      <div className="tc-row">
+        <span className="muted small">Plan</span>
+        <select className="tc-plan" value={o.plan_id || ""} onChange={(e) => onPlan(e.target.value)}>
+          {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {inr(p.price_monthly)}/mo</option>)}
+        </select>
+      </div>
+
+      <div className="tc-row">
+        <span className="muted small">Paid till</span>
+        <span className="tc-paid">
+          {paidTill || "—"}
+          {d != null && (
+            <span className={`muted small ${d < 0 ? "tc-over" : ""}`}>
+              {d >= 0 ? ` · ${d}d left` : ` · ${Math.abs(d)}d over`}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {o.note && <div className="tc-note" title={o.note}>{o.note}</div>}
+
+      <div className="tc-actions">
+        <button className="btn btn-sm btn-primary" onClick={onPay}>💰 Record payment</button>
+        {o.status === "suspended"
+          ? <button className="btn btn-sm" onClick={() => onStatus("trialing")}>Start trial</button>
+          : <button className="btn btn-sm btn-ghost btn-danger" onClick={() => onStatus("suspended")}>Suspend</button>}
+        <button className={`btn btn-sm btn-ghost tc-access ${o.is_active ? "" : "tc-off"}`}
+          onClick={onToggle}
+          title="Disable the whole account — separate from billing">
+          {o.is_active ? "Enabled" : "Disabled"}
+        </button>
+      </div>
     </div>
   );
 }

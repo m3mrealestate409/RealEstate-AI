@@ -329,11 +329,69 @@ a { color: inherit; text-decoration: none; }
 .chip-red { background: var(--red-soft); color: var(--red); }
 .chip-blue { background: var(--primary-soft); color: var(--primary); }
 
-/* ---- Billing (super-admin: record a payment against a tenant) ---- */
-.bill-cell { display: flex; flex-direction: column; gap: 5px; min-width: 190px; }
-.bill-cell input { font-size: 12px; padding: 4px 7px; border: 1px solid var(--border);
-  border-radius: 7px; background: var(--surface); color: var(--text); width: 100%; box-sizing: border-box; }
-.bill-actions { display: flex; gap: 5px; }
+/* ---- Platform: the tenant console ----
+   Tenants used to be table rows with five inputs crammed into one cell. Cards
+   give each company room to say how it's doing, and the payment form moved to
+   a dialog where a money job belongs. ---- */
+.pf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;
+  margin-bottom: 14px; }
+.pf-stat { border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px;
+  background: var(--surface); }
+.pf-stat-v { font-size: 24px; font-weight: 800; line-height: 1.15; letter-spacing: -.02em; }
+.pf-stat-sub { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.pf-stat-l { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.pf-stat-risk { border-color: var(--amber); background: var(--amber-soft); }
+.pf-stat-risk .pf-stat-v, .pf-stat-risk .pf-stat-l { color: var(--amber); }
+.pf-stat-hero { background: var(--grad); border-color: transparent; color: #fff;
+  box-shadow: 0 10px 26px rgba(99, 102, 241, .3); }
+.pf-stat-hero .pf-stat-l { color: rgba(255, 255, 255, .85); }
+.pf-hint { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+
+.tenant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; }
+.tenant-card { border: 1px solid var(--border); border-radius: 16px; padding: 16px;
+  background: var(--surface); display: flex; flex-direction: column; gap: 12px;
+  transition: box-shadow .18s, transform .18s; }
+.tenant-card:hover { box-shadow: 0 12px 30px rgba(0, 0, 0, .09); transform: translateY(-2px); }
+.tenant-card-risk { border-color: var(--amber); }
+
+.tc-head { display: flex; align-items: center; gap: 10px; }
+.tc-avatar { width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; background: var(--grad);
+  color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+.tc-id { min-width: 0; flex: 1; }
+.tc-name { font-weight: 800; font-size: 14.5px; letter-spacing: -.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-flag { font-size: 12px; font-weight: 700; color: var(--amber); background: var(--amber-soft);
+  border-radius: 8px; padding: 6px 9px; }
+.tc-meters { display: flex; flex-direction: column; gap: 9px; }
+.tc-meter-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+.tc-meter-n { font-size: 12.5px; font-weight: 700; }
+.tc-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tc-plan { font-size: 12.5px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; max-width: 62%; }
+.tc-paid { font-size: 12.5px; font-weight: 700; }
+.tc-over { color: var(--red); font-weight: 700; }
+.tc-note { font-size: 11.5px; color: var(--muted); background: var(--surface-2); border-radius: 8px;
+  padding: 6px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto;
+  padding-top: 10px; border-top: 1px solid var(--border); }
+.tc-access { margin-left: auto; font-size: 11px; }
+.tc-off { color: var(--red); }
+
+/* ---- Modal ---- */
+.modal-back { position: fixed; inset: 0; z-index: 200; background: rgba(15, 18, 28, .5);
+  backdrop-filter: blur(3px); display: grid; place-items: center; padding: 20px; }
+.modal { width: 100%; max-width: 520px; background: var(--surface); border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .3); overflow: hidden;
+  max-height: 90vh; display: flex; flex-direction: column; }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.modal-title { font-weight: 800; font-size: 16px; letter-spacing: -.01em; }
+.modal-x { border: 0; background: none; color: var(--muted); font-size: 15px; cursor: pointer;
+  padding: 2px 6px; border-radius: 7px; }
+.modal-x:hover { background: var(--surface-2); color: var(--text); }
+.modal-body { padding: 16px 18px; overflow-y: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px;
+  border-top: 1px solid var(--border); background: var(--surface-2); }
 
 /* ---- Billing (org admin: Plan & Usage) ---- */
 .bill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 14px 0; }

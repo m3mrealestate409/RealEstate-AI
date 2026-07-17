@@ -6,6 +6,28 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.19.0] — 2026-07-17
+
+### Changed — Platform rebuilt around tenants, not table rows
+The tenant list had grown into a seven-column table with **five inputs crammed
+into one cell** — date, amount, method, reference, note — so recording money,
+the most careful job on the page, looked and felt like clutter. And nothing
+answered the first question you actually have: how is the business doing?
+
+- **Stat tiles**: companies, paid & active (+ trials), needs chasing *with the
+  revenue at risk*, and monthly recurring — the last one carried as the hero.
+  All derived from data already on the page; no new endpoint.
+- **Tenant cards** replace the table. Each shows who they are, billing status,
+  usage meters for employees and AI questions (amber past 80%), plan, paid-till
+  with days left or days over, and any pending plan request. Cards at risk carry
+  an amber border, so a lapsed company is visible before you read a word.
+- **Recording a payment is now a dialog** — proper labelled fields, amount
+  pre-filled from the plan, one Save. Closes on Esc, backdrop click or ✕.
+- Disabling a whole account now asks first, and says how it differs from
+  Suspend — one kills logins, the other only pauses AI.
+- "Add a company" is collapsed by default: onboarding is occasional, and it was
+  taking the bottom half of the page every day.
+
 ## [2.18.1] — 2026-07-17
 
 ### Changed — Billing and System Health swapped places

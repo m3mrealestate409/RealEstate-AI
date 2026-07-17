@@ -6,6 +6,28 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.19.1] — 2026-07-17
+
+### Fixed — The browser was autofilling "add a teammate" with your own login
+The create-user form had no `autocomplete` hints, so password managers filled it
+with the **signed-in admin's** email and password. Left unnoticed, "add a
+teammate" became "recreate yourself" and failed with a 409 that explained
+nothing. Now `autocomplete="off"` on the form and fields, `new-password` on the
+password, and non-standard field names so managers don't recognise them.
+
+### Changed — Team page rebuilt
+- **Seat summary** up top: seats used against the plan's cap, with a meter that
+  turns amber near the limit and red at it — *"5 / 5 · Seats full — upgrade to
+  add more"*. The cap was previously invisible until a 403 refused the create.
+  Plus managers, sales, and how many can take Live Chat.
+- **Team rows** replace the table: a role-tinted avatar, name over email, role
+  badge with a tooltip of what it grants, and labelled Tier / Live Chat
+  controls. Deactivated people fade rather than disappear.
+- The action button said **"Toggle"** — which named neither what it did nor
+  which direction. It now reads **Deactivate** / **Reactivate**, asks first, and
+  says the seat frees up but the history stays.
+- "Add a teammate" collapses, like Add a company on Platform.
+
 ## [2.19.0] — 2026-07-17
 
 ### Changed — Platform rebuilt around tenants, not table rows

@@ -1240,10 +1240,17 @@ function ImportCsv() {
 function Users() {
   const [users, setUsers] = useState([]);
   const [limits, setLimits] = useState({ basic_daily_limit: "", advanced_daily_limit: "" });
+  const [seats, setSeats] = useState(null);      // {employees, max_employees, plan}
   const [f, setF] = useState({ email: "", name: "", role: "sales", tier: "basic", password: "" });
   const [msg, setMsg] = useState(null);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const load = () => { api.listUsers().then(setUsers); api.getTierLimits().then(setLimits); };
+  const load = () => {
+    api.listUsers().then(setUsers);
+    api.getTierLimits().then(setLimits);
+    // The seat cap lives with the plan. A super-admin has no org, so this 404s
+    // for them — hence the silent catch and the null guard below.
+    api.myBilling().then(setSeats).catch(() => setSeats(null));
+  };
   useEffect(() => { load(); }, []);
 
   async function create(e) {
@@ -1257,7 +1264,14 @@ function Users() {
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
 
-  async function toggle(id) { await api.toggleUser(id); load(); }
+  async function toggle(u) {
+    const warn = u.is_active === false
+      ? `Reactivate ${u.name || u.email}? They'll be able to sign in again and will take a seat.`
+      : `Deactivate ${u.name || u.email}? They can't sign in, but their history stays and the seat frees up.`;
+    if (!confirm(warn)) return;
+    try { await api.toggleUser(u.id); load(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
   async function changeTier(id, tier) { await api.setUserTier(id, tier); load(); }
   async function toggleLive(id) { await api.toggleUserLiveChat(id); load(); }
   async function saveLimits() {
@@ -1286,6 +1300,8 @@ function Users() {
       </div>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
+      <SeatSummary users={users} seats={seats} />
+
       <div className="tier-limits-box">
         <div className="block-title">Daily AI-query limit per tier</div>
         <div className="muted small" style={{ marginBottom: 8 }}>
@@ -1304,10 +1320,21 @@ function Users() {
         </div>
       </div>
 
-      <form onSubmit={create}>
+      {/* autoComplete="off": the browser's password manager was filling this
+          with the SIGNED-IN admin's own email and password, so "add a teammate"
+          silently became "recreate yourself" and failed with a 409. */}
+      <details className="seed-box" style={{ margin: "16px 0" }}>
+        <summary>➕ Add a teammate</summary>
+      <form onSubmit={create} autoComplete="off">
         <div className="calc-fields">
-          <label className="field"><span>Email</span><input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} required /></label>
-          <label className="field"><span>Name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} /></label>
+          <label className="field"><span>Email</span>
+            <input type="email" name="teammate-email" autoComplete="off" value={f.email}
+              onChange={(e) => set("email", e.target.value)} required />
+          </label>
+          <label className="field"><span>Name</span>
+            <input name="teammate-name" autoComplete="off" value={f.name}
+              onChange={(e) => set("name", e.target.value)} />
+          </label>
           <label className="field"><span>Role — what they can do</span>
             <select value={f.role} onChange={(e) => set("role", e.target.value)}>
               <option value="sales">Sales — ask questions, see projects</option>
@@ -1320,39 +1347,115 @@ function Users() {
               <option value="advanced">Advanced — {limits.advanced_daily_limit ?? 100}/day</option>
             </select>
           </label>
-          <label className="field"><span>Password</span><input type="password" value={f.password} onChange={(e) => set("password", e.target.value)} required /></label>
+          <label className="field"><span>Password they'll sign in with</span>
+            <input type="password" name="teammate-password" autoComplete="new-password"
+              value={f.password} onChange={(e) => set("password", e.target.value)} required />
+          </label>
         </div>
-        <button className="btn btn-primary">Create user</button>
+        <button className="btn btn-primary">Create teammate</button>
       </form>
+      </details>
 
-      <div className="table-wrap" style={{ marginTop: 18 }}>
-        <table className="data-table">
-          <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Tier</th><th>Live Chat</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {users.map((u) => {
-              const liveOn = u.role === "admin" || u.can_live_chat;
-              return (
-              <tr key={u.id}>
-                <td>{u.email}</td><td>{u.name || "—"}</td>
-                <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
-                <td>
-                  <select value={u.tier || "basic"} onChange={(e) => changeTier(u.id, e.target.value)}>
-                    <option value="basic">basic</option><option value="advanced">advanced</option>
-                  </select>
-                </td>
-                <td>
-                  {u.role === "admin"
-                    ? <span className="status-chip chip-green" title="Admins always have Live Chat">always</span>
-                    : <button className={`btn btn-sm ${liveOn ? "btn-primary" : ""}`} onClick={() => toggleLive(u.id)}>{u.can_live_chat ? "✓ On" : "Off"}</button>}
-                </td>
-                <td>{u.is_active === false ? <span className="status-chip chip-gray">inactive</span> : <span className="status-chip chip-green">active</span>}</td>
-                <td><button className="btn btn-ghost" onClick={() => toggle(u.id)}>Toggle</button></td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="team-list">
+        {users.map((u) => (
+          <TeamRow key={u.id} u={u}
+            onTier={(v) => changeTier(u.id, v)}
+            onLive={() => toggleLive(u.id)}
+            onToggle={() => toggle(u)} />
+        ))}
+        {users.length === 0 && <div className="muted">Nobody yet — add your first teammate above.</div>}
       </div>
+    </div>
+  );
+}
+
+// Seats are a plan limit, so hitting the cap is a sales moment, not an error to
+// discover at the point of failure. Shown before the list, not after a 403.
+function SeatSummary({ users, seats }) {
+  const active = users.filter((u) => u.is_active !== false).length;
+  const cap = seats?.max_employees ?? null;
+  const pct = cap ? Math.min(100, Math.round((active / cap) * 100)) : 0;
+  const full = cap != null && active >= cap;
+  const near = cap != null && !full && pct >= 80;
+  const live = users.filter((u) => u.role === "admin" || u.can_live_chat).length;
+
+  return (
+    <div className="pf-stats" style={{ marginBottom: 14 }}>
+      <div className={`pf-stat ${full ? "pf-stat-full" : near ? "pf-stat-risk" : ""}`}>
+        <div className="pf-stat-v">{active}<span className="pf-stat-sub">/ {cap ?? "∞"}</span></div>
+        <div className="pf-stat-l">
+          {full ? "Seats full — upgrade to add more" : near ? `Seats used · ${cap - active} left` : "Seats used"}
+        </div>
+        {cap != null && (
+          <div className={`bill-bar ${near || full ? "bill-bar-warn" : ""}`} style={{ marginTop: 8 }}>
+            <span style={{ width: `${pct}%` }} />
+          </div>
+        )}
+      </div>
+      <div className="pf-stat">
+        <div className="pf-stat-v">{users.filter((u) => u.role === "manager").length}</div>
+        <div className="pf-stat-l">Managers</div>
+      </div>
+      <div className="pf-stat">
+        <div className="pf-stat-v">{users.filter((u) => u.role === "sales").length}</div>
+        <div className="pf-stat-l">Sales</div>
+      </div>
+      <div className="pf-stat">
+        <div className="pf-stat-v">{live}</div>
+        <div className="pf-stat-l">Can take Live Chat</div>
+      </div>
+    </div>
+  );
+}
+
+const ROLE_HINT = {
+  admin: "Full access — settings, billing, the team",
+  manager: "Projects, analytics and knowledge",
+  sales: "Ask questions and see projects",
+};
+
+function TeamRow({ u, onTier, onLive, onToggle }) {
+  const off = u.is_active === false;
+  const initial = (u.name || u.email || "?")[0].toUpperCase();
+  const liveOn = u.role === "admin" || u.can_live_chat;
+
+  return (
+    <div className={`team-row ${off ? "team-row-off" : ""}`}>
+      <div className={`team-av role-av-${u.role}`}>{initial}</div>
+
+      <div className="team-id">
+        <div className="team-name">
+          {u.name || u.email}
+          {off && <span className="status-chip chip-gray" style={{ marginLeft: 8 }}>deactivated</span>}
+        </div>
+        <div className="muted small">{u.email}</div>
+      </div>
+
+      <div className="team-role" title={ROLE_HINT[u.role]}>
+        <span className={`role-badge role-${u.role}`}>{u.role}</span>
+      </div>
+
+      <label className="team-ctl">
+        <span className="muted small">Tier</span>
+        <select value={u.tier || "basic"} onChange={(e) => onTier(e.target.value)} disabled={off}>
+          <option value="basic">Basic</option><option value="advanced">Advanced</option>
+        </select>
+      </label>
+
+      <div className="team-ctl">
+        <span className="muted small">Live Chat</span>
+        {u.role === "admin" ? (
+          <span className="status-chip chip-green" title="Admins always have Live Chat">always</span>
+        ) : (
+          <button className={`btn btn-sm ${liveOn ? "btn-primary" : ""}`} onClick={onLive} disabled={off}>
+            {u.can_live_chat ? "✓ On" : "Off"}
+          </button>
+        )}
+      </div>
+
+      <button className={`btn btn-sm btn-ghost ${off ? "" : "btn-danger"} team-act`} onClick={onToggle}>
+        {off ? "Reactivate" : "Deactivate"}
+      </button>
     </div>
   );
 }

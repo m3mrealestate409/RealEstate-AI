@@ -570,8 +570,16 @@ function Plans() {
   const load = () => api.saPlans().then(setPlans);
   useEffect(() => { load(); }, []);
 
-  async function saveField(id, field, value) {
-    await api.saUpdatePlan(id, { [field]: Number(value) }); load();
+  // One save per card, not one per field: changing a plan usually means
+  // changing more than one number, and three separate Save buttons made that
+  // three round-trips and three chances to leave half a change behind.
+  async function savePlan(id, patch) {
+    setMsg(null);
+    try {
+      await api.saUpdatePlan(id, patch);
+      await load();
+      setMsg({ ok: true, text: "Plan updated. It applies from their next bill." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); throw err; }
   }
   async function createPlan(e) {
     e.preventDefault(); setMsg(null);
@@ -605,40 +613,8 @@ function Plans() {
 
       <div className="plan-grid">
         {plans.map((p) => (
-          <div key={p.id} className={`plan-card ${p.is_active ? "" : "plan-card-off"}`}>
-            <div className="plan-card-head">
-              <div className="plan-card-name">{p.name}</div>
-              <button className={`status-chip ${p.is_active ? "chip-green" : "chip-gray"} plan-toggle`}
-                onClick={() => toggleActive(p)}
-                title={p.is_active ? "Offered to customers — click to hide" : "Hidden from customers — click to offer"}>
-                {p.is_active ? "offered" : "hidden"}
-              </button>
-            </div>
-
-            <div className="plan-price">
-              <span className="plan-cur">₹</span>
-              <EditNum value={p.price_monthly} onSave={(v) => saveField(p.id, "price_monthly", v)} big />
-              <span className="plan-per">/month</span>
-            </div>
-
-            <div className="plan-rows">
-              <div className="plan-row">
-                <span className="muted small">Max employees</span>
-                <EditNum value={p.max_employees} onSave={(v) => saveField(p.id, "max_employees", v)} />
-              </div>
-              <div className="plan-row">
-                <span className="muted small">AI questions / day</span>
-                <EditNum value={p.daily_llm_quota} onSave={(v) => saveField(p.id, "daily_llm_quota", v)} />
-              </div>
-            </div>
-
-            <div className="plan-foot">
-              <span><b>{p.organizations}</b> compan{p.organizations === 1 ? "y" : "ies"}</span>
-              {p.organizations > 0 && p.price_monthly > 0 && (
-                <span className="muted">{inr(p.price_monthly * p.organizations)}/mo</span>
-              )}
-            </div>
-          </div>
+          <PlanCard key={p.id} p={p} onSave={(patch) => savePlan(p.id, patch)}
+            onToggle={() => toggleActive(p)} />
         ))}
       </div>
 
@@ -665,18 +641,90 @@ function Plans() {
   );
 }
 
-// Inline-editable number (saves on Enter, or via the Save button that appears
-// once it differs — so a stray keystroke never silently reprices a plan).
-function EditNum({ value, onSave, big = false }) {
-  const [v, setV] = useState(value);
-  useEffect(() => { setV(value); }, [value]);
-  const changed = String(v) !== String(value);
+// A plan you can edit as a whole. Every field is a draft until you save, and
+// the save bar appears at the FOOT of the card — the first version put a tiny
+// Save between the number and "/month", which read as part of the price rather
+// than as an action, so it went unnoticed.
+function PlanCard({ p, onSave, onToggle }) {
+  const fields = ["price_monthly", "max_employees", "daily_llm_quota"];
+  const clean = () => ({
+    price_monthly: p.price_monthly,
+    max_employees: p.max_employees,
+    daily_llm_quota: p.daily_llm_quota,
+  });
+  const [d, setD] = useState(clean);
+  const [busy, setBusy] = useState(false);
+  // Re-sync when the server sends a fresh copy (e.g. after someone else saved).
+  useEffect(() => { setD(clean()); }, [p.price_monthly, p.max_employees, p.daily_llm_quota]);
+
+  const set = (k, v) => setD((s) => ({ ...s, [k]: v }));
+  const dirty = fields.some((k) => String(d[k]) !== String(p[k]));
+  const valid = fields.every((k) => d[k] !== "" && Number(d[k]) >= 0);
+
+  async function save() {
+    if (!dirty || !valid) return;
+    setBusy(true);
+    try {
+      await onSave({
+        price_monthly: Number(d.price_monthly),
+        max_employees: Number(d.max_employees),
+        daily_llm_quota: Number(d.daily_llm_quota),
+      });
+    } catch { /* the page shows the error; keep the draft so nothing is lost */ }
+    finally { setBusy(false); }
+  }
+
   return (
-    <span className={`ecr-inline ${big ? "editnum-big" : ""}`}>
-      <input type="number" value={v} style={big ? undefined : { width: 90 }}
-        onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && changed) onSave(v); }} />
-      {changed && <button type="button" className="btn btn-sm btn-primary" onClick={() => onSave(v)}>Save</button>}
-    </span>
+    <div className={`plan-card ${p.is_active ? "" : "plan-card-off"} ${dirty ? "plan-card-dirty" : ""}`}>
+      <div className="plan-card-head">
+        <div className="plan-card-name">{p.name}</div>
+        <button className={`status-chip ${p.is_active ? "chip-green" : "chip-gray"} plan-toggle`}
+          onClick={onToggle}
+          title={p.is_active ? "Offered to customers — click to hide" : "Hidden from customers — click to offer"}>
+          {p.is_active ? "offered" : "hidden"}
+        </button>
+      </div>
+
+      <label className="plan-price">
+        <span className="plan-cur">₹</span>
+        <input type="number" min="0" className="plan-price-in" value={d.price_monthly}
+          onChange={(e) => set("price_monthly", e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+        <span className="plan-per">/month</span>
+      </label>
+
+      <div className="plan-rows">
+        <label className="plan-row">
+          <span className="muted small">Max employees</span>
+          <input type="number" min="1" value={d.max_employees}
+            onChange={(e) => set("max_employees", e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+        </label>
+        <label className="plan-row">
+          <span className="muted small">AI questions / day</span>
+          <input type="number" min="0" value={d.daily_llm_quota}
+            onChange={(e) => set("daily_llm_quota", e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+        </label>
+      </div>
+
+      {dirty ? (
+        <div className="plan-save">
+          <button className="btn btn-sm btn-ghost" onClick={() => setD(clean())} disabled={busy}>
+            Cancel
+          </button>
+          <button className="btn btn-sm btn-primary" onClick={save} disabled={busy || !valid}>
+            {busy ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      ) : (
+        <div className="plan-foot">
+          <span><b>{p.organizations}</b> compan{p.organizations === 1 ? "y" : "ies"}</span>
+          {p.organizations > 0 && p.price_monthly > 0 && (
+            <span className="muted">{inr(p.price_monthly * p.organizations)}/mo</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

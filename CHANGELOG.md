@@ -6,6 +6,25 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.19.3] — 2026-07-17
+
+### Fixed — The plan Save button was hiding inside the price
+It existed and worked, but it was rendered *between the number and "/month"* —
+so it read as part of the price rather than as an action, and went unnoticed.
+Reported, fairly, as "there's no save option".
+
+Worse, each field had its **own** Save. Changing a plan usually means changing
+more than one number, so that was three round-trips and three chances to leave
+half a change behind.
+
+- A plan card is now edited **as a whole**: every field is a draft until saved.
+- **Cancel / Save changes** sit at the foot of the card, in the footer's place
+  so nothing jumps when they appear, and an edited card is outlined until it's
+  saved — a half-made change can't be walked away from unnoticed.
+- Enter saves from any field; Cancel restores every field at once.
+- Saving confirms what it did — *"applies from their next bill"* — rather than
+  silently refreshing.
+
 ## [2.19.2] — 2026-07-17
 
 ### Fixed — Billing hung on "Loading…" forever for the platform owner

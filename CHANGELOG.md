@@ -6,6 +6,21 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.11.1] — 2026-07-17
+
+### Changed — Lead webhook moved next to API Keys
+The CRM lead webhook lived under Growth → Leads, mixed in with the lead list —
+even though it is an *integration* setting, and its natural counterpart (API
+Keys) sat in a different category. That split made the two directions hard to
+tell apart.
+
+- New **📤 Lead Webhook** sub-tab under **🔌 Integrations**, beside **API Keys**:
+  - **API Keys** = inbound — *they* call *us* (ask questions, read leads).
+  - **Lead Webhook** = outbound — *we* call *them* (push every new lead).
+- Each panel now says which direction it is, and notes that most setups use both.
+- **Growth → Leads** is now purely lead management (list, status, delete), with
+  a pointer to the new tab.
+
 ## [2.11.0] — 2026-07-16
 
 ### Added — Connection details in the UI (no developer needed)

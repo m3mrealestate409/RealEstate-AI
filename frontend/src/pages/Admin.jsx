@@ -39,6 +39,7 @@ export default function Admin() {
     ] },
     { id: "connect", label: "Integrations", ico: "🔌", tabs: [
       { id: "integrations", label: "Integrations" }, { id: "apikeys", label: "API Keys" },
+      { id: "webhook", label: "📤 Lead Webhook" },
     ] },
     { id: "system", label: "System", ico: "⚙️", tabs: [
       ...(isSuper ? [{ id: "ai", label: "AI Settings" }] : []),
@@ -87,6 +88,7 @@ export default function Admin() {
       {tab === "insights" && <Insights />}
       {tab === "leads" && <Leads />}
       {tab === "apikeys" && <ApiKeys />}
+      {tab === "webhook" && <LeadWebhook />}
       {tab === "integrations" && <Integrations />}
       {tab === "audit" && <AuditLog />}
     </div>
@@ -1333,17 +1335,18 @@ function Insights() {
 
 const LEAD_STATUSES = ["new", "contacted", "qualified", "closed"];
 
-function Leads() {
-  const [rows, setRows] = useState([]);
+// Outbound side of an integration: where WE send each new lead. Lives next to
+// API Keys (the inbound side) — both are "how systems connect", whereas the
+// Leads tab is about working the leads themselves.
+function LeadWebhook() {
   const [webhook, setWebhook] = useState("");
   const [hdrName, setHdrName] = useState("");
   const [hdrValue, setHdrValue] = useState("");
   const [defHdr, setDefHdr] = useState("X-Webhook-Secret");
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
-  const load = () => api.listLeads().then(setRows).catch(() => setRows([]));
+
   useEffect(() => {
-    load();
     api.getCrmConfig().then((c) => {
       setWebhook(c.crm_webhook_url || "");
       setHdrName(c.crm_webhook_header || "");
@@ -1363,10 +1366,56 @@ function Leads() {
       setWebhook(r.crm_webhook_url || "");
       setHdrName(r.crm_webhook_header || "");
       setHdrValue(r.crm_webhook_secret || "");
-      setMsg({ ok: true, text: "CRM webhook saved — new leads will be pushed there." });
+      setMsg({ ok: true, text: webhook.trim() ? "Saved — new leads will be pushed there." : "Saved — lead push is now off." });
     } catch (e) { setMsg({ ok: false, text: e.message }); }
     finally { setSaving(false); }
   }
+
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        <b>📤 Outgoing — we call your CRM.</b> Every new lead is POSTed to the URL below the moment it's
+        captured. This is the opposite direction to <b>🔌 API Keys</b> (where <i>they</i> call <i>us</i> to ask
+        questions and read data) — most setups use both.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      <div className="tier-limits-box">
+        <div className="block-title">Your CRM's lead URL</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          A URL that accepts a <code>POST</code> with JSON. Every lead — from the callback form <i>or</i> from a
+          phone number typed in chat — arrives with the same fields:
+          <code> id, name, phone, email, message, project_interest, source, page_url, status, created_at</code>.
+          Retried up to 3× if your CRM is briefly down; leave blank to turn the push off.
+        </div>
+        <div className="ecr-inline" style={{ maxWidth: 640, marginBottom: 10 }}>
+          <input style={{ flex: 1 }} placeholder="https://your-crm.com/webhooks/leads" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
+        </div>
+        <div className="muted small" style={{ marginBottom: 6 }}>
+          Optional shared secret — sent as a header so your CRM can verify the call really came from us.
+        </div>
+        <div className="ecr-inline" style={{ maxWidth: 640 }}>
+          <input style={{ width: 200 }} placeholder={defHdr} value={hdrName} onChange={(e) => setHdrName(e.target.value)} />
+          <input style={{ flex: 1 }} type="password" placeholder="secret value (leave blank for none)" value={hdrValue} onChange={(e) => setHdrValue(e.target.value)} />
+          <button className="btn btn-primary" onClick={saveWebhook} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+
+      <div className="conn-hint" style={{ marginTop: 12 }}>
+        Every push also carries <code>X-Idempotency-Key: rag-lead-&lt;id&gt;</code>, so a retry can never create a
+        duplicate. If a push fails permanently the lead is still safe here — your CRM can catch up any time via
+        the <b>Read leads</b> endpoint (see 🔌 API Keys).
+      </div>
+    </div>
+  );
+}
+
+function Leads() {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState(null);
+  const load = () => api.listLeads().then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+
   async function changeStatus(id, status) {
     try { await api.updateLeadStatus(id, status); await load(); }
     catch (e) { setMsg({ ok: false, text: e.message }); }
@@ -1380,31 +1429,10 @@ function Leads() {
   return (
     <div className="admin-form">
       <div className="settings-note">
-        Prospects captured by the assistant (website widget, CRM, WhatsApp). Optionally push every new lead to
-        your own CRM via a <b>webhook</b> — the engine POSTs the lead's details there in real time.
+        Prospects captured by the assistant (website widget, CRM, WhatsApp). To push every new lead straight
+        into your CRM, set it up in <b>🔌 Integrations → 📤 Lead Webhook</b>.
       </div>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
-
-      <div className="tier-limits-box">
-        <div className="block-title">CRM webhook (optional)</div>
-        <div className="muted small" style={{ marginBottom: 8 }}>
-          Paste a URL that accepts a <code>POST</code> with JSON. Every new lead — from the callback form
-          <i> or</i> from a phone number typed in chat — is sent there in real time with the same fields:
-          <code> id, name, phone, email, message, project_interest, source, page_url, status, created_at</code>.
-          Retried up to 3× if your CRM is briefly down.
-        </div>
-        <div className="ecr-inline" style={{ maxWidth: 640, marginBottom: 10 }}>
-          <input style={{ flex: 1 }} placeholder="https://your-crm.com/webhooks/leads" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
-        </div>
-        <div className="muted small" style={{ marginBottom: 6 }}>
-          Optional shared secret — sent as a header so your CRM can verify the call came from us.
-        </div>
-        <div className="ecr-inline" style={{ maxWidth: 640 }}>
-          <input style={{ width: 200 }} placeholder={defHdr} value={hdrName} onChange={(e) => setHdrName(e.target.value)} />
-          <input style={{ flex: 1 }} type="password" placeholder="secret value (leave blank for none)" value={hdrValue} onChange={(e) => setHdrValue(e.target.value)} />
-          <button className="btn btn-primary" onClick={saveWebhook} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-        </div>
-      </div>
 
       <div className="table-wrap" style={{ marginTop: 18 }}>
         <table className="data-table">

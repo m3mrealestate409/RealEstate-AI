@@ -57,10 +57,11 @@ payment plans, inventory and dates are always exact.
 | [troubleshooting.md](troubleshooting.md) | Fix the issues that actually come up. |
 | [security.md](security.md) | The authentication, authorization and abuse-protection model. |
 
-**Plan**
+**Plan & reference**
 | Document | Read it to… |
 |---|---|
 | [roadmap.md](roadmap.md) | Technical debt, in-progress hardening, and the product roadmap. |
+| [glossary.md](glossary.md) | Definitions of the domain terms used throughout. |
 | [DOCUMENTATION_GAP_REPORT.md](DOCUMENTATION_GAP_REPORT.md) | The documentation audit: completeness score and gaps. |
 
 ### Related files in the repository root (not in `/docs`)

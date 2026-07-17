@@ -708,23 +708,33 @@ function PlanCard({ p, onSave, onToggle }) {
         </label>
       </div>
 
-      {dirty ? (
-        <div className="plan-save">
-          <button className="btn btn-sm btn-ghost" onClick={() => setD(clean())} disabled={busy}>
-            Cancel
-          </button>
-          <button className="btn btn-sm btn-primary" onClick={save} disabled={busy || !valid}>
-            {busy ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      ) : (
-        <div className="plan-foot">
-          <span><b>{p.organizations}</b> compan{p.organizations === 1 ? "y" : "ies"}</span>
-          {p.organizations > 0 && p.price_monthly > 0 && (
-            <span className="muted">{inr(p.price_monthly * p.organizations)}/mo</span>
+      {/* The save row is ALWAYS here, so there is never a moment where the card
+          offers no way to save. The button just sits disabled until something
+          actually changes — which also stops pointless no-op saves. */}
+      <div className="plan-foot">
+        <span className="plan-foot-meta">
+          {dirty ? (
+            <span className="plan-unsaved">● Unsaved changes</span>
+          ) : (
+            <>
+              <b>{p.organizations}</b> compan{p.organizations === 1 ? "y" : "ies"}
+              {p.organizations > 0 && p.price_monthly > 0 && (
+                <span className="muted"> · {inr(p.price_monthly * p.organizations)}/mo</span>
+              )}
+            </>
           )}
-        </div>
-      )}
+        </span>
+        <span className="plan-foot-actions">
+          {dirty && (
+            <button className="btn btn-sm btn-ghost" onClick={() => setD(clean())} disabled={busy}>
+              Cancel
+            </button>
+          )}
+          <button className="btn btn-sm btn-primary" onClick={save} disabled={!dirty || busy || !valid}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </span>
+      </div>
     </div>
   );
 }

@@ -439,11 +439,11 @@ a { color: inherit; text-decoration: none; }
 .plan-row input { width: 88px; font-size: 13px; padding: 4px 8px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--surface); color: var(--text); text-align: right; }
 .plan-row input:focus { border-color: var(--primary); outline: none; }
-.plan-foot { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px;
-  padding-top: 10px; border-top: 1px solid var(--border); margin-top: auto; }
-/* Sits where the footer was, so the card doesn't jump when it appears. */
-.plan-save { display: flex; gap: 6px; justify-content: flex-end; padding-top: 10px;
-  border-top: 1px solid var(--border); margin-top: auto; }
+.plan-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  font-size: 12.5px; padding-top: 10px; border-top: 1px solid var(--border); margin-top: auto; }
+.plan-foot-meta { min-width: 0; }
+.plan-foot-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.plan-unsaved { color: var(--primary); font-weight: 700; }
 
 /* ---- Modal ---- */
 .modal-back { position: fixed; inset: 0; z-index: 200; background: rgba(15, 18, 28, .5);

@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.19.4] — 2026-07-17
+
+### Fixed — The plan Save button only existed after you'd edited
+v2.19.3 fixed *where* the Save button sat, but it still appeared only once a
+field changed — so a plan card at rest showed no way to save at all, and it
+read as "there is no save option". Now every card always shows a **Save**
+button; it sits disabled (greyed) until a value actually changes, which also
+stops no-op saves. Cancel and an "● Unsaved changes" note appear alongside it
+only when there's something to save.
+
 ## [2.19.3] — 2026-07-17
 
 ### Fixed — The plan Save button was hiding inside the price

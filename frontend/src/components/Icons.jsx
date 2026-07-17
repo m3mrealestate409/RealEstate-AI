@@ -101,6 +101,12 @@ const PATHS = {
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </>
   ),
+  billing: (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 18, className = "" }) {

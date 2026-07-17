@@ -129,9 +129,9 @@ export default function Layout() {
               <span className="nav-ic"><Icon name="knowledge" /></span> Knowledge
             </NavLink>
           )}
-          {isManager && (
-            <NavLink to="/system" className="nav-link">
-              <span className="nav-ic"><Icon name="health" /></span> System Health
+          {isAdmin && (
+            <NavLink to="/billing" className="nav-link">
+              <span className="nav-ic"><Icon name="billing" /></span> Billing
             </NavLink>
           )}
           {isSuperAdmin && (

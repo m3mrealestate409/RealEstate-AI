@@ -10,7 +10,7 @@ import Admin from "./pages/Admin.jsx";
 import LiveChat from "./pages/LiveChat.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Knowledge from "./pages/Knowledge.jsx";
-import SystemHealth from "./pages/SystemHealth.jsx";
+import Billing from "./pages/Billing.jsx";
 import Platform from "./pages/Platform.jsx";
 
 function Protected({ children }) {
@@ -37,7 +37,9 @@ export default function App() {
         <Route path="calculators" element={<Calculators />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="knowledge" element={<Knowledge />} />
-        <Route path="system" element={<SystemHealth />} />
+        {/* System Health moved into Admin → System; billing came the other way. */}
+        <Route path="system" element={<Navigate to="/admin" replace />} />
+        <Route path="billing" element={<Billing />} />
         <Route path="platform" element={<Platform />} />
         <Route path="live" element={<LiveChat />} />
         <Route path="admin" element={<Admin />} />

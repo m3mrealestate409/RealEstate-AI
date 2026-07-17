@@ -6,6 +6,26 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.18.1] — 2026-07-17
+
+### Changed — Billing and System Health swapped places
+Two pages were in each other's homes. Billing sat three clicks deep under Admin
+even though "what am I paying for" is its own job, not an administration task —
+while System Health had a top-level sidebar slot despite being the thing you
+look at only when something is wrong.
+
+- **Billing** is now a sidebar page (`/billing`) with its tabs intact —
+  Plan & Usage, Payments, Pricing. Admin-only, matching its endpoints.
+- **System Health** moved into **Admin → System**, beside Audit Log and AI
+  Settings, where the other diagnostics already live.
+- `/system` redirects to `/admin` rather than 404ing on an old bookmark.
+- The billing components moved to their own `pages/Billing.jsx`; `Admin.jsx`
+  lost 291 lines and keeps only the lapsed-payment banner, which still belongs
+  where admins actually work.
+
+**Note:** System Health used to be visible to managers; inside Admin it is
+admin-only. Say the word if managers should keep it.
+
 ## [2.18.0] — 2026-07-17
 
 ### Fixed — A project slug was unique across the whole platform

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 
-export default function SystemHealth() {
+// Lives inside Admin → System rather than in the sidebar: it answers "is the
+// engine up", which you look at when something is wrong, not every day.
+export function SystemHealthPanel() {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
 
@@ -10,17 +12,14 @@ export default function SystemHealth() {
   }
   useEffect(() => { load(); }, []);
 
-  if (err) return <div className="page"><div className="alert alert-error">{err}</div></div>;
-  if (!d) return <div className="page muted">Loading…</div>;
+  if (err) return <div className="alert alert-error">{err}</div>;
+  if (!d) return <div className="muted">Loading…</div>;
 
   return (
-    <div className="page">
-      <div className="page-head row-between">
-        <div>
-          <h2>System Health</h2>
-          <p className="muted">Live status of the engine's services.</p>
-        </div>
-        <button className="btn" onClick={load}>Refresh</button>
+    <div className="admin-form">
+      <div className="settings-note">
+        <b>🩺 Live status of the engine's services.</b> If the assistant is behaving oddly, look here
+        first — a service being down explains more than any prompt ever will.
       </div>
 
       <div className={`health-banner ${d.healthy ? "ok" : "bad"}`}>
@@ -37,6 +36,8 @@ export default function SystemHealth() {
           </div>
         ))}
       </div>
+
+      <button className="btn" style={{ marginTop: 14 }} onClick={load}>Refresh</button>
     </div>
   );
 }

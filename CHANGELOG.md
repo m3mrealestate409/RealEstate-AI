@@ -6,6 +6,20 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.16.1] — 2026-07-17
+
+### Added — Alerts bell in the sidebar (platform owner)
+The pending-requests box only exists on Platform, so you had to already be
+looking at the right page to see money waiting on you.
+
+- A **bell** now sits next to the brand in the sidebar, with a **red count**
+  badge. Click it for the list; clicking a row jumps to Platform. Polls every
+  60s, closes on click-away.
+- Shown to **super-admins only** — it reads a super-admin endpoint, so rendering
+  it for an org admin would just 403 in a loop.
+- The panel opens rightward: at 268px it is wider than the 256px sidebar, so
+  anchoring it to the bell's right edge pushed it off-screen.
+
 ## [2.16.0] — 2026-07-17
 
 ### Added — The platform owner actually gets told about plan requests

@@ -1,8 +1,65 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { api } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { BrandMark } from "./Logo.jsx";
 import Icon from "./Icons.jsx";
+
+// Platform-owner alerts. Lives in the shell rather than on the Platform page,
+// because the whole point is to be seen from wherever you happen to be — a
+// tenant asking to change plan is money waiting on you.
+function AlertsBell() {
+  const [rows, setRows] = useState([]);
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const load = () => api.saRequests().then(setRows).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Click-away, so the panel doesn't sit there once you've moved on.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+
+  const n = rows.length;
+  return (
+    <div className="bell-wrap" ref={box}>
+      <button className="bell-btn" onClick={() => setOpen((o) => !o)}
+        aria-label={n ? `${n} alerts` : "Alerts"} title={n ? `${n} waiting` : "No alerts"}>
+        <Icon name="bell" size={18} />
+        {n > 0 && <span className="bell-dot">{n > 9 ? "9+" : n}</span>}
+      </button>
+
+      {open && (
+        <div className="bell-pop">
+          <div className="bell-pop-head">Alerts{n > 0 && ` · ${n}`}</div>
+          {n === 0 ? (
+            <div className="bell-empty">Nothing waiting. Plan-change requests show up here.</div>
+          ) : (
+            rows.map((r) => (
+              <button key={r.organization_id} className="bell-item"
+                onClick={() => { setOpen(false); navigate("/platform"); }}>
+                <div><b>{r.name}</b> wants <b>{r.requested_plan}</b></div>
+                <div className="muted small">
+                  from {r.current_plan || "—"}
+                  {r.requested_at ? ` · ${new Date(r.requested_at).toLocaleDateString()}` : ""}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -37,10 +94,11 @@ export default function Layout() {
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
         <div className="brand">
           <BrandMark size={38} />
-          <div>
+          <div className="brand-text">
             <div className="brand-name">PropX Estate</div>
             <div className="brand-sub">Knowledge Guru</div>
           </div>
+          {isSuperAdmin && <AlertsBell />}
           <button className="drawer-close" onClick={closeMenu} aria-label="Close menu">
             <Icon name="close" size={20} />
           </button>

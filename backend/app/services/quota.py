@@ -49,11 +49,19 @@ def user_daily_limit(db: Session, user: User) -> int | None:
 
 
 def org_daily_limit(db: Session, org_id: int | None) -> int | None:
-    """The whole company's daily expensive-query cap (from its plan). None = unlimited."""
+    """The whole company's daily expensive-query cap. None = unlimited, 0 = AI off.
+
+    Comes from the plan AND whether the org has paid — an unpaid org resolves to
+    0, which is what actually stops our LLM spend. See services/billing.py.
+    """
     if not org_id:
         return None
     org = db.get(Organization, org_id)
-    return org.plan.daily_llm_quota if org and org.plan else None
+    if not org:
+        return None
+    from app.services import billing  # local import: billing imports models too
+
+    return billing.entitlements(db, org).daily_llm_quota
 
 
 def _key(user_id: int, day: str) -> str:
@@ -85,6 +93,11 @@ def check_org_quota(db: Session, org_id: int | None, day: str) -> tuple[bool, in
     limit = org_daily_limit(db, org_id)
     if limit is None:
         return True, 0, None
+    # A zero limit means billing switched AI off — that is a decision, not a
+    # counter, so it must hold even when Redis is down. Fail-open applies to
+    # infra hiccups, never to "this org has not paid".
+    if limit <= 0:
+        return False, 0, 0
     r = _get_redis()
     if r is None:
         return True, 0, limit

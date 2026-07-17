@@ -45,6 +45,7 @@ export default function Admin() {
       { id: "webhook", label: "Lead Webhook" },
     ] },
     { id: "system", label: "System", ico: "⚙️", tabs: [
+      { id: "plan", label: "Plan & Usage" },
       ...(isSuper ? [{ id: "ai", label: "AI Settings" }] : []),
       { id: "audit", label: "Audit Log" },
     ] },
@@ -62,6 +63,8 @@ export default function Admin() {
         <h2>Admin</h2>
         <p className="muted">Manage projects, knowledge, growth and your team — all in one place.</p>
       </div>
+
+      <BillingBanner />
 
       <div className="admin-cats">
         {CATS.map((c) => (
@@ -95,6 +98,7 @@ export default function Admin() {
       {tab === "integrations" && <Integrations />}
       {tab === "persona" && <AssistantIdentity />}
       {tab === "notify" && <NotificationSettings />}
+      {tab === "plan" && <PlanUsage />}
       {tab === "audit" && <AuditLog />}
     </div>
   );
@@ -1113,6 +1117,104 @@ function ApiKeys() {
             {keys.length === 0 && <tr><td colSpan="7" className="muted">No API keys yet.</td></tr>}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+const BILL_LABEL = {
+  active: ["chip-green", "Active"],
+  trialing: ["chip-blue", "Trial"],
+  past_due: ["chip-amber", "Payment due"],
+  suspended: ["chip-red", "Suspended"],
+  cancelled: ["chip-gray", "Cancelled"],
+  none: ["chip-gray", "—"],
+};
+
+// Shown to an org admin above every Admin page while billing needs attention.
+// Silent when all is well — a banner that is always there stops being read.
+export function BillingBanner() {
+  const [b, setB] = useState(null);
+  useEffect(() => { api.myBilling().then(setB).catch(() => {}); }, []);
+  if (!b || !["past_due", "suspended", "cancelled"].includes(b.status)) return null;
+  const due = b.status === "past_due";
+  return (
+    <div className={`alert ${due ? "alert-warn" : "alert-error"}`} style={{ marginBottom: 14 }}>
+      {due ? (
+        <>
+          <b>Your subscription has lapsed.</b> Everything still works for now, but AI answers will pause
+          in {(b.grace_days ?? 7) + (b.days_left ?? 0)} day(s). Please settle the invoice to avoid interruption.
+        </>
+      ) : (
+        <><b>AI answers are paused</b> — your subscription is {b.status}. Your data and leads are safe and
+          nothing has been deleted. Renew to switch answers back on.</>
+      )}
+    </div>
+  );
+}
+
+function PlanUsage() {
+  const [b, setB] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { api.myBilling().then(setB).catch((e) => setErr(e.message)); }, []);
+  if (err) return <div className="alert alert-error">{err}</div>;
+  if (!b) return <div className="muted">Loading…</div>;
+
+  const [cls, label] = BILL_LABEL[b.status] || BILL_LABEL.none;
+  const pct = (used, cap) => (cap ? Math.min(100, Math.round((used / cap) * 100)) : 0);
+  const qPct = pct(b.queries_today, b.daily_llm_quota);
+  const ePct = pct(b.employees, b.max_employees);
+  const expiry = b.expires_at ? new Date(b.expires_at).toLocaleDateString(undefined,
+    { day: "numeric", month: "short", year: "numeric" }) : null;
+
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        <b>💳 Your plan.</b> What your subscription includes and how much of it you have used today.
+        To change plans or settle an invoice, contact us — we will update it here.
+      </div>
+
+      <div className="tier-limits-box">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{b.plan || "—"}</div>
+          <span className={`status-chip ${cls}`}>{label}</span>
+          {b.price_monthly ? <span className="muted">₹{b.price_monthly.toLocaleString("en-IN")}/month</span> : null}
+        </div>
+        {expiry && (
+          <div className="muted small" style={{ marginTop: 6 }}>
+            {b.status === "trialing" ? "Trial ends" : "Paid till"} <b>{expiry}</b>
+            {b.days_left != null && (b.days_left >= 0
+              ? ` · ${b.days_left} day${b.days_left === 1 ? "" : "s"} left`
+              : ` · ${Math.abs(b.days_left)} day${b.days_left === -1 ? "" : "s"} overdue`)}
+          </div>
+        )}
+        {b.reason && <div className="alert alert-error" style={{ marginTop: 10 }}>{b.reason}</div>}
+      </div>
+
+      <div className="bill-grid">
+        <div className="bill-stat">
+          <div className="bill-stat-v">{b.queries_today} <span className="muted" style={{ fontSize: 14 }}>/ {b.daily_llm_quota ?? "∞"}</span></div>
+          <div className="bill-stat-l">AI questions today</div>
+          {b.daily_llm_quota ? (
+            <div className={`bill-bar ${qPct > 80 ? "bill-bar-warn" : ""}`}><span style={{ width: `${qPct}%` }} /></div>
+          ) : null}
+        </div>
+        <div className="bill-stat">
+          <div className="bill-stat-v">{b.employees} <span className="muted" style={{ fontSize: 14 }}>/ {b.max_employees ?? "∞"}</span></div>
+          <div className="bill-stat-l">Employees</div>
+          {b.max_employees ? (
+            <div className={`bill-bar ${ePct > 80 ? "bill-bar-warn" : ""}`}><span style={{ width: `${ePct}%` }} /></div>
+          ) : null}
+        </div>
+        <div className="bill-stat">
+          <div className="bill-stat-v">{b.ai_enabled ? "On" : "Paused"}</div>
+          <div className="bill-stat-l">AI answers</div>
+        </div>
+      </div>
+
+      <div className="conn-hint">
+        Only AI answers depend on the subscription. Price and inventory look-ups come straight from your
+        own data and keep working — as do your logins, leads and Live Chat.
       </div>
     </div>
   );

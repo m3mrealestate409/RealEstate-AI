@@ -19,10 +19,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.tenancy import org_scope_id
-from app.models import QueryLog
+from app.models import Organization, QueryLog
 from app.services import database_service as dbsvc
 from app.services import intent as intent_svc
-from app.services import cache, crm, nlparse, quota, ratelimit, recommend, renderer
+from app.services import billing, cache, crm, nlparse, quota, ratelimit, recommend, renderer
 from app.services.llm import get_llm_provider
 from app.services.llm.base import Message
 from app.services.rag import retrieve as rag_retrieve
@@ -232,6 +232,24 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
         ir.project_ids = [p for p in ir.project_ids if p in owned]
         ir.matched_projects = [m for m in ir.matched_projects if m["id"] in owned]
 
+    # ---- BILLING GATE. Must sit above EVERY llm path, not next to the quota
+    # block further down: small talk, the lead-capture reply and the general-
+    # knowledge fallback all call the LLM and all return before that block ever
+    # runs. Gating any lower leaves an unpaid org spending our money through a
+    # side door — which is exactly what the first version of this did.
+    # We withhold the LLM (what WE pay for), never the tenant's own data — so
+    # this degrades rather than blocks: price and inventory look-ups are plain
+    # SQL and keep working. Staff hitting an LLM-only question get told why;
+    # a website visitor never learns their builder has a billing problem.
+    billing_off = False
+    billing_reason = None
+    if org_id is not None:
+        ent = billing.entitlements(db, db.get(Organization, org_id))
+        if not ent.ai_enabled:
+            billing_off = True
+            if not getattr(user, "_via_api_key", False):
+                billing_reason = ent.reason
+
     # Website visitor dropped their phone number in chat → capture a lead right
     # away and reply warmly. ONLY the public widget: a logged-in employee (JWT)
     # or a CRM/back-office integration typing a number must NOT create a lead.
@@ -264,7 +282,8 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
 
     # Small talk / greeting → a warm persona chat reply (no factual claims). Makes
     # the assistant feel like an agent instead of a search box.
-    if _is_smalltalk(query) and not ir.project_ids and not ir.db_intents and not ir.rag_intents and not ir.needs_llm:
+    if (_is_smalltalk(query) and not billing_off and not ir.project_ids
+            and not ir.db_intents and not ir.rag_intents and not ir.needs_llm):
         from app.models import Project
 
         pq = db.query(Project).order_by(Project.name)
@@ -295,7 +314,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
         if org_id is not None:
             pq = pq.filter(Project.organization_id == org_id)
         names = [p.name for p in pq.all()]
-        fb = _internet_fallback(query, persona, history=prior_dialogue)
+        fb = None if billing_off else _internet_fallback(query, persona, history=prior_dialogue)
         if fb:
             env = _envelope(
                 blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
@@ -323,7 +342,7 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
     # ---- CACHE + QUOTA: only EXPENSIVE (LLM/RAG) queries; SQL look-ups are free.
     is_expensive = bool(ir.rag_intents or ir.needs_llm)
     cacheable = is_expensive and not ir.resolved_from_memory  # follow-ups depend on context
-    suppress_llm = False  # set when the widget's daily budget is spent (degrade to DB-only)
+    suppress_llm = billing_off  # widget budget spent OR org unpaid → DB-only
 
     if is_expensive:
         # 1) Serve a cached answer if we have one — no LLM call, no quota spent.
@@ -357,15 +376,22 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
             u_ok, _, u_limit = quota.check_quota(db, user, today)
             o_ok, _, o_limit = quota.check_org_quota(db, org_id, today)
             if not u_ok or not o_ok:
-                if not o_ok:
+                if o_limit == 0:
+                    # A zero cap is not a spent counter — billing switched AI
+                    # off. Saying "quota used up" would send an admin hunting
+                    # through limits that are not the problem.
+                    text = billing.SUSPENDED_MSG
+                elif not o_ok:
                     text = (f"Your company's daily AI quota ({o_limit}) is used up for today. "
                             "Price/inventory look-ups still work. Ask your admin to upgrade the plan.")
                 else:
                     text = (f"You've used all {u_limit} of your AI queries for today (your tier: {user.tier}). "
                             "Price/inventory look-ups still work. Ask your admin to raise your limit.")
                 env = _envelope(
-                    blocks=[renderer.paragraph_block("Daily limit reached", text)],
-                    citations=[], handlers=["quota"], session_id=session_id,
+                    blocks=[renderer.paragraph_block(
+                        "Subscription inactive" if o_limit == 0 else "Daily limit reached", text)],
+                    citations=[], handlers=["billing" if o_limit == 0 else "quota"],
+                    session_id=session_id,
                     not_available=True, confidence=0.0, intent=ir, suggestions=[],
                 )
                 env["limit_reached"] = True
@@ -479,20 +505,24 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
 
     # ---- 4) Compose / Hallucination policy -------------------------------
     if suppress_llm and not blocks:
-        # Widget's daily AI budget is spent and the DB had no direct answer.
-        # Don't make an LLM call — invite a callback instead (turns the limit
-        # into a lead opportunity).
+        # No LLM to fall back on and the DB had no direct answer. Staff are told
+        # the real reason (they can act on it); a visitor gets the high-demand
+        # line, which turns the limit into a lead opportunity instead of leaking
+        # their builder's billing state.
         env = _envelope(
             blocks=[renderer.paragraph_block(
-                "",
+                "Subscription inactive" if billing_reason else "",
+                billing_reason or
                 "We're experiencing high demand right now. Please leave your number and our "
                 "team will get back to you — or ask about a specific project's price, payment "
                 "plan, or amenities and I'll pull it up.",
             )],
-            citations=[], handlers=["quota"], session_id=session_id,
+            citations=[], handlers=["billing" if billing_reason else "quota"], session_id=session_id,
             not_available=True, confidence=0.0, intent=ir, suggestions=_suggestions(ir),
         )
-        env["suggest_callback"] = True
+        env["suggest_callback"] = not billing_reason
+        if billing_reason:
+            env["limit_reached"] = True
         session_store.remember_turn(mem_key, query=query, intents=ir.intents, project_ids=ir.project_ids)
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)

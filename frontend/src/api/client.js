@@ -192,6 +192,11 @@ export const api = {
   saOrgs: () => request("/v1/superadmin/organizations"),
   saCreateOrg: (data) => request("/v1/superadmin/organizations", { method: "POST", body: data }),
   saUpdateOrg: (id, data) => request(`/v1/superadmin/organizations/${id}`, { method: "PUT", body: data }),
+  saSetSubscription: (id, data) =>
+    request(`/v1/superadmin/organizations/${id}/subscription`, { method: "PUT", body: data }),
+
+  // Billing (org admin — read-only; money is recorded by the platform owner)
+  myBilling: () => request("/v1/billing/me"),
 
   // Builders & document types
   listBuilders: () => request("/v1/admin/builders"),

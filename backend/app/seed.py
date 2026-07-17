@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.core.security import hash_password
 from app.database import SessionLocal
+from app.services import billing
 from app.models import (
     Builder,
     Configuration,
@@ -48,6 +49,8 @@ def _default_org(db) -> Organization:
         db.add(org)
         db.flush()
         logger.info("Seeded default organization: Chaahat Homes")
+    # The demo tenant is ours — keep it active rather than letting a trial lapse.
+    billing.ensure_subscription(db, org, trial=False)
     return org
 
 

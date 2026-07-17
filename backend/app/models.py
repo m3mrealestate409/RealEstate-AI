@@ -46,6 +46,46 @@ class Plan(Base):
     organizations: Mapped[list["Organization"]] = relationship(back_populates="plan")
 
 
+class Subscription(Base):
+    """Whether an organization has actually PAID for its plan.
+
+    `Organization.plan_id` says what a tenant is entitled to; this says whether
+    that entitlement is currently earned. Kept apart so the two can disagree —
+    a suspended org keeps its plan (and its data) while losing its entitlements.
+
+    Deliberately provider-free: Phase 1 is billed by hand (bank transfer / UPI)
+    and a super-admin records "paid till <date>". A payment provider later adds
+    its own columns without touching how entitlements are resolved.
+
+    `status` is a stored intent, NOT the truth — the truth is derived from the
+    dates by `services.billing.effective_status`, so an expiry needs no cron job
+    and cannot be missed.
+    """
+
+    __tablename__ = "subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # One live subscription per tenant (history is a later concern).
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("plans.id"))
+    # trialing | active | past_due | suspended | cancelled
+    status: Mapped[str] = mapped_column(String, default="trialing", nullable=False)
+    # Paid up to this moment. Past it, grace begins; past grace, entitlements stop.
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Free-text for the human who took the money ("UPI ref 4471, Aug invoice").
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    organization: Mapped["Organization"] = relationship(back_populates="subscription")
+    plan: Mapped["Plan | None"] = relationship()
+
+
 class Organization(Base):
     """A tenant — one real-estate company. All its users and projects are isolated."""
 
@@ -85,6 +125,9 @@ class Organization(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     plan: Mapped["Plan"] = relationship(back_populates="organizations")
+    subscription: Mapped["Subscription | None"] = relationship(
+        back_populates="organization", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 # --------------------------------------------------------------------------

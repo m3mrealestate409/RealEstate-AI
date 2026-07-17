@@ -19,6 +19,77 @@ export default function Platform() {
   );
 }
 
+// Effective billing state. `past_due` is the one that needs chasing — it is
+// still serving, but on borrowed time.
+const BILLING_CHIP = {
+  active: ["chip-green", "active"],
+  trialing: ["chip-blue", "trial"],
+  past_due: ["chip-amber", "past due"],
+  suspended: ["chip-red", "suspended"],
+  cancelled: ["chip-gray", "cancelled"],
+  none: ["chip-gray", "—"],
+};
+
+function BillingChip({ o }) {
+  const [cls, label] = BILLING_CHIP[o.status] || BILLING_CHIP.none;
+  const d = o.days_left;
+  return (
+    <>
+      <span className={`status-chip ${cls}`}>{label}</span>
+      {d != null && (
+        <div className="muted small" style={{ marginTop: 3 }}>
+          {d >= 0 ? `${d} day${d === 1 ? "" : "s"} left` : `${Math.abs(d)} day${d === -1 ? "" : "s"} over`}
+        </div>
+      )}
+      {o.note && <div className="muted small" title={o.note}>{o.note.slice(0, 28)}</div>}
+    </>
+  );
+}
+
+// The whole Phase-1 payment flow: someone paid, so record how far it covers.
+function PaidTill({ o, onDone, onErr }) {
+  const [date, setDate] = useState((o.expires_at || "").slice(0, 10));
+  const [note, setNote] = useState(o.note || "");
+  const [busy, setBusy] = useState(false);
+
+  async function markPaid() {
+    if (!date) return;
+    setBusy(true);
+    try {
+      await api.saSetSubscription(o.id, { paid_till: date, note });
+      onDone();
+    } catch (e) { onErr(e.message); }
+    finally { setBusy(false); }
+  }
+  async function setStatus(status) {
+    const warn = status === "suspended"
+      ? `Suspend ${o.name}? AI answers stop immediately. Their data, logins and leads stay untouched.`
+      : `Start a fresh 14-day trial for ${o.name}?`;
+    if (!confirm(warn)) return;
+    setBusy(true);
+    try {
+      await api.saSetSubscription(o.id, status === "trialing" ? { trial_days: 14 } : { status });
+      onDone();
+    } catch (e) { onErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="bill-cell">
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      <input placeholder="note (UPI ref…)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="bill-actions">
+        <button className="btn btn-sm btn-primary" onClick={markPaid} disabled={busy || !date}>
+          {busy ? "…" : "Mark paid"}
+        </button>
+        {o.status === "suspended"
+          ? <button className="btn btn-sm" onClick={() => setStatus("trialing")} disabled={busy}>Trial</button>
+          : <button className="btn btn-sm btn-ghost btn-danger" onClick={() => setStatus("suspended")} disabled={busy}>Suspend</button>}
+      </div>
+    </div>
+  );
+}
+
 function Organizations() {
   const [orgs, setOrgs] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -47,9 +118,18 @@ function Organizations() {
     <div className="admin-form">
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
+      <div className="settings-note">
+        <b>Billing is recorded by hand.</b> Money arrives by bank transfer or UPI; you enter the date it
+        is paid up to. An expired org keeps working for <b>{orgs[0]?.grace_days ?? 7} days</b> (grace), then
+        AI answers stop — logins, data and leads are never withheld.
+      </div>
+
       <div className="table-wrap" style={{ marginBottom: 20 }}>
         <table className="data-table">
-          <thead><tr><th>Company</th><th>Plan</th><th>Employees</th><th>Queries today</th><th>Status</th></tr></thead>
+          <thead><tr>
+            <th>Company</th><th>Plan</th><th>Employees</th><th>Queries today</th>
+            <th>Billing</th><th>Paid till</th><th>Access</th>
+          </tr></thead>
           <tbody>
             {orgs.map((o) => (
               <tr key={o.id}>
@@ -61,10 +141,13 @@ function Organizations() {
                 </td>
                 <td>{o.employees} / {o.max_employees}</td>
                 <td>{o.queries_today} / {o.daily_llm_quota}</td>
+                <td><BillingChip o={o} /></td>
+                <td><PaidTill o={o} onDone={load} onErr={(t) => setMsg({ ok: false, text: t })} /></td>
                 <td>
                   <button className={`status-chip ${o.is_active ? "chip-green" : "chip-gray"}`}
-                    onClick={() => toggleActive(o)} style={{ cursor: "pointer", border: "none" }}>
-                    {o.is_active ? "active" : "suspended"}
+                    onClick={() => toggleActive(o)} style={{ cursor: "pointer", border: "none" }}
+                    title="Disable the whole account (separate from billing)">
+                    {o.is_active ? "enabled" : "disabled"}
                   </button>
                 </td>
               </tr>

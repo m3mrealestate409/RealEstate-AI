@@ -6,6 +6,46 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.14.0] — 2026-07-17
+
+### Added — Subscriptions (Phase 1: billed by hand, no payment provider)
+Plans already existed and were already enforced — the employee cap in
+`api/v1/users.py`, the daily LLM quota in `orchestrator`. Only `price_monthly`
+was inert ("informational for now"). What was missing was not enforcement but
+the answer to one question: *has this tenant actually paid?*
+
+- New **`subscriptions`** table (one per org): status, `current_period_end`
+  ("paid till"), `trial_ends_at`, and a free-text note for whoever took the
+  money. Deliberately provider-free — a gateway later adds columns without
+  touching how entitlements resolve.
+- New **`services/billing.py`** — the single resolver:
+  - `effective_status()` derives the truth from **dates**, so an expiry needs no
+    cron job and cannot be missed. Stored `status` is only a human's intent.
+  - `entitlements()` returns the live `max_employees` / `daily_llm_quota` /
+    `ai_enabled`. `quota.py` and `users.py` now read from it rather than the
+    plan directly, so payment state is resolved in exactly one place.
+- **Failure ladder**: `trialing → active → past_due (7-day grace, nothing
+  changes but the warnings) → suspended`. Suspension withholds the **LLM** —
+  what we pay for — and nothing else: price/inventory look-ups are plain SQL and
+  keep working, as do logins, leads and Live Chat. A website visitor never sees
+  their builder's billing state; the widget quietly degrades to database answers.
+- **Super-admin** (Platform → Organizations): billing status, days left, and the
+  whole Phase-1 flow — enter the date it is paid up to, plus a note ("UPI ref…").
+  Suspend / restart-trial too. All audited. The `is_active` toggle is now labelled
+  **enabled/disabled** so it stops colliding with billing status.
+- **Org admin**: **System → Plan & Usage** (plan, status, expiry, usage vs caps)
+  and a banner across Admin while payment needs attention — silent otherwise.
+- Existing tenants are **grandfathered** on migration (active, +365 days) rather
+  than being dropped into the grace ladder on deploy day.
+
+### Fixed — LLM paths that bypassed the quota gate
+The quota check sat below several `return`s that each call the LLM: small talk,
+the lead-capture reply, and the unknown-project general-knowledge fallback. A
+query classified as "cheap" reached them with no check at all — so an employee
+could spend past their quota, and (once billing landed) an unpaid org kept
+spending our money through the side door. The billing gate now sits above every
+LLM path, and those three paths respect it.
+
 ## [2.13.0] — 2026-07-17
 
 ### Changed — Assistant settings split out of Integrations

@@ -17,6 +17,7 @@ from app.api.v1 import (
     analytics,
     apikeys,
     auth,
+    billing,
     calculate,
     extract,
     knowledge,
@@ -79,6 +80,7 @@ app.include_router(widget_api.router)
 app.include_router(leads.router)
 app.include_router(livechat.router)
 app.include_router(notify.router)
+app.include_router(billing.router)
 
 # Static assets (the embeddable chat widget served at /static/widget.js).
 _static_dir = os.path.join(os.path.dirname(__file__), "static")

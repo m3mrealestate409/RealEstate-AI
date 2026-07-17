@@ -10,6 +10,7 @@ from app.core.tenancy import scope_by_org
 from app.database import get_db
 from app.models import Organization, User
 from app.schemas import UserOut
+from app.services import billing
 
 router = APIRouter(prefix="/v1/admin/users", tags=["users"])
 
@@ -41,17 +42,20 @@ def create_user(
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "email already exists")
 
-    # Enforce the plan's employee cap (super-admins are exempt).
+    # Enforce the plan's employee cap (super-admins are exempt). The cap comes
+    # from billing, not the plan directly, so payment state is resolved in one
+    # place — see services/billing.py.
     if not admin.is_super_admin and admin.organization_id:
         org = db.get(Organization, admin.organization_id)
-        cap = org.plan.max_employees if org and org.plan else None
+        ent = billing.entitlements(db, org)
+        cap = ent.max_employees
         current = db.query(User).filter(
             User.organization_id == admin.organization_id, User.is_active.is_(True)
         ).count()
         if cap is not None and current >= cap:
             raise HTTPException(
                 403,
-                f"Employee limit reached for your '{org.plan.name}' plan ({cap} users). "
+                f"Employee limit reached for your '{ent.plan_name}' plan ({cap} users). "
                 "Upgrade the plan to add more employees.",
             )
 

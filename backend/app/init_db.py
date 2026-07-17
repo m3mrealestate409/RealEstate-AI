@@ -80,6 +80,19 @@ def init_db() -> None:
         # Optional shared secret header for the CRM lead webhook.
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS crm_webhook_header TEXT"))
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS crm_webhook_secret TEXT"))
+        # Billing: every existing tenant predates subscriptions and is already
+        # trusted, so grant each one an active, long-dated row rather than
+        # letting the grace ladder suspend a paying customer on deploy day.
+        # Only orgs with no row are touched, so this is safe to re-run.
+        conn.execute(
+            text(
+                "INSERT INTO subscriptions (organization_id, plan_id, status, current_period_end, note) "
+                "SELECT o.id, o.plan_id, 'active', now() + interval '365 days', "
+                "       'Grandfathered on billing rollout' "
+                "FROM organizations o "
+                "WHERE NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id)"
+            )
+        )
     logger.info("Database initialised.")
 
 

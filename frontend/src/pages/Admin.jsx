@@ -1501,6 +1501,16 @@ function Users() {
 
   return (
     <div className="admin-form">
+      <div className="settings-note">
+        <b>👥 Your team.</b> Add <b>managers</b> and <b>sales</b> people, and choose how many AI questions
+        each gets per day. Two separate things, easy to mix up:
+        <br /><br />
+        <b>Role</b> = what they're allowed to see. <b>Tier</b> = how many AI questions a day they get.
+        A sales person can be Advanced; a manager can be Basic.
+        <br /><br />
+        Admin accounts come with the organization itself, so they aren't created here — contact us if
+        your company needs another admin.
+      </div>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
       <div className="tier-limits-box">
@@ -1525,14 +1535,16 @@ function Users() {
         <div className="calc-fields">
           <label className="field"><span>Email</span><input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} required /></label>
           <label className="field"><span>Name</span><input value={f.name} onChange={(e) => set("name", e.target.value)} /></label>
-          <label className="field"><span>Role</span>
+          <label className="field"><span>Role — what they can do</span>
             <select value={f.role} onChange={(e) => set("role", e.target.value)}>
-              <option value="sales">sales</option><option value="manager">manager</option><option value="admin">admin</option>
+              <option value="sales">Sales — ask questions, see projects</option>
+              <option value="manager">Manager — the above + analytics &amp; knowledge</option>
             </select>
           </label>
-          <label className="field"><span>Tier (query limit)</span>
+          <label className="field"><span>Tier — how many AI questions a day</span>
             <select value={f.tier} onChange={(e) => set("tier", e.target.value)}>
-              <option value="basic">basic</option><option value="advanced">advanced</option>
+              <option value="basic">Basic — {limits.basic_daily_limit ?? 25}/day</option>
+              <option value="advanced">Advanced — {limits.advanced_daily_limit ?? 100}/day</option>
             </select>
           </label>
           <label className="field"><span>Password</span><input type="password" value={f.password} onChange={(e) => set("password", e.target.value)} required /></label>

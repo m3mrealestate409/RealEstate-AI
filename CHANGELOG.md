@@ -6,6 +6,32 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.17.0] — 2026-07-17
+
+### Changed — One clean rule for who creates whom
+Roles and tiers were spread across two consoles with no stated boundary, and an
+org admin could quietly create another **admin** — so "who owns this company"
+was something an employee could grant themselves.
+
+The model is now one line per level:
+
+| Level | Creates | Chooses |
+|---|---|---|
+| Super-admin | organizations, each with its one admin | **plan** (org-wide limits) |
+| Org admin | managers and sales | **tier** (per-person daily AI questions) |
+
+- `POST /v1/admin/users` refuses `role: "admin"` from an org admin (403, with a
+  reason rather than a bare rejection). Super-admins still can — they provision
+  tenants. Role is only ever set at creation and there is no change-role
+  endpoint, so this closes the whole escalation path, not just the dropdown.
+- Users page: the admin option is gone, and the two dropdowns now say what they
+  actually are — Role is *what they can see*, Tier is *how many AI questions a
+  day*, with each tier showing its real number (e.g. "Basic — 25/day"). These
+  are independent: a sales person can be Advanced, a manager can be Basic.
+- Platform already exposed plan and never tier, so nothing moved there.
+
+Existing users are untouched — every org already had exactly one admin.
+
 ## [2.16.1] — 2026-07-17
 
 ### Added — Alerts bell in the sidebar (platform owner)

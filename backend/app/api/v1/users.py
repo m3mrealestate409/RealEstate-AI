@@ -14,7 +14,15 @@ from app.services import billing
 
 router = APIRouter(prefix="/v1/admin/users", tags=["users"])
 
+# Who may create whom:
+#   super-admin  → organizations, each with its one admin (see superadmin.py)
+#   org admin    → managers and sales, inside their own company
+# An admin account is therefore provisioned WITH the tenant, never self-served.
+# That keeps "who owns this company" a decision we make, not one an employee can
+# grant themselves — and since role is only ever set at creation (there is no
+# change-role endpoint), closing this closes the whole path.
 ROLES = ["sales", "manager", "admin"]
+ORG_ROLES = ["sales", "manager"]
 
 
 class UserCreate(BaseModel):
@@ -37,8 +45,15 @@ def list_users(db: Session = Depends(get_db), admin: User = Depends(require_role
 def create_user(
     payload: UserCreate, db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
 ):
-    if payload.role not in ROLES:
-        raise HTTPException(422, f"role must be one of {ROLES}")
+    allowed = ROLES if admin.is_super_admin else ORG_ROLES
+    if payload.role not in allowed:
+        if payload.role == "admin":
+            raise HTTPException(
+                403,
+                "Admin accounts are set up with the organization itself, not from here. "
+                "Contact us to add another admin to your company.",
+            )
+        raise HTTPException(422, f"role must be one of {allowed}")
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "email already exists")
 

@@ -34,22 +34,34 @@ def _use_fake(monkeypatch):
     return fake
 
 
-def test_account_locks_out_after_max_failures(monkeypatch):
+def test_same_ip_same_account_still_locks(monkeypatch):
+    # Brute force from ONE source against one account is still capped.
     _use_fake(monkeypatch)
     ip, email = "1.2.3.4", "victim@example.com"
     assert ratelimit.login_allowed(ip, email)
     for _ in range(ratelimit.LOGIN_ACCOUNT_MAX):
         ratelimit.login_register_failure(ip, email)
-    assert not ratelimit.login_allowed(ip, email)  # locked
+    assert not ratelimit.login_allowed(ip, email)  # locked for THIS ip+account
 
 
-def test_success_reset_unlocks_account(monkeypatch):
+def test_attacker_cannot_lock_out_victim_from_another_ip(monkeypatch):
+    # The DoS fix: an attacker hammering the victim's email from their own IP
+    # must NOT lock the real user out on a different IP.
+    _use_fake(monkeypatch)
+    victim = "admin@example.com"
+    for _ in range(ratelimit.LOGIN_ACCOUNT_MAX + 5):
+        ratelimit.login_register_failure("10.0.0.1", victim)  # attacker's IP
+    assert not ratelimit.login_allowed("10.0.0.1", victim)    # attacker's own IP blocked
+    assert ratelimit.login_allowed("10.0.0.2", victim)        # VICTIM's IP still allowed
+
+
+def test_success_reset_unlocks_that_pair(monkeypatch):
     _use_fake(monkeypatch)
     ip, email = "1.2.3.4", "victim@example.com"
     for _ in range(ratelimit.LOGIN_ACCOUNT_MAX):
         ratelimit.login_register_failure(ip, email)
     assert not ratelimit.login_allowed(ip, email)
-    ratelimit.login_reset(email)
+    ratelimit.login_reset(ip, email)
     assert ratelimit.login_allowed(ip, email)  # unlocked after a real success
 
 
@@ -72,4 +84,4 @@ def test_fail_open_when_redis_down(monkeypatch):
     monkeypatch.setattr(ratelimit, "_get_redis", lambda: None)
     assert ratelimit.login_allowed("ip", "e@x.com") is True
     ratelimit.login_register_failure("ip", "e@x.com")  # no raise
-    ratelimit.login_reset("e@x.com")  # no raise
+    ratelimit.login_reset("ip", "e@x.com")  # no raise

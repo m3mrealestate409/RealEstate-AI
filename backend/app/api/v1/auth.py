@@ -46,7 +46,7 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(),
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password"
         )
-    ratelimit.login_reset(form.username)  # successful login clears the lockout counter
+    ratelimit.login_reset(ip, form.username)  # successful login clears the (ip, account) counter
     token = create_access_token(subject=user.email, role=user.role)
     return TokenResponse(
         access_token=token, role=user.role, name=user.name,

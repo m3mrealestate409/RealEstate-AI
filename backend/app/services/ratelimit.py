@@ -138,13 +138,22 @@ def daily_consume(org_id: int | None, source: str = "widget") -> None:
 
 
 # --- Login brute-force protection -----------------------------------------
-# Counts FAILED logins per IP and per account within a window. The account cap
-# is the real lock (an attacker rotating IPs still trips it); the IP cap slows
-# credential-stuffing across many accounts from one source. Fail-open on infra
-# error so a Redis blip never locks everyone out of the product.
+# Counts FAILED logins per IP and per (IP, account) within a window.
+#
+# The lockout is keyed on the (IP, account) PAIR, not the account alone. A
+# global per-account lock lets an attacker deny login to any known email by
+# submitting a few bad passwords (account-lockout DoS). Pairing it with the IP
+# means an attacker's failures only lock the ATTACKER's own source for that
+# account — the real user on a different IP is never locked out. The per-IP cap
+# still bounds how many failures any single source can make across all accounts.
+# Fail-open on infra error so a Redis blip never locks everyone out.
 LOGIN_WINDOW = 900          # 15 minutes
-LOGIN_IP_MAX = 30           # failed logins per IP per window
-LOGIN_ACCOUNT_MAX = 8       # failed logins per account per window (lockout)
+LOGIN_IP_MAX = 30           # failed logins per IP per window (across all accounts)
+LOGIN_ACCOUNT_MAX = 8       # failed logins per (IP, account) per window
+
+
+def _acct_key(ip: str | None, email: str | None) -> str:
+    return f"login:acct:{ip}:{(email or '').lower()}"
 
 
 def login_allowed(ip: str | None, email: str | None) -> bool:
@@ -153,8 +162,8 @@ def login_allowed(ip: str | None, email: str | None) -> bool:
         return True
     try:
         ip_fails = int(r.get(f"login:ip:{ip}") or 0)
-        acct_fails = int(r.get(f"login:acct:{(email or '').lower()}") or 0)
-        return ip_fails < LOGIN_IP_MAX and acct_fails < LOGIN_ACCOUNT_MAX
+        pair_fails = int(r.get(_acct_key(ip, email)) or 0)
+        return ip_fails < LOGIN_IP_MAX and pair_fails < LOGIN_ACCOUNT_MAX
     except Exception:  # noqa: BLE001
         return True
 
@@ -164,19 +173,19 @@ def login_register_failure(ip: str | None, email: str | None) -> None:
     if r is None:
         return
     try:
-        for key in (f"login:ip:{ip}", f"login:acct:{(email or '').lower()}"):
+        for key in (f"login:ip:{ip}", _acct_key(ip, email)):
             if r.incr(key) == 1:
                 r.expire(key, LOGIN_WINDOW)
     except Exception:  # noqa: BLE001
         pass
 
 
-def login_reset(email: str | None) -> None:
-    """Clear an account's failed-login counter after a successful login."""
+def login_reset(ip: str | None, email: str | None) -> None:
+    """Clear the (IP, account) failed-login counter after a successful login."""
     r = _get_redis()
     if r is None:
         return
     try:
-        r.delete(f"login:acct:{(email or '').lower()}")
+        r.delete(_acct_key(ip, email))
     except Exception:  # noqa: BLE001
         pass

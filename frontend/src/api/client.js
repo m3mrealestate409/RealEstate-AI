@@ -182,6 +182,8 @@ export const api = {
     request(`/v1/admin/payment-plans/${planId}`, { method: "DELETE" }),
   importProjectsCsv: (formData) =>
     request("/v1/admin/import/projects-csv", { method: "POST", body: formData }),
+  importProjectsJson: (formData) =>
+    request("/v1/admin/import/projects-json", { method: "POST", body: formData }),
   extractDraft: (formData) => request("/v1/admin/extract", { method: "POST", body: formData }),
   applyDraft: (projectId, draft) => request(`/v1/admin/projects/${projectId}/apply`, { method: "POST", body: draft }),
 
@@ -215,6 +217,10 @@ export const api = {
   saSetSubscription: (id, data) =>
     request(`/v1/superadmin/organizations/${id}/subscription`, { method: "PUT", body: data }),
   saRequests: () => request("/v1/superadmin/requests"),
+  saOrgProjects: (id) => request(`/v1/superadmin/organizations/${id}/projects`),
+  saSeedProjects: (id, source_org_id, project_ids) =>
+    request(`/v1/superadmin/organizations/${id}/seed-projects`,
+      { method: "POST", body: { source_org_id, project_ids } }),
   saNotifyConfig: () => request("/v1/superadmin/notify-config"),
   saSetNotifyConfig: (provider, config) =>
     request("/v1/superadmin/notify-config", { method: "PUT", body: { provider, config } }),

@@ -262,6 +262,92 @@ function PaidTill({ o, onDone, onErr }) {
   );
 }
 
+// Onboarding: a new tenant whose assistant knows nothing is a bad first day.
+// Copies projects WITH their prices, plans and amenities (same pack code as the
+// file export), so the new company can answer questions straight away.
+function SeedProjects({ orgs, onDone }) {
+  const [target, setTarget] = useState("");
+  const [source, setSource] = useState("");
+  const [projects, setProjects] = useState([]);
+  const [picked, setPicked] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    setProjects([]); setPicked([]);
+    if (!source) return;
+    api.saOrgProjects(source).then(setProjects).catch(() => setProjects([]));
+  }, [source]);
+
+  const toggle = (id) =>
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  async function seed() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.saSeedProjects(Number(target), Number(source), picked.length ? picked : null);
+      setMsg({
+        ok: true,
+        text: `Copied ${r.created} project${r.created === 1 ? "" : "s"}.`
+          + (r.skipped_existing ? ` ${r.skipped_existing} were already there.` : "")
+          + (r.errors.length ? ` Problems: ${r.errors.join("; ")}` : ""),
+      });
+      setPicked([]);
+      onDone();
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <details className="seed-box">
+      <summary>🌱 Give a company a starter set of projects</summary>
+      <p className="muted small" style={{ margin: "8px 0 12px" }}>
+        Copies projects <b>with</b> their configurations, prices, payment plans, towers and amenities —
+        so a newly onboarded company's assistant can answer from day one. Projects it already has
+        (same slug) are skipped. Brochures are not copied.
+      </p>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      <div className="calc-fields">
+        <label className="field"><span>Copy from</span>
+          <select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">Select a company…</option>
+            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>Into</span>
+          <select value={target} onChange={(e) => setTarget(e.target.value)}>
+            <option value="">Select a company…</option>
+            {orgs.filter((o) => String(o.id) !== String(source))
+              .map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {source && (
+        <div className="seed-list">
+          <div className="muted small" style={{ marginBottom: 6 }}>
+            {projects.length ? "Tick the ones to copy — none ticked means all." : "That company has no projects."}
+          </div>
+          {projects.map((p) => (
+            <label key={p.id} className="seed-item">
+              <input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} />
+              <span><b>{p.name}</b> <span className="muted small">
+                {p.city || "—"} · {p.configurations} configs · {p.amenities} amenities
+              </span></span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      <button className="btn btn-primary" style={{ marginTop: 10 }}
+        disabled={busy || !source || !target} onClick={seed}>
+        {busy ? "Copying…" : picked.length ? `Copy ${picked.length} project(s)` : "Copy all projects"}
+      </button>
+    </details>
+  );
+}
+
 function Organizations() {
   const [orgs, setOrgs] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -294,6 +380,7 @@ function Organizations() {
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
       <PendingRequests plans={plans} onDone={load} />
+      <SeedProjects orgs={orgs} onDone={load} />
 
       <div className="settings-note">
         <b>Billing is recorded by hand.</b> Money arrives by bank transfer or UPI; you enter the date it

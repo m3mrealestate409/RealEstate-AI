@@ -97,6 +97,17 @@ def init_db() -> None:
         # existing subscriptions table).
         conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS requested_plan_id BIGINT"))
         conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ"))
+        # A project slug is unique per COMPANY, not across the platform: two
+        # builders may both sell a "Green Valley". The old global constraint let
+        # one tenant block a name for everyone else — and made bulk-importing a
+        # starter set into a new tenant silently skip rows it did not have.
+        conn.execute(text("ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_slug_key"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_projects_org_slug "
+                "ON projects (organization_id, slug)"
+            )
+        )
     logger.info("Database initialised.")
 
 

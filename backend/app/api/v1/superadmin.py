@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_audit
 from app.core.security import hash_password, require_super_admin
 from app.database import get_db
-from app.models import Organization, Plan, QueryLog, Subscription, User
-from app.services import billing, notify
+from app.models import Organization, Plan, Project, QueryLog, Subscription, User
+from app.services import billing, cache, notify, packs
 
 router = APIRouter(prefix="/v1/superadmin", tags=["superadmin"])
 
@@ -323,6 +323,50 @@ def test_platform_notify(db: Session = Depends(get_db), _: User = Depends(requir
     if not ok:
         raise HTTPException(400, detail)
     return {"ok": True, "detail": detail}
+
+
+# ------------------- Seed a tenant with starter projects -------------------
+class SeedIn(BaseModel):
+    source_org_id: int
+    project_ids: list[int] | None = None    # None = every project in the source
+
+
+@router.get("/organizations/{org_id}/projects")
+def org_projects(org_id: int, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
+    """What's in a company — so you can pick what to copy into a new one."""
+    rows = (
+        db.query(Project).filter(Project.organization_id == org_id)
+        .order_by(Project.name).all()
+    )
+    return [{
+        "id": p.id, "name": p.name, "slug": p.slug, "city": p.city,
+        "configurations": len(p.configurations),
+        "amenities": len(p.amenities),
+    } for p in rows]
+
+
+@router.post("/organizations/{org_id}/seed-projects")
+def seed_projects(org_id: int, payload: SeedIn, db: Session = Depends(get_db),
+                  admin: User = Depends(require_super_admin)):
+    """Copy projects from one company into another, so a new tenant doesn't
+    start with an assistant that knows nothing. Runs through the same pack code
+    as the file export/import — one way to copy a project, not two."""
+    target = db.get(Organization, org_id)
+    if not target:
+        raise HTTPException(404, "Organization not found")
+    if payload.source_org_id == org_id:
+        raise HTTPException(422, "Source and target are the same company.")
+    if not db.get(Organization, payload.source_org_id):
+        raise HTTPException(404, "Source organization not found")
+
+    pack = packs.export_org(db, payload.source_org_id, payload.project_ids)
+    result = packs.import_pack(db, org_id, pack)
+    record_audit(db, user_id=admin.id, action="CREATE", entity="projects", entity_id=None,
+                 after={"seeded_into": target.name, "from_org": payload.source_org_id,
+                        "created": result["created"], "skipped": result["skipped_existing"]})
+    db.commit()
+    cache.bump_org(org_id)
+    return result
 
 
 @router.get("/requests")

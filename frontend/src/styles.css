@@ -367,6 +367,17 @@ a { color: inherit; text-decoration: none; }
 .tab-badge { display: inline-block; min-width: 17px; margin-left: 6px; padding: 1px 5px;
   border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; }
 
+/* ---- Platform: seed a tenant with starter projects (collapsed by default —
+       it is an onboarding-day job, not something you look at daily) ---- */
+.seed-box { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+  margin-bottom: 16px; background: var(--surface); }
+.seed-box summary { cursor: pointer; font-weight: 700; font-size: 13.5px; }
+.seed-box[open] summary { margin-bottom: 4px; }
+.seed-list { max-height: 190px; overflow-y: auto; border: 1px solid var(--border);
+  border-radius: 9px; padding: 8px 10px; margin-top: 10px; }
+.seed-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px;
+  cursor: pointer; }
+
 /* ---------- System Health ---------- */
 .health-banner { padding: 14px 16px; border-radius: 10px; font-weight: 700; margin-bottom: 16px; }
 .health-banner.ok { background: var(--green-soft); color: var(--green); }

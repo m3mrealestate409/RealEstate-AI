@@ -28,7 +28,7 @@ export default function Admin() {
     { id: "projects", label: "Projects & Data", ico: "📦", tabs: [
       { id: "project", label: "New Project" }, { id: "data", label: "Manage Data" },
       { id: "builders", label: "Developers" }, { id: "doctypes", label: "Doc Types" },
-      { id: "import", label: "Import CSV" },
+      { id: "import", label: "Import / Export" },
     ] },
     { id: "knowledge", label: "Knowledge", ico: "📚", tabs: [
       { id: "import-ai", label: "AI Import" }, { id: "document", label: "Upload Brochure" },
@@ -1450,17 +1450,84 @@ function ImportCsv() {
     URL.revokeObjectURL(url);
   }
 
+  async function importPack(f) {
+    if (!f) return;
+    setBusy(true); setMsg(null);
+    const fd = new FormData();
+    fd.append("file", f);
+    try {
+      const r = await api.importProjectsJson(fd);
+      setMsg({
+        ok: true,
+        text: `Imported ${r.created} project${r.created === 1 ? "" : "s"} with their prices, plans and amenities.`
+          + (r.skipped_existing ? ` Skipped ${r.skipped_existing} you already have.` : "")
+          + (r.errors.length ? ` Problems: ${r.errors.join("; ")}` : ""),
+      });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+    finally { setBusy(false); }
+  }
+
+  async function download(path, name) {
+    setBusy(true); setMsg(null);
+    try { await downloadFile(path, name); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+    finally { setBusy(false); }
+  }
+
   return (
-    <form className="admin-form" onSubmit={submit}>
+    <div className="admin-form">
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
       <div className="settings-note">
-        CSV columns: <span className="mono">name, slug, city, locality, project_status, possession_date</span> (YYYY-MM-DD).
-        Not sure of the format? Download the sample below and fill it in Excel.
+        <b>📦 Move projects in and out.</b> A <b>pack</b> carries a project's whole knowledge —
+        configurations, prices, payment plans, towers, amenities — so a company you export from can be
+        recreated somewhere else and answer questions immediately. <b>CSV</b> is the flat list for
+        Excel: quick to type, but it holds no prices or plans.
+        <br /><br />
+        Brochures and uploaded documents are never included — those stay with the company that owns them.
       </div>
-      <button type="button" className="btn" style={{ marginBottom: 14 }} onClick={downloadSample}>⬇ Download sample CSV</button>
-      <label className="field"><span>CSV file</span><input type="file" accept=".csv" onChange={(e) => setFile(e.target.files[0])} required /></label>
-      <button className="btn btn-primary" disabled={busy}>{busy ? "Importing…" : "Import projects"}</button>
-    </form>
+
+      <div className="tier-limits-box">
+        <div className="block-title">Export — your projects, as a file</div>
+        <p className="muted small" style={{ margin: "0 0 10px" }}>
+          Keep it as a backup, edit it, or hand it to us to load into another company.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-primary" disabled={busy}
+            onClick={() => download("/v1/admin/export/projects.json", "projects-pack.json")}>
+            📦 Export pack (everything)
+          </button>
+          <button type="button" className="btn" disabled={busy}
+            onClick={() => download("/v1/admin/export/projects.csv", "projects.csv")}>
+            📄 Export CSV (names only)
+          </button>
+        </div>
+      </div>
+
+      <div className="tier-limits-box" style={{ marginTop: 14 }}>
+        <div className="block-title">Import a pack</div>
+        <p className="muted small" style={{ margin: "0 0 10px" }}>
+          Loads projects <b>with</b> their prices, plans and amenities. Anything you already have (same
+          slug) is skipped — an import never overwrites your live prices.
+        </p>
+        <input type="file" accept=".json,application/json" disabled={busy}
+          onChange={(e) => { importPack(e.target.files[0]); e.target.value = ""; }} />
+      </div>
+
+      <form className="tier-limits-box" style={{ marginTop: 14 }} onSubmit={submit}>
+        <div className="block-title">Import a CSV (project names only)</div>
+        <p className="muted small" style={{ margin: "0 0 10px" }}>
+          Columns: <span className="mono">name, slug, city, locality, project_status, possession_date</span> (YYYY-MM-DD).
+          This creates project <i>shells</i> — you'll still need to add prices and plans before the
+          assistant can answer about them.
+        </p>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files[0])} />
+          <button className="btn" disabled={busy || !file}>{busy ? "Importing…" : "Import CSV"}</button>
+          <button type="button" className="btn btn-ghost" onClick={downloadSample}>⬇ Sample CSV</button>
+        </div>
+      </form>
+    </div>
   );
 }
 

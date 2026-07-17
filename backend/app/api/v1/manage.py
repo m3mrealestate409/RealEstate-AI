@@ -5,9 +5,11 @@ import for projects. All mutations are audited (§19).
 """
 import csv
 import io
-from datetime import date
+import json
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -16,13 +18,14 @@ from app.core.audit import record_audit
 from app.core.security import require_role
 from app.core.tenancy import get_scoped_project
 from app.database import get_db
-from app.services import cache
+from app.services import cache, packs
 from app.models import (
     Amenity,
     Builder,
     Configuration,
     Inventory,
     LocationPoint,
+    Organization,
     PaymentPlan,
     PaymentPlanMilestone,
     Price,
@@ -528,7 +531,13 @@ def import_projects_csv(
             if not slug or not name:
                 errors.append(f"Row {i}: missing name/slug")
                 continue
-            if db.query(Project).filter(Project.slug == slug).first():
+            # Scoped: an unscoped check reported "skipped existing" for a project
+            # this company had never seen, just because another tenant had the slug.
+            if (
+                db.query(Project)
+                .filter(Project.slug == slug, Project.organization_id == admin.organization_id)
+                .first()
+            ):
                 skipped += 1
                 continue
             poss = (row.get("possession_date") or "").strip()
@@ -546,3 +555,82 @@ def import_projects_csv(
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"created": created, "skipped_existing": skipped, "errors": errors}
+
+
+# ----------------------- Project packs (export / import) -------------------
+# A CSV row makes a project SHELL. A pack carries the whole knowledge tree —
+# configurations, prices, payment plans, towers, amenities — which is what the
+# engine actually answers from. See services/packs.py.
+def _ids_param(ids: str | None) -> list[int] | None:
+    if not ids:
+        return None
+    out = []
+    for part in ids.split(","):
+        part = part.strip()
+        if part.isdigit():
+            out.append(int(part))
+    return out or None
+
+
+@router.get("/export/projects.json")
+def export_projects_json(
+    ids: str | None = None,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Download this company's projects, with everything under them, as one file."""
+    pack = packs.export_org(db, admin.organization_id, _ids_param(ids))
+    pack["exported_at"] = datetime.now(timezone.utc).isoformat()
+    org = db.get(Organization, admin.organization_id) if admin.organization_id else None
+    pack["exported_from"] = org.name if org else None
+    fname = f"projects-{(org.slug if org else 'export')}-{date.today().isoformat()}.json"
+    return Response(
+        content=json.dumps(pack, indent=2, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.post("/import/projects-json")
+def import_projects_json(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Load a pack into THIS company. Projects it already has (by slug) are
+    skipped rather than merged — an import must never quietly rewrite live prices."""
+    try:
+        pack = json.loads(file.file.read().decode("utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(422, f"That file isn't valid JSON: {exc}") from exc
+    try:
+        result = packs.import_pack(db, admin.organization_id, pack)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    record_audit(db, user_id=admin.id, action="CREATE", entity="projects", entity_id=None,
+                 after={"pack_created": result["created"], "skipped": result["skipped_existing"]})
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return result
+
+
+@router.get("/export/projects.csv")
+def export_projects_csv(
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """The flat project list for Excel. Round-trips with the CSV import — but it
+    is a shell: prices and plans need the JSON pack."""
+    rows = (
+        db.query(Project).filter(Project.organization_id == admin.organization_id)
+        .order_by(Project.name).all()
+    )
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["name", "slug", "city", "locality", "project_status", "possession_date"])
+    for p in rows:
+        w.writerow([p.name, p.slug, p.city or "", p.locality or "",
+                    p.project_status or "", p.possession_date or ""])
+    org = db.get(Organization, admin.organization_id) if admin.organization_id else None
+    fname = f"projects-{(org.slug if org else 'export')}-{date.today().isoformat()}.csv"
+    return Response(
+        content=buf.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )

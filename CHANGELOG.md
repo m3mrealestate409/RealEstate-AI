@@ -6,6 +6,47 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.18.0] — 2026-07-17
+
+### Fixed — A project slug was unique across the whole platform
+`projects.slug` carried a global `UNIQUE`. Two builders may both sell a "Green
+Valley", so one tenant owning the slug silently took the name away from every
+other — and the CSV import's duplicate check wasn't org-scoped either, so a new
+company's import reported **"skipped existing"** for projects it had never had.
+This bit precisely when onboarding company #4 or #5.
+
+- Constraint is now `UNIQUE (organization_id, slug)`; migration drops the old one.
+- The two unscoped lookups (create project, CSV import) are scoped to the caller's
+  company. Duplicates *within* a company are still rejected.
+
+### Added — Project packs: bulk export/import, and seeding a new tenant
+A CSV row makes a project **shell** — name, city, dates. Everything the engine
+actually answers from (configurations, prices, payment plans and their
+milestones, towers, amenities, location points, offers) hangs *below* the
+project, so a CSV-onboarded company still knew nothing.
+
+- New **`services/packs.py`** — a project's whole tree as JSON. Two things it is
+  careful about:
+  - **Ids can't travel.** `Price.payment_plan_id` points at a plan of the same
+    project, so a pack stores the plan's *name* and the importer relinks it.
+    Copying the id would attach a price to whatever owned that id in the target.
+  - **Builders are per-company.** The importer matches the target's own builder
+    by name and creates one if needed, never pointing across a tenant boundary.
+  - Documents are excluded on purpose: they're files plus embeddings, and one
+    company's brochure isn't another's to hold.
+- **Admin → Projects & Data → Import / Export** (was "Import CSV"): export a pack
+  or a flat CSV, import a pack, or keep using the CSV for quick shells. The panel
+  says plainly which one carries prices.
+- **Platform → 🌱 Give a company a starter set** — copy projects from one company
+  into another, all or a picked few, with config/amenity counts shown so you can
+  see what's worth copying. Runs through the same pack code as the file path.
+- Imports **skip** what a company already has (by slug) rather than merging — an
+  import must never quietly rewrite live prices. Re-running one is a no-op.
+
+Verified end-to-end: a tenant created and seeded from scratch answered price,
+amenity and payment-plan questions immediately, with each price correctly
+relinked to its own project's plan.
+
 ## [2.17.0] — 2026-07-17
 
 ### Changed — One clean rule for who creates whom

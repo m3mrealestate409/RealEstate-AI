@@ -224,10 +224,14 @@ class User(Base):
 # --------------------------------------------------------------------------
 class Project(Base):
     __tablename__ = "projects"
+    # A slug is unique WITHIN a company, not across the platform. Two builders
+    # may both sell a "Green Valley", and one tenant must never be able to take
+    # a name away from another — or to learn that another tenant has it.
+    __table_args__ = (UniqueConstraint("organization_id", "slug", name="uq_projects_org_slug"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False)
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     builder_id: Mapped[int | None] = mapped_column(ForeignKey("builders.id"))
     city: Mapped[str | None] = mapped_column(String)

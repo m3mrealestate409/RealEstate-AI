@@ -38,7 +38,13 @@ def create_project(
     db: Session = Depends(get_db),
     admin: User = Depends(require_role("admin")),
 ):
-    if db.query(Project).filter(Project.slug == payload.slug).first():
+    # Scoped to this company: another tenant owning the slug is none of our
+    # business, and must not stop this one using it.
+    if (
+        db.query(Project)
+        .filter(Project.slug == payload.slug, Project.organization_id == admin.organization_id)
+        .first()
+    ):
         raise HTTPException(409, "slug already exists")
     _check_builder(db, payload.builder_id, admin)
     project = Project(**payload.model_dump(), organization_id=admin.organization_id)

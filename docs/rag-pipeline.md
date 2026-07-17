@@ -17,8 +17,24 @@ Implemented in `backend/app/services/orchestrator.py` (`handle_query`).
 
 ## Stages
 
-```
-Query ─► Intent ─► Tenant scope ─► DATABASE ─► Calculation ─► RAG ─► LLM ─► Renderer
+```mermaid
+flowchart TD
+    Q[Query] --> I[Intent detection]
+    I --> S[Tenant scoping<br/>filter to caller's org]
+    S --> H{Human agent<br/>taken over?}
+    H -- yes --> HM[Return human-mode<br/>no LLM]
+    H -- no --> DB[Database SQL<br/>exact facts]
+    DB --> C[Calculation<br/>totals · EMI · compare]
+    C --> EX{Descriptive /<br/>needs prose?}
+    EX -- no --> R[Render facts directly]
+    EX -- yes --> BUD{LLM budget<br/>available?}
+    BUD -- no --> DEG[Degrade:<br/>answer from DB only]
+    BUD -- yes --> RAG[RAG retrieval<br/>vector search, org-scoped]
+    RAG --> LLM[LLM composes<br/>over retrieved facts]
+    LLM --> R
+    DEG --> R
+    R[Renderer<br/>blocks for app · humanized text for widget] --> A[Answer]
+    HM --> A
 ```
 
 1. **Intent detection** (`services/intent.py`, `nlparse.py`)

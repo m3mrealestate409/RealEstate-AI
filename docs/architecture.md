@@ -2,27 +2,35 @@
 
 ## Component overview
 
-```
-                         ┌──────────────────────────────────────────────┐
-   Website visitor ──►   │  widget.js  (embedded on the builder's site)  │
-                         └───────────────┬──────────────────────────────┘
-                                         │  X-API-Key (widget scope)
-   Sales / admin ──►  React SPA ─────────┤  Bearer JWT
-                                         │
-   CRM / bot     ──►  server-side ───────┤  X-API-Key (internal scope)
-                                         ▼
-                    ┌────────────────────────────────────────────────┐
-                    │                FastAPI  (app)                   │
-                    │  auth · query · projects · admin · billing ·   │
-                    │  superadmin · livechat · leads · webhooks …    │
-                    └───────┬───────────────┬───────────────┬────────┘
-                            │               │               │
-                   ┌────────▼──────┐  ┌──────▼──────┐  ┌─────▼───────────┐
-                   │ PostgreSQL 16 │  │   Redis     │  │ LLM / Embeddings│
-                   │  + pgvector   │  │ sessions,   │  │ provider (Gemini│
-                   │ (facts + RAG  │  │ quotas,     │  │  / Claude / …)  │
-                   │  vectors)     │  │ rate limits │  │  via httpx      │
-                   └───────────────┘  └─────────────┘  └─────────────────┘
+```mermaid
+flowchart TB
+    visitor([Website visitor]):::ext
+    staff([Sales / admin]):::ext
+    crm([CRM / bot]):::ext
+
+    widget[widget.js<br/>embedded on builder's site]
+    spa[React SPA]
+
+    subgraph API["FastAPI application"]
+        routers[Routers: auth · query · projects · admin ·<br/>billing · superadmin · livechat · leads]
+        orch[Orchestrator<br/>hybrid pipeline]
+        routers --> orch
+    end
+
+    pg[(PostgreSQL 16 + pgvector<br/>facts + RAG vectors)]
+    redis[(Redis<br/>sessions · quotas · rate limits)]
+    llm[LLM / Embeddings provider<br/>Gemini / Claude / … via httpx]
+
+    visitor --> widget
+    staff --> spa
+    widget -- "X-API-Key (widget scope)" --> API
+    spa -- "Bearer JWT" --> API
+    crm -- "X-API-Key (internal scope)" --> API
+    orch --> pg
+    orch --> redis
+    orch --> llm
+
+    classDef ext fill:#eef,stroke:#88a,color:#224;
 ```
 
 | Component | Role |
@@ -59,6 +67,37 @@ directly. The LLM only writes prose around facts that were already retrieved.
 ---
 
 ## Request lifecycle (a website chat message)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as widget.js
+    participant API as FastAPI
+    participant RL as Redis (limits)
+    participant DB as PostgreSQL
+    participant LLM as LLM provider
+
+    W->>API: POST /v1/query (X-API-Key, session_id)
+    API->>API: resolve key → org + scope
+    API->>RL: rate-limit + daily-budget check
+    alt over limit
+        API-->>W: 429 / degraded (DB-only)
+    end
+    API->>DB: record session + message
+    alt human agent has taken over
+        API-->>W: human-mode envelope (no LLM)
+    else AI mode
+        API->>DB: intent → SQL facts (scoped to org)
+        opt descriptive question
+            API->>DB: vector search (rag_chunks)
+            API->>LLM: compose over retrieved facts
+        end
+        API-->>W: answer (blocks / text)
+    end
+    loop every ~3s
+        W->>API: GET /v1/widget/poll (agent msgs, mode)
+    end
+```
 
 1. `widget.js` POSTs `/v1/query` with the `X-API-Key` (a **widget-scope** key) and a `session_id`.
 2. FastAPI resolves the key → the owning organization; the key's scope limits it to the widget's four endpoints.
@@ -117,6 +156,38 @@ backend/app/
   api/v1/                 one router module per area (see api-reference.md)
   static/widget.js        the embeddable widget
 ```
+
+### Module dependency graph (backend)
+
+```mermaid
+flowchart LR
+    api[api/v1/*<br/>routers] --> orch[services/orchestrator]
+    api --> sec[core/security]
+    api --> ten[core/tenancy]
+    api --> bill[services/billing]
+    api --> crm[services/crm]
+    api --> notify[services/notify]
+    orch --> intent[services/intent]
+    orch --> dbsvc[services/database_service]
+    orch --> rag[services/rag]
+    orch --> rend[services/renderer]
+    orch --> quota[services/quota]
+    orch --> rl[services/ratelimit]
+    orch --> llm[services/llm]
+    rag --> llm
+    dbsvc --> models[(models.py)]
+    bill --> models
+    sec --> models
+    quota --> redis[(Redis)]
+    rl --> redis
+    llm --> ext[external provider API]
+
+    classDef store fill:#efe,stroke:#8a8;
+    class models,redis store;
+```
+
+Direction of the arrows = "depends on / calls". Routers are thin; the
+orchestrator composes the pipeline; `models.py` and Redis are the leaf stores.
 
 ---
 

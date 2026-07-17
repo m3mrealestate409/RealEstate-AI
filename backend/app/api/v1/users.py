@@ -2,6 +2,7 @@
 enforce the plan's employee cap, toggle active. Scoped to the caller's org."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
@@ -61,6 +62,15 @@ def create_user(
     # from billing, not the plan directly, so payment state is resolved in one
     # place — see services/billing.py.
     if not admin.is_super_admin and admin.organization_id:
+        # Serialize the cap check + insert per org with a transaction-scoped
+        # advisory lock. Without it, count()+INSERT is a TOCTOU race: concurrent
+        # requests all read the same count before any commits and blow past the
+        # cap (proven: 6 parallel creates put 10 users on a 5-seat plan). The
+        # lock (namespace 742, org id) is released automatically at commit.
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(742, :org)"),
+            {"org": admin.organization_id},
+        )
         org = db.get(Organization, admin.organization_id)
         ent = billing.entitlements(db, org)
         cap = ent.max_employees

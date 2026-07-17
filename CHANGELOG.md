@@ -6,6 +6,20 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.12.1] — 2026-07-17
+
+### Changed — Connection details show the whole widget snippet
+The **Website chat widget** row gave only the `widget.js` URL, which is not
+something you can paste anywhere on its own. The full snippet is revealed when a
+widget key is created, but the key is shown only once — so anyone coming back for
+the tag later found just the file URL.
+
+- The row now shows the complete `<script>` tag with `YOUR_API_KEY` in place of
+  the key, ready to paste before `</body>`.
+- The `host.docker.internal` hint now says it applies to a *server* calling us
+  (a CRM, a bot) and explicitly **not** to the widget script, which runs in the
+  visitor's browser where `localhost` is already correct.
+
 ## [2.12.0] — 2026-07-17
 
 ### Added — Widget-only API keys (safe to embed in a public page)

@@ -1037,12 +1037,16 @@ function ApiKeys() {
         </p>
         <CopyField label="Ask a question" value={`${API_BASE}/v1/query`} hint="POST · send the key as an X-API-Key header" />
         <CopyField label="Read leads (for CRM sync)" value={`${API_BASE}/v1/admin/leads`} hint="GET · same header" />
-        <CopyField label="Website chat widget script" value={`${API_BASE}/static/widget.js`} hint="Setup steps: Integrations → WordPress" />
+        <CopyField label="Website chat widget" pre value={widgetSnippet("YOUR_API_KEY")}
+          hint={<>Paste before <code>&lt;/body&gt;</code> on any site — WordPress, PHP, Shopify, plain HTML.
+            Replace <code>YOUR_API_KEY</code> with a <b>🛡️ Widget only</b> key from below.</>} />
         <div className="conn-hint" style={{ marginTop: 8 }}>
           Full API reference: <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">{API_BASE}/docs</a>
           {API_BASE.includes("localhost") && (
-            <> · <b>Local testing:</b> if the tool connecting to you also runs in Docker, swap
-            <code> localhost </code> for <code> host.docker.internal</code>.</>
+            <> · <b>Local testing:</b> if a <i>server</i> is calling us and it runs in Docker (a CRM, a bot),
+            swap <code> localhost </code> for <code> host.docker.internal</code> — inside a container,
+            <code> localhost </code> means the container itself. This does <b>not</b> apply to the widget
+            script: that runs in your visitor's browser, so <code> localhost </code> is already correct.</>
           )}
         </div>
       </div>

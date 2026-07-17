@@ -214,6 +214,11 @@ export const api = {
   saUpdateOrg: (id, data) => request(`/v1/superadmin/organizations/${id}`, { method: "PUT", body: data }),
   saSetSubscription: (id, data) =>
     request(`/v1/superadmin/organizations/${id}/subscription`, { method: "PUT", body: data }),
+  saRequests: () => request("/v1/superadmin/requests"),
+  saNotifyConfig: () => request("/v1/superadmin/notify-config"),
+  saSetNotifyConfig: (provider, config) =>
+    request("/v1/superadmin/notify-config", { method: "PUT", body: { provider, config } }),
+  saTestNotify: () => request("/v1/superadmin/notify-config/test", { method: "POST" }),
 
   // Billing (org admin). Read-only except asking to change plan — money itself
   // is recorded by the platform owner (Phase 1 has no self-serve checkout).

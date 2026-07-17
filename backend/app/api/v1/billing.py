@@ -13,7 +13,7 @@ import csv
 import io
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -23,7 +23,7 @@ from app.core.audit import record_audit
 from app.core.security import require_role
 from app.database import get_db
 from app.models import Organization, Payment, Plan, User
-from app.services import billing, quota
+from app.services import billing, notify, quota
 
 router = APIRouter(prefix="/v1/billing", tags=["billing"])
 
@@ -202,10 +202,11 @@ class UpgradeIn(BaseModel):
 
 
 @router.post("/upgrade-request")
-def request_upgrade(payload: UpgradeIn, db: Session = Depends(get_db),
+def request_upgrade(payload: UpgradeIn, background: BackgroundTasks,
+                    db: Session = Depends(get_db),
                     admin: User = Depends(require_role("admin"))):
     """Ask to move plan. Charges nothing and grants nothing — Phase 1 has no
-    checkout, so this only raises a flag the platform owner acts on."""
+    checkout, so this raises a flag on the platform owner's list and pings them."""
     org = _my_org(db, admin)
     plan = db.get(Plan, payload.plan_id)
     if not plan or not plan.is_active:
@@ -213,11 +214,24 @@ def request_upgrade(payload: UpgradeIn, db: Session = Depends(get_db),
     if plan.id == org.plan_id:
         raise HTTPException(422, "You are already on that plan.")
     sub = billing.ensure_subscription(db, org)
+    was = sub.requested_plan_id
     sub.requested_plan_id = plan.id
     sub.requested_at = datetime.now(timezone.utc)
     record_audit(db, user_id=admin.id, action="UPDATE", entity="subscriptions",
                  entity_id=sub.id, after={"requested_plan": plan.name})
     db.commit()
+
+    # Tell the platform owner. Backgrounded and best-effort: this is money
+    # walking towards us, but a slow Telegram must not make the tenant wait,
+    # and a failed ping must not lose the request — the flag is already saved.
+    if was != plan.id:
+        current = org.plan.name if org.plan else "—"
+        background.add_task(
+            notify.notify_platform,
+            f"💰 *Plan change requested*\n\n*{org.name}* wants to move from "
+            f"{current} → *{plan.name}* (₹{float(plan.price_monthly or 0):,.0f}/month).\n"
+            f"Requested by {admin.email}.\n\nOpen Platform → Organizations to action it.",
+        )
     return {"requested_plan": plan.name,
             "message": f"Request noted — we'll contact you about moving to {plan.name}."}
 

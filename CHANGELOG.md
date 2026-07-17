@@ -6,6 +6,29 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.16.0] — 2026-07-17
+
+### Added — The platform owner actually gets told about plan requests
+A tenant could ask to change plan and nobody found out. The request saved fine,
+but the only sign of it was small amber text inside a table cell on Platform —
+something you find only if you already knew to look. That is not a notification.
+
+- **Platform → Organizations** now leads with a loud box: *"N plan-change
+  requests waiting"*, each with one-click **Switch to <plan>** or **Dismiss**.
+  A count badge sits on the tab, polled every 60s, so it is visible from Plans
+  or Alerts too.
+- New **Platform → Alerts** — the platform owner's own Telegram/webhook config,
+  stored in the `settings` table. Deliberately separate from a tenant's notify
+  config: that one pings *their* sales team about website visitors, this one
+  pings *us* about money. Includes **Send test**.
+- Requesting a plan now pings the owner, backgrounded and best-effort: a slow
+  Telegram must not make the tenant wait, and a failed ping must not lose the
+  request. The in-app list is the reliable channel; the ping is only the nudge.
+- New `GET /v1/superadmin/requests` — the pending list, correct regardless of
+  whether any ping got through.
+- Super-admin can now clear a request without acting on it (`clear_request`),
+  so declining one doesn't leave the banner up forever.
+
 ## [2.15.0] — 2026-07-17
 
 ### Added — Payments, receipts, pricing and plan-change requests

@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_audit
 from app.core.security import hash_password, require_super_admin
 from app.database import get_db
-from app.models import Organization, Plan, QueryLog, User
-from app.services import billing
+from app.models import Organization, Plan, QueryLog, Subscription, User
+from app.services import billing, notify
 
 router = APIRouter(prefix="/v1/superadmin", tags=["superadmin"])
 
@@ -184,6 +184,9 @@ class SubscriptionIn(BaseModel):
     amount: float | None = None
     method: str | None = None        # bank | upi | cash | card | other
     reference: str | None = None     # UPI ref / UTR
+    # Drop a pending plan-change request without acting on it (they declined,
+    # or it was handled off-system). Changing the plan clears it anyway.
+    clear_request: bool = False
 
 
 def _sub_out(db: Session, org: Organization) -> dict:
@@ -264,6 +267,10 @@ def set_subscription(org_id: int, payload: SubscriptionIn, db: Session = Depends
     if payload.note is not None:
         sub.note = payload.note.strip() or None
 
+    if payload.clear_request:
+        sub.requested_plan_id = None
+        sub.requested_at = None
+
     record_audit(db, user_id=admin.id, action="UPDATE", entity="subscriptions",
                  entity_id=sub.id, after={
                      "org": org.name, "status": sub.status,
@@ -278,3 +285,59 @@ def set_subscription(org_id: int, payload: SubscriptionIn, db: Session = Depends
     if payment is not None:
         out["payment"] = billing.payment_out(payment)
     return out
+
+
+# --------------------- Platform-owner notifications ------------------------
+# Separate from a tenant's own notify config: these go to US, not to them.
+class PlatformNotifyIn(BaseModel):
+    provider: str          # off | telegram | webhook
+    config: dict | None = None
+
+
+@router.get("/notify-config")
+def get_platform_notify(db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
+    return notify.get_platform_config(db)
+
+
+@router.put("/notify-config")
+def set_platform_notify(payload: PlatformNotifyIn, db: Session = Depends(get_db),
+                        admin: User = Depends(require_super_admin)):
+    if payload.provider not in ("off", "telegram", "webhook"):
+        raise HTTPException(422, "provider must be off, telegram or webhook")
+    val = notify.set_platform_config(db, payload.provider, payload.config)
+    # Never audit the config itself — it holds a bot token.
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="settings",
+                 entity_id=None, after={"platform_notify_provider": val["provider"]})
+    db.commit()
+    return val
+
+
+@router.post("/notify-config/test")
+def test_platform_notify(db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
+    cfg = notify.get_platform_config(db)
+    if cfg["provider"] == "off":
+        raise HTTPException(422, "Turn notifications on and save first.")
+    ok, detail = notify.send(cfg["provider"], cfg["config"],
+                             "✅ PropX platform alerts are working — you'll get a ping here when a "
+                             "tenant asks to change plan.")
+    if not ok:
+        raise HTTPException(400, detail)
+    return {"ok": True, "detail": detail}
+
+
+@router.get("/requests")
+def pending_requests(db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
+    """Tenants waiting on a plan change — the platform owner's to-do list.
+    In-app and always correct, regardless of whether a ping got through."""
+    rows = (
+        db.query(Subscription).filter(Subscription.requested_plan_id.isnot(None))
+        .order_by(Subscription.requested_at.desc()).all()
+    )
+    return [{
+        "organization_id": s.organization_id,
+        "name": s.organization.name if s.organization else None,
+        "current_plan": s.plan.name if s.plan else None,
+        "requested_plan": s.requested_plan.name if s.requested_plan else None,
+        "requested_plan_id": s.requested_plan_id,
+        "requested_at": s.requested_at.isoformat() if s.requested_at else None,
+    } for s in rows]

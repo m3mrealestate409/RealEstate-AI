@@ -19,6 +19,7 @@ import json
 import logging
 
 import httpx
+from sqlalchemy.orm.attributes import flag_modified
 
 logger = logging.getLogger(__name__)
 
@@ -85,3 +86,55 @@ def send(provider: str, config: dict | None, text: str, extra: dict | None = Non
     except Exception as exc:  # noqa: BLE001 — best-effort
         logger.warning("Notification send failed (%s): %s", provider, exc)
         return False, str(exc)
+
+
+# --------------------------------------------------------------------------
+# Platform-owner notifications (a different audience to the tenant ones above).
+#
+# Tenant alerts live on `Organization.notify_config` and go to THAT company's
+# team. The platform owner has no organization, so their alerts — a tenant
+# asking to change plan, and later a payment failing — need their own config.
+# It lives in the `settings` key-value table, same as the LLM settings.
+# --------------------------------------------------------------------------
+_PLATFORM_KEY = "platform_notify"
+
+
+def get_platform_config(db) -> dict:
+    from app.models import Setting
+
+    row = db.get(Setting, _PLATFORM_KEY)
+    val = (row.value if row else None) or {}
+    return {"provider": (val.get("provider") or "off").lower(), "config": val.get("config") or {}}
+
+
+def set_platform_config(db, provider: str, config: dict | None) -> dict:
+    from app.models import Setting
+
+    val = {"provider": (provider or "off").lower(), "config": config or {}}
+    row = db.get(Setting, _PLATFORM_KEY)
+    if row:
+        row.value = val
+        flag_modified(row, "value")
+    else:
+        db.add(Setting(key=_PLATFORM_KEY, value=val))
+    return val
+
+
+def notify_platform(text: str) -> tuple[bool, str]:
+    """Ping the platform owner. Opens its own session because it runs on a
+    background thread after the request's session is gone. Best-effort by
+    design: a missed ping must never fail the tenant's action — the in-app
+    list on Platform is the reliable channel, this is only the nudge."""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        cfg = get_platform_config(db)
+        if cfg["provider"] == "off":
+            return False, "Platform notifications are off."
+        return send(cfg["provider"], cfg["config"], text)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Platform notification failed: %s", exc)
+        return False, str(exc)
+    finally:
+        db.close()

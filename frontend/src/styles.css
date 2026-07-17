@@ -333,6 +333,16 @@ a { color: inherit; text-decoration: none; }
 .price-feats { list-style: none; padding: 0; margin: 2px 0 auto; font-size: 13px; line-height: 1.9; color: var(--muted); }
 .price-feats li::before { content: "✓ "; color: var(--green); font-weight: 800; }
 
+/* ---- Platform: plan-change requests waiting on the owner ---- */
+.req-box { border: 1px solid var(--amber); background: var(--amber-soft); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 16px; }
+.req-head { font-weight: 800; color: var(--amber); margin-bottom: 8px; font-size: 14px; }
+.req-row { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; padding: 8px 0; border-top: 1px solid rgba(0, 0, 0, .06); font-size: 13.5px; }
+.req-row:first-of-type { border-top: 0; }
+.tab-badge { display: inline-block; min-width: 17px; margin-left: 6px; padding: 1px 5px;
+  border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; }
+
 /* ---------- System Health ---------- */
 .health-banner { padding: 14px 16px; border-radius: 10px; font-weight: 700; margin-bottom: 16px; }
 .health-banner.ok { background: var(--green-soft); color: var(--green); }

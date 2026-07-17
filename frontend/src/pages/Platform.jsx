@@ -4,17 +4,164 @@ import { api } from "../api/client.js";
 // Super-admin only. Manage tenant organizations and subscription plans.
 export default function Platform() {
   const [tab, setTab] = useState("orgs");
+  const [pending, setPending] = useState(0);
+  // Polled here rather than inside the tab, so the count is visible even while
+  // you are on Plans or Alerts — a request you cannot see is a request missed.
+  useEffect(() => {
+    const load = () => api.saRequests().then((r) => setPending(r.length)).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [tab]);
+
   return (
     <div className="page">
       <div className="page-head">
         <h2>Platform</h2>
-        <p className="muted">Manage companies (tenants) and subscription plans.</p>
+        <p className="muted">Manage companies (tenants), plans and your own alerts.</p>
       </div>
       <div className="calc-tabs">
-        <button className={`tab ${tab === "orgs" ? "tab-active" : ""}`} onClick={() => setTab("orgs")}>Organizations</button>
+        <button className={`tab ${tab === "orgs" ? "tab-active" : ""}`} onClick={() => setTab("orgs")}>
+          Organizations{pending > 0 && <span className="tab-badge">{pending}</span>}
+        </button>
         <button className={`tab ${tab === "plans" ? "tab-active" : ""}`} onClick={() => setTab("plans")}>Plans</button>
+        <button className={`tab ${tab === "alerts" ? "tab-active" : ""}`} onClick={() => setTab("alerts")}>Alerts</button>
       </div>
-      {tab === "orgs" ? <Organizations /> : <Plans />}
+      {tab === "orgs" && <Organizations />}
+      {tab === "plans" && <Plans />}
+      {tab === "alerts" && <PlatformAlerts />}
+    </div>
+  );
+}
+
+// Money walking towards you. Deliberately loud and at the top: the previous
+// version of this was small amber text inside a table cell, which is not a
+// notification — it is something you find only if you already knew to look.
+function PendingRequests({ plans, onDone }) {
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.saRequests().then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+  if (!rows.length) return null;
+
+  async function approve(r) {
+    if (!confirm(`Move ${r.name} to ${r.requested_plan}? Their limits change immediately — record the payment separately.`)) return;
+    setBusy(true);
+    try { await api.saSetSubscription(r.organization_id, { plan_id: r.requested_plan_id }); load(); onDone(); }
+    finally { setBusy(false); }
+  }
+  async function dismiss(r) {
+    if (!confirm(`Dismiss ${r.name}'s request for ${r.requested_plan}? Their plan stays exactly as it is.`)) return;
+    setBusy(true);
+    try { await api.saSetSubscription(r.organization_id, { clear_request: true }); load(); onDone(); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="req-box">
+      <div className="req-head">
+        💰 {rows.length} plan-change request{rows.length === 1 ? "" : "s"} waiting
+      </div>
+      {rows.map((r) => (
+        <div key={r.organization_id} className="req-row">
+          <div>
+            <b>{r.name}</b> wants <b>{r.current_plan || "—"} → {r.requested_plan}</b>
+            <div className="muted small">
+              asked {r.requested_at ? new Date(r.requested_at).toLocaleString() : "—"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => approve(r)}>
+              Switch to {r.requested_plan}
+            </button>
+            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => dismiss(r)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Where the platform owner's own alerts go. Separate from a tenant's notify
+// config — that one pings THEIR sales team, this one pings us.
+function PlatformAlerts() {
+  const [provider, setProvider] = useState("off");
+  const [cfg, setCfg] = useState({});
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => setCfg((s) => ({ ...s, [k]: v }));
+
+  useEffect(() => {
+    api.saNotifyConfig().then((r) => { setProvider(r.provider || "off"); setCfg(r.config || {}); }).catch(() => {});
+  }, []);
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try { await api.saSetNotifyConfig(provider, cfg); setMsg({ ok: true, text: "Saved." }); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setBusy(false); }
+  }
+  async function test() {
+    setBusy(true); setMsg(null);
+    try { await api.saTestNotify(); setMsg({ ok: true, text: "Test sent ✓ check your Telegram/webhook." }); }
+    catch (e) { setMsg({ ok: false, text: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="admin-form">
+      <div className="settings-note">
+        <b>🔔 Your alerts as the platform owner.</b> Get pinged when a tenant asks to change plan, so
+        you don't have to watch this page. This is <b>separate</b> from a tenant's own notification
+        settings — those ping their sales team about website visitors.
+        <br /><br />
+        The list on <b>Organizations</b> is always correct on its own; this is just the nudge.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      <div className="tier-limits-box">
+        <label className="field" style={{ maxWidth: 320 }}><span>Notify via</span>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <option value="off">Off</option>
+            <option value="telegram">Telegram (recommended)</option>
+            <option value="webhook">Webhook (WhatsApp / any HTTP)</option>
+          </select>
+        </label>
+
+        {provider === "telegram" && (
+          <div className="calc-fields">
+            <label className="field"><span>Bot token</span>
+              <input value={cfg.bot_token || ""} onChange={(e) => set("bot_token", e.target.value)} placeholder="123456:ABC-DEF…" />
+            </label>
+            <label className="field"><span>Chat ID</span>
+              <input value={cfg.chat_id || ""} onChange={(e) => set("chat_id", e.target.value)} placeholder="-1001234567890 or your user id" />
+            </label>
+            <p className="muted small" style={{ gridColumn: "1 / -1", margin: 0 }}>
+              Create a bot with <b>@BotFather</b>, message it once, then get your chat id from <b>@getidsbot</b>.
+              Use a private chat or a group only you and your team can see — plan requests name your customers.
+            </p>
+          </div>
+        )}
+
+        {provider === "webhook" && (
+          <>
+            <label className="field"><span>Webhook URL</span>
+              <input value={cfg.url || ""} onChange={(e) => set("url", e.target.value)} placeholder="https://your-service.com/send" />
+            </label>
+            <label className="field"><span>Body template (JSON, use <code>{"{{text}}"}</code>)</span>
+              <textarea rows={3} value={cfg.body_template || ""} onChange={(e) => set("body_template", e.target.value)}
+                placeholder='{"text": "{{text}}"}' />
+            </label>
+          </>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? "…" : "Save"}</button>
+          {provider !== "off" && <button className="btn" onClick={test} disabled={busy}>Send test</button>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -145,6 +292,8 @@ function Organizations() {
   return (
     <div className="admin-form">
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      <PendingRequests plans={plans} onDone={load} />
 
       <div className="settings-note">
         <b>Billing is recorded by hand.</b> Money arrives by bank transfer or UPI; you enter the date it

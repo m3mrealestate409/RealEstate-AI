@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { api, downloadFile, openBlobTab } from "../api/client.js";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 // Billing lives in the sidebar, not under Admin: an admin checks their plan,
 // usage and invoices far more often than they edit doc types — and "what am I
@@ -217,10 +219,15 @@ function Payments() {
 
 function Pricing() {
   const [d, setD] = useState(null);
+  const [err, setErr] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
-  const load = () => api.myPricing().then(setD).catch((e) => setMsg({ ok: false, text: e.message }));
+  // A failed load used to land in `msg`, which never rendered because the
+  // `!d` guard below returned "Loading…" first — so any error showed as a
+  // spinner that never stopped. Load failures get their own state.
+  const load = () => api.myPricing().then((r) => { setD(r); setErr(null); }).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, []);
+  if (err) return <div className="alert alert-error">{err}</div>;
   if (!d) return <div className="muted">Loading…</div>;
 
   async function ask(p) {
@@ -298,12 +305,18 @@ function Pricing() {
 
 
 export default function Billing() {
+  const { user } = useAuth();
   const [tab, setTab] = useState("plan");
   const TABS = [
     ["plan", "Plan & Usage"],
     ["payments", "Payments"],
     ["pricing", "Pricing"],
   ];
+  // The platform owner has no organization, so every endpoint here 404s for
+  // them. The nav link is already hidden; this catches a typed URL or an old
+  // bookmark and sends them where their pricing actually lives.
+  if (user?.is_super_admin) return <Navigate to="/platform" replace />;
+
   return (
     <div className="page">
       <div className="page-head">

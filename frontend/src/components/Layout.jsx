@@ -129,7 +129,9 @@ export default function Layout() {
               <span className="nav-ic"><Icon name="knowledge" /></span> Knowledge
             </NavLink>
           )}
-          {isAdmin && (
+          {/* Not for the platform owner: they have no organization, so no
+              subscription to look at. Their pricing lives in Platform → Plans. */}
+          {isAdmin && !isSuperAdmin && (
             <NavLink to="/billing" className="nav-link">
               <span className="nav-ic"><Icon name="billing" /></span> Billing
             </NavLink>

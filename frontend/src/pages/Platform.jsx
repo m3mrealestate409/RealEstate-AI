@@ -582,51 +582,101 @@ function Plans() {
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
 
+  async function toggleActive(p) {
+    const warn = p.is_active
+      ? `Hide ${p.name} from the pricing page? Companies already on it keep everything — it just stops being offered.`
+      : `Offer ${p.name} again? It reappears on every customer's Pricing page.`;
+    if (!confirm(warn)) return;
+    try { await api.saUpdatePlan(p.id, { is_active: !p.is_active }); load(); }
+    catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+
+  const mrr = plans.reduce((s, p) => s + (p.price_monthly || 0) * (p.organizations || 0), 0);
+
   return (
     <div className="admin-form">
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
-      <div className="table-wrap" style={{ marginBottom: 20 }}>
-        <table className="data-table">
-          <thead><tr><th>Plan</th><th>Max employees</th><th>Daily query quota</th><th>Price/mo (₹)</th><th>Companies</th></tr></thead>
-          <tbody>
-            {plans.map((p) => (
-              <tr key={p.id}>
-                <td><b>{p.name}</b></td>
-                <td><EditNum value={p.max_employees} onSave={(v) => saveField(p.id, "max_employees", v)} /></td>
-                <td><EditNum value={p.daily_llm_quota} onSave={(v) => saveField(p.id, "daily_llm_quota", v)} /></td>
-                <td><EditNum value={p.price_monthly} onSave={(v) => saveField(p.id, "price_monthly", v)} /></td>
-                <td>{p.organizations}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div className="settings-note">
+        <b>💎 This is where your pricing lives.</b> Change a price and it applies to that plan
+        everywhere — the customer's Pricing page, and the amount pre-filled when you record their next
+        payment. It never re-charges anyone or touches money already recorded.
       </div>
 
-      <div className="block-title">Add a plan</div>
-      <form onSubmit={createPlan}>
-        <div className="calc-fields">
-          <label className="field"><span>Name</span><input value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} required /></label>
-          <label className="field"><span>Max employees</span><input type="number" value={nf.max_employees} onChange={(e) => setNf({ ...nf, max_employees: e.target.value })} /></label>
-          <label className="field"><span>Daily query quota</span><input type="number" value={nf.daily_llm_quota} onChange={(e) => setNf({ ...nf, daily_llm_quota: e.target.value })} /></label>
-          <label className="field"><span>Price/mo (₹)</span><input type="number" value={nf.price_monthly} onChange={(e) => setNf({ ...nf, price_monthly: e.target.value })} /></label>
+      <div className="plan-grid">
+        {plans.map((p) => (
+          <div key={p.id} className={`plan-card ${p.is_active ? "" : "plan-card-off"}`}>
+            <div className="plan-card-head">
+              <div className="plan-card-name">{p.name}</div>
+              <button className={`status-chip ${p.is_active ? "chip-green" : "chip-gray"} plan-toggle`}
+                onClick={() => toggleActive(p)}
+                title={p.is_active ? "Offered to customers — click to hide" : "Hidden from customers — click to offer"}>
+                {p.is_active ? "offered" : "hidden"}
+              </button>
+            </div>
+
+            <div className="plan-price">
+              <span className="plan-cur">₹</span>
+              <EditNum value={p.price_monthly} onSave={(v) => saveField(p.id, "price_monthly", v)} big />
+              <span className="plan-per">/month</span>
+            </div>
+
+            <div className="plan-rows">
+              <div className="plan-row">
+                <span className="muted small">Max employees</span>
+                <EditNum value={p.max_employees} onSave={(v) => saveField(p.id, "max_employees", v)} />
+              </div>
+              <div className="plan-row">
+                <span className="muted small">AI questions / day</span>
+                <EditNum value={p.daily_llm_quota} onSave={(v) => saveField(p.id, "daily_llm_quota", v)} />
+              </div>
+            </div>
+
+            <div className="plan-foot">
+              <span><b>{p.organizations}</b> compan{p.organizations === 1 ? "y" : "ies"}</span>
+              {p.organizations > 0 && p.price_monthly > 0 && (
+                <span className="muted">{inr(p.price_monthly * p.organizations)}/mo</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {mrr > 0 && (
+        <div className="pf-hint" style={{ marginTop: 12 }}>
+          These plans bring in <b>{inr(mrr)}</b> a month across {plans.reduce((s, p) => s + (p.organizations || 0), 0)} companies.
+          Editing a price changes what they're billed <i>next</i> time — past receipts keep the amount they were paid at.
         </div>
-        <button className="btn btn-primary">Create plan</button>
-      </form>
+      )}
+
+      <details className="seed-box" style={{ marginTop: 16 }}>
+        <summary>➕ Add a plan</summary>
+        <form onSubmit={createPlan} style={{ marginTop: 10 }}>
+          <div className="calc-fields">
+            <label className="field"><span>Name</span><input value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} required /></label>
+            <label className="field"><span>Max employees</span><input type="number" value={nf.max_employees} onChange={(e) => setNf({ ...nf, max_employees: e.target.value })} /></label>
+            <label className="field"><span>AI questions / day</span><input type="number" value={nf.daily_llm_quota} onChange={(e) => setNf({ ...nf, daily_llm_quota: e.target.value })} /></label>
+            <label className="field"><span>Price / month (₹)</span><input type="number" value={nf.price_monthly} onChange={(e) => setNf({ ...nf, price_monthly: e.target.value })} /></label>
+          </div>
+          <button className="btn btn-primary">Create plan</button>
+        </form>
+      </details>
     </div>
   );
 }
 
-// Inline-editable number cell (saves on blur / Enter when changed).
-function EditNum({ value, onSave }) {
+// Inline-editable number (saves on Enter, or via the Save button that appears
+// once it differs — so a stray keystroke never silently reprices a plan).
+function EditNum({ value, onSave, big = false }) {
   const [v, setV] = useState(value);
   useEffect(() => { setV(value); }, [value]);
   const changed = String(v) !== String(value);
   return (
-    <span className="ecr-inline">
-      <input type="number" value={v} style={{ width: 90 }}
+    <span className={`ecr-inline ${big ? "editnum-big" : ""}`}>
+      <input type="number" value={v} style={big ? undefined : { width: 90 }}
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && changed) onSave(v); }} />
-      {changed && <button type="button" className="btn btn-primary" onClick={() => onSave(v)}>Save</button>}
+      {changed && <button type="button" className="btn btn-sm btn-primary" onClick={() => onSave(v)}>Save</button>}
     </span>
   );
 }

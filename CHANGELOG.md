@@ -6,6 +6,36 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.19.2] — 2026-07-17
+
+### Fixed — Billing hung on "Loading…" forever for the platform owner
+Three faults stacked into one symptom:
+
+1. **`Pricing` swallowed load errors.** A failed fetch went into `msg`, but the
+   `!d` guard returned "Loading…" first — so *any* error rendered as a spinner
+   that never stopped. Load failures now have their own state and show the
+   error. This was never specific to super-admins; it would have hidden a
+   network blip from a paying customer just as well.
+2. **Billing was in the platform owner's sidebar at all.** The link keyed off
+   `role === "admin"`, and the owner's role *is* admin — but they have no
+   organization, so `/v1/billing/plans` and `/payments` correctly 404. It isn't
+   their page: hidden now, and `/billing` redirects them to Platform so a typed
+   URL or old bookmark can't reach the dead end either.
+3. There was nowhere obvious to set pricing, which is what prompted the report.
+
+### Changed — Platform → Plans is now clearly the home of pricing
+Plan editing existed and worked, but sat in a five-column table of bare number
+inputs, so the number an owner changes most looked like a spreadsheet cell.
+
+- **Plan cards** with the price as the headline, edited in place. The Save button
+  appears only once a value differs, so a stray keystroke can't reprice a plan.
+- **offered / hidden** toggle — `is_active` was in the model and the API, and
+  filtered the customer's Pricing page, but had no control anywhere. Hiding a
+  plan stops it being offered; companies already on it keep everything.
+- Each card shows how many companies are on it and what it brings in, plus a
+  total underneath — and says plainly that editing a price affects the *next*
+  bill, never a receipt already issued.
+
 ## [2.19.1] — 2026-07-17
 
 ### Fixed — The browser was autofilling "add a teammate" with your own login

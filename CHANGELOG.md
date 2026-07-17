@@ -6,6 +6,23 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.20.0] — 2026-07-18
+
+### Changed — Premium dark sidebar
+The sidebar was a plain light glass rail. Restyled it into a premium dark rail: a
+deep indigo gradient with a soft violet glow, which reads as a high-end console
+against the light content area.
+
+- Brand, nav and user text recoloured for contrast on the dark surface (verified:
+  active white on a gradient pill, idle links at 62% white).
+- Active item now has a gradient tint + a glowing left accent bar; hover lifts to
+  a subtle white wash.
+- The user chip became a soft card with a gradient avatar; the alerts bell and
+  sign-out restyled to match.
+- Fixed the active nav background referencing an undefined `--grad-soft` variable.
+
+CSS-only (`styles.css`); no markup or behaviour change.
+
 ## [2.19.4] — 2026-07-17
 
 ### Fixed — The plan Save button only existed after you'd edited

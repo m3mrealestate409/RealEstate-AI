@@ -18,14 +18,30 @@
   var API_KEY = (s && s.getAttribute("data-api-key")) || "";
   var TITLE = (s && s.getAttribute("data-title")) || "Ask about our projects";
   var ACCENT = (s && s.getAttribute("data-accent")) || "#6b46ff";
+  // A session id is a bearer capability (the live-chat poll returns a session's
+  // agent messages by id), so it must be UNGUESSABLE. The old
+  // Math.random().slice(2,10) gave ~8 weak chars that an attacker could
+  // enumerate to read other visitors' chats. Use a CSPRNG 128-bit id instead.
+  function pxRandomId() {
+    try {
+      var a = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(a);
+      var h = "";
+      for (var i = 0; i < a.length; i++) h += (a[i] + 256).toString(16).slice(1);
+      return "web-" + h;  // 32 hex chars = 128 bits of entropy
+    } catch (e) {
+      // No crypto (very old browser): still far wider than the old 8 chars.
+      return "web-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    }
+  }
   // Persist the session id for the whole browsing session so the conversation
   // continues across page navigations (per-session memory).
   var SESSION = (function () {
     try {
       var s = sessionStorage.getItem("pxSession");
-      if (!s) { s = "web-" + Math.random().toString(36).slice(2, 10); sessionStorage.setItem("pxSession", s); }
+      if (!s) { s = pxRandomId(); sessionStorage.setItem("pxSession", s); }
       return s;
-    } catch (e) { return "web-" + Math.random().toString(36).slice(2, 10); }
+    } catch (e) { return pxRandomId(); }
   })();
   var GREETING = "Hi! Ask me about any project — price, payment plan, amenities, or compare two.";
   if (window.__propxWidgetLoaded) return;

@@ -19,7 +19,48 @@ network/ops hardening, see the checklist in [deployment.md](deployment.md).
   when `APP_ENV=production`; anyone who knew the default could otherwise forge a
   super-admin token.
 
+### Login & authenticated request (sequence)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User / SPA
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    U->>API: POST /v1/auth/login (email, password)
+    API->>DB: find active user by email
+    API->>API: bcrypt verify
+    API-->>U: JWT (sub=email, role, exp 8h)
+    Note over U,API: later request
+    U->>API: GET /v1/... (Authorization: Bearer)
+    API->>API: verify signature + exp (HS256, pinned)
+    API->>DB: re-load user by sub, check is_active
+    API->>API: role / key-scope / org-scope checks
+    API-->>U: response (or 401 / 403 / 404)
+```
+
+The role in the token is informational only — every request re-loads the user
+from the database, so a deactivated user's token stops working immediately.
+
 ## Authorization (RBAC + scoping)
+
+### Authorization decision (per request)
+
+```mermaid
+flowchart TD
+    R[Incoming request] --> C{Credential type?}
+    C -- JWT --> U[Load user from DB<br/>check is_active]
+    C -- X-API-Key --> K[Resolve key → admin + org]
+    U --> RL{Role sufficient<br/>for this route?}
+    K --> SC{Scope allows<br/>method + path?}
+    SC -- no --> D403[403 forbidden]
+    SC -- yes --> RL
+    RL -- no --> D403
+    RL -- yes --> T{Object in caller's org?}
+    T -- no --> D404[404 not found]
+    T -- yes --> OK[Handle request]
+```
 
 - Role dependencies (`require_role`, `require_super_admin`, `require_live_chat`)
   gate every privileged route on the server.

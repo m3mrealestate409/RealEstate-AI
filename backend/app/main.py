@@ -61,6 +61,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Security headers on every response. Deliberately NOT a strict script/style CSP:
+# this app also serves /docs (Swagger) and the printable receipt HTML, which use
+# inline styles — a `default-src` policy would break them. We add the headers
+# that are safe everywhere, and use CSP only for clickjacking (`frame-ancestors`),
+# which restricts framing without touching scripts/styles. The widget is embedded
+# via <script>, not an iframe of our origin, so framing controls don't affect it.
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+    )
+    if settings.is_production:  # only meaningful over TLS
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+        )
+    return response
+
 # Routers
 app.include_router(auth.router)
 app.include_router(query.router)

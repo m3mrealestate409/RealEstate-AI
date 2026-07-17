@@ -83,7 +83,9 @@ def push_lead(url: str, payload: dict, headers: dict | None = None) -> bool:
     detail = "unknown"
     for attempt in range(_ATTEMPTS):
         try:
-            r = httpx.post(url, json=payload, headers=h, timeout=_TIMEOUT)
+            # safe_post pins to the validated IP (DNS-rebind-safe); guard_outbound
+            # above already fast-rejects obviously internal URLs.
+            r = httpguard.safe_post(url, json=payload, headers=h, timeout=_TIMEOUT)
             if r.status_code < 300:
                 return True
             detail = f"HTTP {r.status_code}: {r.text[:150]}"

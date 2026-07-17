@@ -86,7 +86,8 @@ def send(provider: str, config: dict | None, text: str, extra: dict | None = Non
             headers = {"Content-Type": "application/json"}
             for k, v in (config.get("headers") or {}).items():
                 headers[str(k)] = str(v)
-            r = httpx.post(url, json=body, headers=headers, timeout=_TIMEOUT)
+            # safe_post pins to the validated IP (DNS-rebind-safe).
+            r = httpguard.safe_post(url, json=body, headers=headers, timeout=_TIMEOUT)
             # Return the STATUS only — never the response body. Reflecting r.text
             # back to the caller turned this into an SSRF read primitive.
             return (r.status_code < 300), f"Webhook responded HTTP {r.status_code}"

@@ -3,7 +3,7 @@ import { api, fetchBlobUrl } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 import AiSettings from "./AiSettings.jsx";
 import AiImport from "./AiImport.jsx";
-import Integrations from "./Integrations.jsx";
+import Integrations, { AssistantIdentity, NotificationSettings } from "./Integrations.jsx";
 import { StatusPill } from "./Knowledge.jsx";
 
 // Open a protected PDF (brochure/cost sheet) in a new tab via authed blob fetch.
@@ -37,9 +37,12 @@ export default function Admin() {
     { id: "team", label: "Team", ico: "👥", tabs: [
       { id: "users", label: "Users" },
     ] },
+    { id: "assistant", label: "Assistant", ico: "🤖", tabs: [
+      { id: "persona", label: "Identity & Persona" }, { id: "notify", label: "Notifications" },
+    ] },
     { id: "connect", label: "Integrations", ico: "🔌", tabs: [
-      { id: "integrations", label: "Integrations" }, { id: "apikeys", label: "API Keys" },
-      { id: "webhook", label: "📤 Lead Webhook" },
+      { id: "integrations", label: "Channels" }, { id: "apikeys", label: "API Keys" },
+      { id: "webhook", label: "Lead Webhook" },
     ] },
     { id: "system", label: "System", ico: "⚙️", tabs: [
       ...(isSuper ? [{ id: "ai", label: "AI Settings" }] : []),
@@ -90,6 +93,8 @@ export default function Admin() {
       {tab === "apikeys" && <ApiKeys />}
       {tab === "webhook" && <LeadWebhook />}
       {tab === "integrations" && <Integrations />}
+      {tab === "persona" && <AssistantIdentity />}
+      {tab === "notify" && <NotificationSettings />}
       {tab === "audit" && <AuditLog />}
     </div>
   );

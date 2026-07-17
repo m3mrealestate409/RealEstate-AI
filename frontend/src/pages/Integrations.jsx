@@ -33,24 +33,32 @@ function Step({ n, title, children }) {
   );
 }
 
-function AssistantPersona() {
+// Who the assistant is (name, photo, personality) and the first thing it says.
+// One job, one page — and a live preview so you can see what a visitor sees.
+export function AssistantIdentity() {
   const [persona, setPersona] = useState("");
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState(null);        // served path
   const [hint, setHint] = useState("");
   const [nameHint, setNameHint] = useState("Riya");
+  const [greeting, setGreeting] = useState("");
+  const [greetDef, setGreetDef] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
   const avatarSrc = avatar ? (avatar.startsWith("http") ? avatar : API_BASE_URL + avatar) : null;
-  const initial = (name || nameHint || "A").trim().charAt(0).toUpperCase();
+  const shownName = name || nameHint || "Assistant";
+  const initial = shownName.trim().charAt(0).toUpperCase();
 
   useEffect(() => {
     api.getAssistantConfig().then((c) => {
       setPersona(c.persona || ""); setName(c.name || ""); setAvatar(c.avatar_url || null);
       setHint(c.hint || ""); setNameHint(c.name_hint || "Riya");
+    }).catch(() => {});
+    api.getWidgetConfig().then((c) => {
+      setGreeting(c.greeting || ""); setGreetDef(c.default || "");
     }).catch(() => {});
   }, []);
 
@@ -59,7 +67,9 @@ function AssistantPersona() {
     try {
       const r = await api.setAssistantConfig({ persona, name });
       setPersona(r.persona || ""); setName(r.name || "");
-      setMsg({ ok: true, text: "Saved — applies everywhere (website, CRM, WhatsApp, app)." });
+      const g = await api.setWidgetConfig(greeting);
+      setGreeting(g.greeting || "");
+      setMsg({ ok: true, text: "Saved — live everywhere. Refresh your site to see it." });
     } catch (e) { setMsg({ ok: false, text: e.message }); }
     finally { setSaving(false); }
   }
@@ -83,38 +93,83 @@ function AssistantPersona() {
   }
 
   return (
-    <div className="int-greeting int-persona">
-      <b>🎭 Assistant identity &amp; persona — applies to every channel</b>
-      <p className="muted">
-        Give your assistant a name, photo and personality — shown on the website chat widget and used
-        across CRM, WhatsApp and the app. It only changes look/tone; prices &amp; facts stay grounded.
-      </p>
+    <div className="admin-form">
+      <div className="settings-note">
+        <b>🎭 Who your assistant is.</b> Name, photo and personality apply <b>everywhere</b> — website
+        widget, CRM, WhatsApp and this app. The greeting is the website widget's opening line.
+        These change only <b>look and tone</b>; prices and facts always come from your data.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
-      <div className="persona-id-row">
-        <div className="persona-avatar" style={avatarSrc ? { backgroundImage: `url(${avatarSrc})` } : null}>
-          {!avatarSrc && <span>{initial}</span>}
-        </div>
-        <div className="persona-id-fields">
-          <label className="field"><span>Assistant name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={nameHint} maxLength={40} />
-          </label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <label className="btn btn-sm" style={{ cursor: "pointer" }}>
-              {uploading ? "Uploading…" : "Upload photo"}
-              <input type="file" accept="image/*" hidden onChange={(e) => onAvatar(e.target.files[0])} />
+      <div className="as-grid">
+        <div className="as-form">
+          <div className="as-block">
+            <div className="block-title">Identity</div>
+            <div className="persona-id-row">
+              <div className="persona-avatar" style={avatarSrc ? { backgroundImage: `url(${avatarSrc})` } : null}>
+                {!avatarSrc && <span>{initial}</span>}
+              </div>
+              <div className="persona-id-fields">
+                <label className="field"><span>Assistant name</span>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder={nameHint} maxLength={40} />
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+                    {uploading ? "Uploading…" : "Upload photo"}
+                    <input type="file" accept="image/*" hidden onChange={(e) => onAvatar(e.target.files[0])} />
+                  </label>
+                  {avatar && <button type="button" className="btn btn-sm btn-ghost" onClick={removeAvatar} disabled={uploading}>Remove</button>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="as-block">
+            <div className="block-title">Personality</div>
+            <p className="muted small" style={{ margin: "0 0 8px" }}>
+              How it should talk — tone, language, how much detail. Not what it knows.
+            </p>
+            <label className="field">
+              <textarea rows={5} value={persona} onChange={(e) => setPersona(e.target.value)} placeholder={hint} />
             </label>
-            {avatar && <button type="button" className="btn btn-sm btn-ghost" onClick={removeAvatar} disabled={uploading}>Remove</button>}
+            {!persona && hint && (
+              <button type="button" className="btn btn-sm" onClick={() => setPersona(hint)}>Use example</button>
+            )}
+          </div>
+
+          <div className="as-block">
+            <div className="block-title">Chat greeting <span className="as-tag">website widget</span></div>
+            <p className="muted small" style={{ margin: "0 0 8px" }}>
+              Shown as a teaser beside the chat bubble, and as the first message when it opens.
+            </p>
+            <label className="field">
+              <textarea rows={2} value={greeting} onChange={(e) => setGreeting(e.target.value)} placeholder={greetDef} />
+            </label>
+          </div>
+
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+
+        <div className="as-preview">
+          <div className="block-title">Live preview</div>
+          <p className="muted small" style={{ margin: "0 0 10px" }}>What a website visitor sees.</p>
+          <div className="as-prev-panel">
+            <div className="as-prev-head">
+              <div className="as-prev-av" style={avatarSrc ? { backgroundImage: `url(${avatarSrc})` } : null}>
+                {!avatarSrc && <span>{initial}</span>}
+              </div>
+              <div>
+                <div className="as-prev-name">{shownName}</div>
+                <div className="as-prev-status">● Online</div>
+              </div>
+            </div>
+            <div className="as-prev-body">
+              <div className="as-prev-bubble">{greeting || greetDef || "Hi! How can I help you today?"}</div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <label className="field" style={{ marginTop: 4 }}><span>Personality / master prompt</span>
-        <textarea rows={4} value={persona} onChange={(e) => setPersona(e.target.value)} placeholder={hint} />
-      </label>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-        {!persona && hint && <button type="button" className="btn btn-sm" onClick={() => setPersona(hint)}>Use example</button>}
-        {msg && <span style={{ fontSize: 13, color: msg.ok ? "var(--muted)" : "#c0392b" }}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -134,7 +189,7 @@ function headersToLines(obj) {
 
 const DEFAULT_BODY_TEMPLATE = '{"text": "{{text}}"}';
 
-function NotificationSettings() {
+export function NotificationSettings() {
   const [provider, setProvider] = useState("off");
   const [cfg, setCfg] = useState({});
   const [headersText, setHeadersText] = useState("");
@@ -171,15 +226,16 @@ function NotificationSettings() {
   }
 
   return (
-    <div className="int-greeting int-persona">
-      <b>🔔 New-chat notifications</b>
-      <p className="muted">
-        Get pinged the moment a new visitor starts chatting, so someone can jump in from Live Chat.
-        Works with <b>Telegram</b> (free, official) or any <b>webhook</b> — an unofficial WhatsApp service,
-        WhatsApp Cloud API, Zapier/Make, Slack, etc.
-      </p>
+    <div className="admin-form">
+      <div className="settings-note">
+        <b>🔔 Get pinged the moment a new visitor starts chatting</b>, so someone can jump in from
+        <b> Live Chat</b> and take over from the bot. Only <b>🌐 Website</b> chats raise alerts —
+        never your CRM or staff.
+      </div>
+      {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
-      <label className="field" style={{ maxWidth: 280 }}><span>Notify via</span>
+      <div className="tier-limits-box">
+      <label className="field" style={{ maxWidth: 320 }}><span>Notify via</span>
         <select value={provider} onChange={(e) => setProvider(e.target.value)}>
           <option value="off">Off</option>
           <option value="telegram">Telegram (recommended)</option>
@@ -220,40 +276,10 @@ function NotificationSettings() {
         </>
       )}
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
-        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-        {provider !== "off" && <button type="button" className="btn btn-sm" onClick={test} disabled={testing}>{testing ? "Sending…" : "Send test"}</button>}
-        {msg && <span style={{ fontSize: 13, color: msg.ok ? "var(--muted)" : "#c0392b" }}>{msg.text}</span>}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+        <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        {provider !== "off" && <button type="button" className="btn" onClick={test} disabled={testing}>{testing ? "Sending…" : "Send test"}</button>}
       </div>
-    </div>
-  );
-}
-
-function WidgetGreeting() {
-  const [greeting, setGreeting] = useState("");
-  const [def, setDef] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
-  useEffect(() => {
-    api.getWidgetConfig().then((c) => { setGreeting(c.greeting || ""); setDef(c.default || ""); }).catch(() => {});
-  }, []);
-  async function save() {
-    setSaving(true); setMsg(null);
-    try {
-      const r = await api.setWidgetConfig(greeting);
-      setGreeting(r.greeting || "");
-      setMsg({ ok: true, text: "Saved — your site updates live (just refresh)." });
-    } catch (e) { setMsg({ ok: false, text: e.message }); }
-    finally { setSaving(false); }
-  }
-  return (
-    <div className="int-greeting">
-      <b>💬 Chat greeting message</b>
-      <p className="muted">Shown as a teaser next to the chat bubble and as the first message. Edit anytime — the widget picks it up live (no code change).</p>
-      <textarea rows={2} value={greeting} onChange={(e) => setGreeting(e.target.value)} placeholder={def} />
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <button type="button" className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save greeting"}</button>
-        {msg && <span style={{ fontSize: 13, color: msg.ok ? "var(--muted)" : "#c0392b" }}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -269,7 +295,10 @@ function WordPressGuide() {
   return (
     <div className="int-guide">
       <Step n="1" title="Create an API key">
-        <p className="muted">Go to the <b>🔌 API Keys</b> tab → <b>Create key</b> → copy it (shown once).</p>
+        <p className="muted">
+          <b>🔌 API Keys</b> → Create key → Used for <b>🌐 Website</b>, Access <b>🛡️ Widget only</b>.
+          Copy it — it is shown once.
+        </p>
       </Step>
       <Step n="2" title="Install a snippet plugin in WordPress">
         <p className="muted">In WordPress admin → Plugins → add <b>“WPCode”</b> or <b>“Insert Headers and Footers”</b> (free).</p>
@@ -283,9 +312,11 @@ function WordPressGuide() {
       </Step>
       <div className="int-note">
         Customise with <code>data-title</code> (header text) and <code>data-accent</code> (brand colour).
-        For production, put the key behind a small server-side proxy so it isn’t visible in the page.
+        Its name, photo, personality and greeting come from <b>🤖 Assistant</b> — no code change.
+        <br /><br />
+        Visitors can read this key in your page source, and that is fine: a <b>🛡️ Widget only</b> key can
+        run the chat widget and <i>nothing</i> else. Never put a <b>🔓 Full</b> key on a public page.
       </div>
-      <WidgetGreeting />
     </div>
   );
 }
@@ -340,11 +371,11 @@ export default function Integrations() {
   return (
     <div className="admin-form">
       <div className="settings-note">
-        Connect the engine to your other tools. Pick a channel below to see step-by-step instructions.
-        All integrations use an <b>API key</b> (🔌 API Keys tab) and stay scoped to your organisation.
+        <b>Where your assistant is available.</b> Pick a channel for step-by-step setup. Every channel
+        uses an <b>API key</b> (🔌 API Keys) and only ever sees your organisation's data.
+        <br /><br />
+        Looking for its name, photo, personality or greeting? Those live in <b>🤖 Assistant</b>.
       </div>
-      <AssistantPersona />
-      <NotificationSettings />
       <div className="int-cards">
         {INTEGRATIONS.map((i) => (
           <button key={i.id} type="button"

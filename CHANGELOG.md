@@ -6,6 +6,26 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.13.0] — 2026-07-17
+
+### Changed — Assistant settings split out of Integrations
+The Integrations page had grown into four unrelated jobs stacked on one screen:
+assistant identity/persona, new-chat notifications, channel setup guides — and the
+chat greeting was buried *inside* the WordPress guide, where nobody would find it.
+Only the guides were actually integrations, so nothing explained itself.
+
+- New **🤖 Assistant** category — *who your assistant is*:
+  - **Identity & Persona** — name, photo, personality **and the chat greeting**
+    (moved out of the WordPress guide), now with a **live preview** of the widget
+    header and opening line that updates as you type. One Save covers all of it.
+  - **Notifications** — new-chat alerts, on their own page.
+- **🔌 Integrations** is now only about connecting: **Channels** (renamed from the
+  self-referential "Integrations"), **API Keys**, **Lead Webhook**. Each page says
+  which job it does and points to the other where they meet.
+- The WordPress guide now tells you to create a **🛡️ Widget only** key, and drops
+  its "put the key behind a server-side proxy" advice — that was written before
+  widget scope existed (v2.12.0), and is no longer how you make a widget key safe.
+
 ## [2.12.1] — 2026-07-17
 
 ### Changed — Connection details show the whole widget snippet

@@ -97,6 +97,32 @@ Every lead arrives with the same fields:
 - If a push fails permanently, the lead is still safe in the engine — your CRM
   can **catch up** any time by pulling `GET /v1/admin/leads` (same API key).
 
+### Lead → CRM push (sequence)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant V as Visitor / widget
+    participant API as Engine
+    participant DB as PostgreSQL
+    participant CRM as Your CRM webhook
+
+    V->>API: lead (callback form / phone in chat)
+    API->>DB: save lead
+    API-->>V: acknowledged
+    Note over API,CRM: background, best-effort
+    loop up to 3 attempts (network / 5xx)
+        API->>CRM: POST lead + X-Idempotency-Key: rag-lead-<id>
+        alt 2xx
+            CRM-->>API: accepted
+        else 4xx (permanent)
+            CRM-->>API: rejected → stop
+        end
+    end
+    Note over API,CRM: if it never lands, the lead is still safe in the engine
+    CRM->>API: GET /v1/admin/leads (catch-up sync, same key)
+```
+
 ### Local testing caveat
 For a CRM running in another local container, the engine (inside Docker) reaches
 it at `http://host.docker.internal:<port>/…`, not `127.0.0.1`. In production, use

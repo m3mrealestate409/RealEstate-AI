@@ -58,16 +58,38 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 # read-only key is still allowed to use the engine.
 READ_ONLY_POST_PATHS = {"/v1/query"}
 
+# A widget key ships inside a public web page, so treat it as already leaked:
+# an exact allowlist of the calls widget.js makes, and nothing else — not even
+# the blanket GET access a read-only key is trusted with. Adding an endpoint to
+# widget.js means adding it here too.
+WIDGET_ALLOWED = {
+    ("POST", "/v1/query"),
+    ("POST", "/v1/leads"),
+    ("GET", "/v1/widget/config"),
+    ("GET", "/v1/widget/poll"),
+}
+
 
 def enforce_key_scope(user: User, request) -> None:
-    """Least privilege for API keys: a read-only key may ask questions and read,
-    but never modify. Enforced centrally in get_current_user, so a new endpoint
-    can never accidentally be left writable."""
-    if getattr(user, "_api_key_scope", "full") != "read_only":
+    """Least privilege for API keys, enforced centrally in get_current_user so a
+    new endpoint can never accidentally be left reachable by a weaker key."""
+    scope = getattr(user, "_api_key_scope", "full")
+    path = request.url.path.rstrip("/") or "/"
+
+    if scope == "widget":
+        # Preflight carries no API key of its own; CORS middleware answers it.
+        if request.method == "OPTIONS" or (request.method, path) in WIDGET_ALLOWED:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This API key is a website-widget key: it can only run the public chat widget.",
+        )
+
+    if scope != "read_only":
         return
     if request.method in SAFE_METHODS:
         return
-    if request.method == "POST" and request.url.path.rstrip("/") in READ_ONLY_POST_PATHS:
+    if request.method == "POST" and path in READ_ONLY_POST_PATHS:
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

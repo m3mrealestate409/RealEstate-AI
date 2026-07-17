@@ -908,13 +908,13 @@ function AddPlan({ projectId }) {
 // remember or hand-edit a URL.
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
-function CopyField({ label, value, hint, mono = true }) {
+function CopyField({ label, value, hint, mono = true, pre = false }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="conn-row">
       <div className="conn-label">{label}</div>
       <div className="conn-value">
-        <code className={mono ? "conn-code" : ""}>{value}</code>
+        <code className={`${mono ? "conn-code" : ""} ${pre ? "conn-code-pre" : ""}`}>{value}</code>
         <button type="button" className="btn btn-sm" onClick={() => {
           navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500);
         }}>{copied ? "Copied ✓" : "Copy"}</button>
@@ -924,11 +924,15 @@ function CopyField({ label, value, hint, mono = true }) {
   );
 }
 
+// The entire website setup, ready to paste — no API knowledge needed.
+const widgetSnippet = (key) =>
+  `<script src="${API_BASE}/static/widget.js"\n        data-api-url="${API_BASE}"\n        data-api-key="${key}"\n        data-title="Ask about our projects"\n        data-accent="#6b46ff"><\/script>`;
+
 function ApiKeys() {
   const [keys, setKeys] = useState([]);
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("website");
-  const [scope, setScope] = useState("full");
+  const [scope, setScope] = useState("widget");   // pairs with the default channel
   const [newKey, setNewKey] = useState(null);   // {name, api_key} — shown once
   const [msg, setMsg] = useState(null);
   const load = () => api.listApiKeys().then(setKeys).catch(() => setKeys([]));
@@ -945,11 +949,13 @@ function ApiKeys() {
       await load();
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
-  async function switchScope(k) {
-    const next = k.scope === "read_only" ? "full" : "read_only";
-    const warn = next === "read_only"
-      ? "Make this key read-only? It will be able to ask questions and read data, but not modify anything."
-      : "Give this key full access? It will act with its creator's admin rights.";
+  async function switchScope(k, next) {
+    if (next === k.scope) return;
+    const warn = {
+      widget: "Limit this key to the chat widget? It will only be able to run the public widget — nothing else.",
+      read_only: "Make this key read-only? It will be able to ask questions and read data, but not modify anything.",
+      full: "Give this key FULL access? It will act with its creator's admin rights. Never use a full key on a public web page — anyone can read it from the page source.",
+    }[next];
     if (!confirm(warn)) return;
     try { await api.setApiKeyScope(k.id, next); await load(); }
     catch (err) { setMsg({ ok: false, text: err.message }); }
@@ -978,6 +984,11 @@ function ApiKeys() {
         <b>Used for</b> tells the engine what the key is plugged into:
         <b> 🌐 Website</b> = public chat widget — shows in Live Chat, raises new-visitor alerts, captures leads.
         <b> 🏢 Internal tool</b> = CRM / back-office — <b>no alerts, no Live Chat</b>, higher rate limits.
+        <br /><br />
+        <b>Access</b> is how much the key may do — always pick the smallest one that works:
+        <b> 🛡️ Widget only</b> = runs the chat widget and nothing else; the only kind safe to embed in a
+        public page. <b>🔒 Read-only</b> = ask questions and read data, never modify — right for a CRM.
+        <b> 🔓 Full</b> = acts with your admin rights; use only server-side, where nobody can read the key.
       </div>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
 
@@ -990,17 +1001,31 @@ function ApiKeys() {
           <p className="muted small" style={{ margin: "2px 0 12px" }}>
             Everything needed to connect, in one place. <b>The key is shown only once</b> — copy it now.
           </p>
-          <CopyField label="Endpoint URL (ask questions)" value={`${API_BASE}/v1/query`} hint="Method: POST" />
-          <CopyField label="Auth header name" value="X-API-Key" />
-          <CopyField label="API key" value={newKey.api_key} hint="Store it safely — we can't show it again." />
-          <div style={{ marginTop: 12 }}>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => {
-              navigator.clipboard?.writeText(
-                `Endpoint: ${API_BASE}/v1/query\nMethod: POST\nHeader: X-API-Key: ${newKey.api_key}\nBody: {"query": "Golf Hills price", "session_id": "user-1", "format": "text"}\n\nRead leads: GET ${API_BASE}/v1/admin/leads (same header)\nAPI reference: ${API_BASE}/docs`
-              );
-              setMsg({ ok: true, text: "Setup details copied — paste them to whoever is connecting." });
-            }}>📋 Copy all setup details</button>
-          </div>
+
+          {newKey.scope === "widget" ? (
+            <>
+              <CopyField label="Paste this into your website" pre value={widgetSnippet(newKey.api_key)}
+                hint="Goes just before the closing </body> tag — WordPress, PHP, Shopify, plain HTML, anything. That's the whole setup." />
+              <div className="conn-hint" style={{ marginTop: 8 }}>
+                This key can <b>only</b> run the chat widget, so it's safe that visitors can see it in your page
+                source. Change <code>data-title</code> and <code>data-accent</code> to match your brand.
+              </div>
+            </>
+          ) : (
+            <>
+              <CopyField label="Endpoint URL (ask questions)" value={`${API_BASE}/v1/query`} hint="Method: POST" />
+              <CopyField label="Auth header name" value="X-API-Key" />
+              <CopyField label="API key" value={newKey.api_key} hint="Store it safely — we can't show it again." />
+              <div style={{ marginTop: 12 }}>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => {
+                  navigator.clipboard?.writeText(
+                    `Endpoint: ${API_BASE}/v1/query\nMethod: POST\nHeader: X-API-Key: ${newKey.api_key}\nBody: {"query": "Golf Hills price", "session_id": "user-1", "format": "text"}\n\nRead leads: GET ${API_BASE}/v1/admin/leads (same header)\nAPI reference: ${API_BASE}/docs`
+                  );
+                  setMsg({ ok: true, text: "Setup details copied — paste them to whoever is connecting." });
+                }}>📋 Copy all setup details</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1028,15 +1053,21 @@ function ApiKeys() {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="CRM integration" required />
           </label>
           <label className="field"><span>Used for</span>
-            <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+            <select value={channel} onChange={(e) => {
+              const c = e.target.value;
+              setChannel(c);
+              // A website key is public, so default it to the safest scope.
+              setScope(c === "website" ? "widget" : "read_only");
+            }}>
               <option value="website">🌐 Website chat widget (public)</option>
               <option value="internal">🏢 Internal tool — CRM / back-office</option>
             </select>
           </label>
           <label className="field"><span>Access</span>
             <select value={scope} onChange={(e) => setScope(e.target.value)}>
-              <option value="full">🔓 Full access</option>
+              <option value="widget">🛡️ Widget only — safe to put on a public page</option>
               <option value="read_only">🔒 Read-only — ask &amp; read, never modify</option>
+              <option value="full">🔓 Full access</option>
             </select>
           </label>
         </div>
@@ -1057,10 +1088,12 @@ function ApiKeys() {
                   </button>
                 </td>
                 <td>
-                  <button className={`btn btn-sm ${k.scope === "read_only" ? "btn-primary" : ""}`}
-                    onClick={() => switchScope(k)} title="Click to switch">
-                    {k.scope === "read_only" ? "🔒 Read-only" : "🔓 Full"}
-                  </button>
+                  <select className={`scope-pick ${k.scope === "full" ? "scope-pick-warn" : ""}`}
+                    value={k.scope || "full"} onChange={(e) => switchScope(k, e.target.value)}>
+                    <option value="widget">🛡️ Widget only</option>
+                    <option value="read_only">🔒 Read-only</option>
+                    <option value="full">🔓 Full</option>
+                  </select>
                 </td>
                 <td className="muted"><code>{k.prefix}…</code></td>
                 <td className="muted">{k.last_used_at ? String(k.last_used_at).slice(0, 10) : "—"}</td>

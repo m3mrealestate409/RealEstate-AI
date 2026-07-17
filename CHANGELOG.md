@@ -6,6 +6,32 @@ project uses [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [Unreleased]
 
+## [2.12.0] — 2026-07-17
+
+### Added — Widget-only API keys (safe to embed in a public page)
+The chat widget's key ships inside the website's HTML, so anyone can read it from
+the page source. That is normal for a chat widget — but until now the widget had
+to use a **full** key, because `read_only` blocks `POST /v1/leads` and the widget
+needs it to capture leads. So the key visible to every visitor could also reach
+the admin endpoints (read leads, read projects, change settings).
+
+- New key scope **`widget`** — an exact allowlist of the four calls `widget.js`
+  makes, and nothing else:
+  `POST /v1/query`, `POST /v1/leads`, `GET /v1/widget/config`, `GET /v1/widget/poll`.
+  Stricter than `read_only`, which still grants blanket GET access.
+- Enforced centrally in `enforce_key_scope` (`core/security.py`), so a newly added
+  endpoint can never be reachable by a widget key by accident. Adding an endpoint
+  to `widget.js` means adding it to `WIDGET_ALLOWED` too.
+- Admin → Integrations → API Keys:
+  - Choosing **🌐 Website** now defaults Access to **🛡️ Widget only**.
+  - Creating a widget key reveals the **ready-to-paste `<script>` tag** — the whole
+    website setup, no API knowledge needed — instead of endpoint/header details.
+  - The per-key Access control is now a dropdown (three scopes no longer fit a
+    two-way toggle); **🔓 Full** renders as a warning.
+
+Existing keys are unchanged and keep working — `scope` still defaults to `full`.
+Website keys should be switched to **🛡️ Widget only** before going live.
+
 ## [2.11.1] — 2026-07-17
 
 ### Changed — Lead webhook moved next to API Keys

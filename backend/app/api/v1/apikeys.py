@@ -21,7 +21,7 @@ router = APIRouter(prefix="/v1/admin/api-keys", tags=["api-keys"])
 
 
 CHANNELS = {"website", "internal"}
-SCOPES = {"full", "read_only"}
+SCOPES = {"full", "read_only", "widget"}
 
 
 class ApiKeyCreate(BaseModel):
@@ -30,7 +30,8 @@ class ApiKeyCreate(BaseModel):
     # "internal" = CRM / back-office tool (no alerts, no live chat, trusted limits)
     channel: str = "website"
     # "full" = acts as its admin creator; "read_only" = may ask questions and
-    # read, but can never modify anything (least privilege for integrations).
+    # read, but can never modify anything (least privilege for integrations);
+    # "widget" = only the public chat widget's own calls (safe to embed in a page).
     scope: str = "full"
 
 

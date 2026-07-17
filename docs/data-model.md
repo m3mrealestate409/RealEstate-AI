@@ -14,6 +14,41 @@ also performs lightweight `ADD COLUMN IF NOT EXISTS` migrations on boot.
 | **Engagement** | `leads`, `chat_sessions`, `chat_messages`, `query_log` |
 | **Platform** | `audit_log`, `settings` |
 
+## Entity-relationship diagram
+
+```mermaid
+erDiagram
+    PLANS ||--o{ ORGANIZATIONS : "assigned to"
+    ORGANIZATIONS ||--|| SUBSCRIPTIONS : has
+    ORGANIZATIONS ||--o{ PAYMENTS : receives
+    ORGANIZATIONS ||--o{ USERS : employs
+    ORGANIZATIONS ||--o{ API_KEYS : owns
+    ORGANIZATIONS ||--o{ BUILDERS : owns
+    ORGANIZATIONS ||--o{ PROJECTS : owns
+    ORGANIZATIONS ||--o{ LEADS : captures
+    ORGANIZATIONS ||--o{ CHAT_SESSIONS : hosts
+    SUBSCRIPTIONS }o--|| PLANS : "current / requested"
+    BUILDERS ||--o{ PROJECTS : develops
+    PROJECTS ||--o{ CONFIGURATIONS : has
+    PROJECTS ||--o{ PAYMENT_PLANS : has
+    PROJECTS ||--o{ TOWERS : has
+    PROJECTS ||--o{ AMENITIES : has
+    PROJECTS ||--o{ LOCATION_POINTS : has
+    PROJECTS ||--o{ OFFERS : has
+    PROJECTS ||--o{ DOCUMENTS : has
+    CONFIGURATIONS ||--o{ PRICES : "priced by"
+    CONFIGURATIONS ||--|| INVENTORY : stock
+    PAYMENT_PLANS ||--o{ PAYMENT_PLAN_MILESTONES : has
+    PAYMENT_PLANS ||--o{ PRICES : "applies to"
+    DOCUMENTS ||--o{ RAG_CHUNKS : "chunked into"
+    CHAT_SESSIONS ||--o{ CHAT_MESSAGES : contains
+    USERS ||--o{ AUDIT_LOG : "acts in"
+```
+
+`ORGANIZATIONS` is the tenancy hub: nearly every business table hangs off it via
+`organization_id`. `SETTINGS` and `QUERY_LOG` are omitted above (`SETTINGS` is a
+platform-wide key/value store; `QUERY_LOG` references org + user for analytics).
+
 ## Tenancy & billing
 
 - **plans** — a subscription tier. `max_employees`, `daily_llm_quota`,

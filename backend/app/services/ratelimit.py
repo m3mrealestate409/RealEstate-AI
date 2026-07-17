@@ -135,3 +135,48 @@ def daily_consume(org_id: int | None, source: str = "widget") -> None:
             r.expire(key, 60 * 60 * 24)
     except Exception as exc:  # noqa: BLE001
         logger.warning("daily_consume failed (%s).", exc)
+
+
+# --- Login brute-force protection -----------------------------------------
+# Counts FAILED logins per IP and per account within a window. The account cap
+# is the real lock (an attacker rotating IPs still trips it); the IP cap slows
+# credential-stuffing across many accounts from one source. Fail-open on infra
+# error so a Redis blip never locks everyone out of the product.
+LOGIN_WINDOW = 900          # 15 minutes
+LOGIN_IP_MAX = 30           # failed logins per IP per window
+LOGIN_ACCOUNT_MAX = 8       # failed logins per account per window (lockout)
+
+
+def login_allowed(ip: str | None, email: str | None) -> bool:
+    r = _get_redis()
+    if r is None:
+        return True
+    try:
+        ip_fails = int(r.get(f"login:ip:{ip}") or 0)
+        acct_fails = int(r.get(f"login:acct:{(email or '').lower()}") or 0)
+        return ip_fails < LOGIN_IP_MAX and acct_fails < LOGIN_ACCOUNT_MAX
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def login_register_failure(ip: str | None, email: str | None) -> None:
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        for key in (f"login:ip:{ip}", f"login:acct:{(email or '').lower()}"):
+            if r.incr(key) == 1:
+                r.expire(key, LOGIN_WINDOW)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def login_reset(email: str | None) -> None:
+    """Clear an account's failed-login counter after a successful login."""
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        r.delete(f"login:acct:{(email or '').lower()}")
+    except Exception:  # noqa: BLE001
+        pass

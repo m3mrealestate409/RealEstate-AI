@@ -21,6 +21,8 @@ import logging
 import httpx
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.services import httpguard
+
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 8.0
@@ -70,6 +72,11 @@ def send(provider: str, config: dict | None, text: str, extra: dict | None = Non
             url = (config.get("url") or "").strip()
             if not url.startswith(("http://", "https://")):
                 return False, "Webhook url must start with http:// or https://"
+            # SSRF guard: the URL is admin-chosen; refuse internal targets in prod.
+            try:
+                httpguard.guard_outbound(url)
+            except httpguard.BlockedURLError as exc:
+                return False, f"Blocked: {exc}"
             template = config.get("body_template") or '{"text": "{{text}}"}'
             body_str = _render_template(template, text, extra)
             try:
@@ -79,8 +86,11 @@ def send(provider: str, config: dict | None, text: str, extra: dict | None = Non
             headers = {"Content-Type": "application/json"}
             for k, v in (config.get("headers") or {}).items():
                 headers[str(k)] = str(v)
-            r = httpx.post(url, json=body, headers=headers, timeout=_TIMEOUT)
-            return (r.status_code < 300), f"Webhook HTTP {r.status_code}: {r.text[:200]}"
+            # safe_post pins to the validated IP (DNS-rebind-safe).
+            r = httpguard.safe_post(url, json=body, headers=headers, timeout=_TIMEOUT)
+            # Return the STATUS only — never the response body. Reflecting r.text
+            # back to the caller turned this into an SSRF read primitive.
+            return (r.status_code < 300), f"Webhook responded HTTP {r.status_code}"
 
         return False, "Notifications are off."
     except Exception as exc:  # noqa: BLE001 — best-effort

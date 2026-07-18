@@ -16,6 +16,8 @@ import time
 
 import httpx
 
+from app.services import httpguard
+
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 8.0
@@ -64,6 +66,14 @@ def push_lead(url: str, payload: dict, headers: dict | None = None) -> bool:
     errors and 5xx. A 4xx is the CRM telling us the request itself is wrong
     (bad payload / bad secret): retrying would just burn calls and log noise,
     so we fail fast and log it as a rejection. Returns success."""
+    # SSRF guard: the destination is admin-chosen and the push can be triggered
+    # by an anonymous widget visitor, so refuse internal targets in production.
+    try:
+        httpguard.guard_outbound(url)
+    except httpguard.BlockedURLError as exc:
+        logger.warning("CRM webhook BLOCKED (SSRF guard) for lead id=%s: %s", payload.get("id"), exc)
+        return False
+
     h = {
         "Content-Type": "application/json",
         # Same key on every attempt — a retry can never create a duplicate.
@@ -73,7 +83,9 @@ def push_lead(url: str, payload: dict, headers: dict | None = None) -> bool:
     detail = "unknown"
     for attempt in range(_ATTEMPTS):
         try:
-            r = httpx.post(url, json=payload, headers=h, timeout=_TIMEOUT)
+            # safe_post pins to the validated IP (DNS-rebind-safe); guard_outbound
+            # above already fast-rejects obviously internal URLs.
+            r = httpguard.safe_post(url, json=payload, headers=h, timeout=_TIMEOUT)
             if r.status_code < 300:
                 return True
             detail = f"HTTP {r.status_code}: {r.text[:150]}"

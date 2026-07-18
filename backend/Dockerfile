@@ -14,9 +14,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
+# gosu lets the entrypoint run migrations/seed as root, then drop to a non-root
+# user for the network-facing server process. Separate layer keeps the pip cache.
+RUN apt-get update && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -u 10001 appuser
+
 COPY . .
 
-RUN mkdir -p /app/uploads
+RUN mkdir -p /app/uploads && chown -R appuser:appuser /app/uploads
 
 EXPOSE 8000
 

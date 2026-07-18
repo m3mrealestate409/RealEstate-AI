@@ -1,10 +1,13 @@
 # Production overrides (H3). Usage:
+#   cp .env.production.example .env   # then fill in every blank
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Differences from the dev compose:
 #   - NO source bind-mount (image is immutable; code can't be rewritten at runtime)
-#   - NO --reload (uses entrypoint.prod.sh with multiple workers)
+#   - NO --reload; runs entrypoint.prod.sh with multiple workers as a NON-ROOT user
 #   - APP_DEBUG=false so CORS uses the explicit CORS_ORIGINS allow-list
+#   - API published on 127.0.0.1 only — a TLS reverse proxy (nginx/Caddy/Traefik)
+#     must sit in front and forward to 127.0.0.1:8001. Never expose it on 0.0.0.0.
 #   - Requires SECRET_KEY + CORS_ORIGINS + strong SEED_* passwords in .env
 services:
   api:
@@ -16,6 +19,12 @@ services:
       #   SECRET_KEY=<64-char random>
       #   CORS_ORIGINS=https://app.yourdomain.com
       #   SEED_ADMIN_PASSWORD / SEED_SUPER_ADMIN_PASSWORD=<strong>
-    volumes:
+    # !override REPLACES the base list instead of appending to it — without it,
+    # compose would keep the dev 0.0.0.0:8001 publish AND the ./backend:/app
+    # source bind-mount, defeating the whole overlay.
+    ports: !override
+      # Loopback only — the reverse proxy on this host forwards to it.
+      - "127.0.0.1:8001:8000"
+    volumes: !override
       # Only persist uploads; do NOT bind-mount the source tree in production.
       - uploads:/app/uploads

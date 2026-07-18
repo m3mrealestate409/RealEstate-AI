@@ -1,14 +1,16 @@
-# Production overrides (H3). Usage:
+# Production overrides. Usage:
 #   cp .env.production.example .env   # then fill in every blank
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Differences from the dev compose:
-#   - NO source bind-mount (image is immutable; code can't be rewritten at runtime)
-#   - NO --reload; runs entrypoint.prod.sh with multiple workers as a NON-ROOT user
-#   - APP_DEBUG=false so CORS uses the explicit CORS_ORIGINS allow-list
-#   - API published on 127.0.0.1 only — a TLS reverse proxy (nginx/Caddy/Traefik)
-#     must sit in front and forward to 127.0.0.1:8001. Never expose it on 0.0.0.0.
-#   - Requires SECRET_KEY + CORS_ORIGINS + strong SEED_* passwords in .env
+#   - Adds a `web` service (Caddy): serves the built React SPA AND reverse-proxies
+#     /v1, /static, /health to the API — so the whole app is same-origin with
+#     automatic HTTPS. This is the ONLY service exposed to the internet (80/443).
+#   - api: NO source bind-mount (image is immutable), NO --reload; runs
+#     entrypoint.prod.sh with multiple workers as a NON-ROOT user. Published only
+#     on 127.0.0.1 (for local debugging); real traffic reaches it via `web`.
+#   - APP_DEBUG=false so CORS uses the explicit CORS_ORIGINS allow-list.
+#   - Requires SECRET_KEY + CORS_ORIGINS + strong SEED_* passwords in .env.
 services:
   api:
     command: ["bash", "./entrypoint.prod.sh"]
@@ -17,14 +19,43 @@ services:
       APP_DEBUG: "false"
       # Set these in .env for production:
       #   SECRET_KEY=<64-char random>
-      #   CORS_ORIGINS=https://app.yourdomain.com
+      #   CORS_ORIGINS=https://yourdomain.com
       #   SEED_ADMIN_PASSWORD / SEED_SUPER_ADMIN_PASSWORD=<strong>
     # !override REPLACES the base list instead of appending to it — without it,
     # compose would keep the dev 0.0.0.0:8001 publish AND the ./backend:/app
     # source bind-mount, defeating the whole overlay.
     ports: !override
-      # Loopback only — the reverse proxy on this host forwards to it.
+      # Loopback only — `web` reaches the API internally as api:8000. This publish
+      # is just for on-server debugging (curl 127.0.0.1:8001/health).
       - "127.0.0.1:8001:8000"
     volumes: !override
       # Only persist uploads; do NOT bind-mount the source tree in production.
       - uploads:/app/uploads
+
+  # The public web edge: HTTPS, the SPA, and an API proxy in one small container.
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the SPA build. Must be the public site URL (same origin as
+        # `web`). Set VITE_API_URL in .env.
+        VITE_API_URL: ${VITE_API_URL:-https://yourdomain.com}
+    container_name: chaahat_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Domain Caddy serves + gets a cert for. Set SITE_ADDRESS in .env
+      # (e.g. yourdomain.com). Use ":80" for a plain-HTTP local smoke test.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Persist issued TLS certs + Caddy state across restarts.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

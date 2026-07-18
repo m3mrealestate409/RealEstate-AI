@@ -46,6 +46,94 @@ the published host ports exist only for local tooling.
 - **Backups:** the `db_data` volume is the system of record. Back it up
   regularly; `uploads` holds brochures/avatars.
 
+## Production deploy on a VPS (e.g. Hostinger)
+
+The production overlay ([`docker-compose.prod.yml`](../docker-compose.prod.yml))
+adds a **`web` edge** (Caddy) that serves the built React SPA **and** reverse-proxies
+`/v1`, `/static`, `/health` to the API — one origin, automatic HTTPS. The API, DB,
+and Redis stay off the public internet; only `web` (80/443) is exposed.
+
+> **Every `yourdomain.com` below is a placeholder — replace it with your real
+> domain.** It appears in exactly one place you edit: the `.env` file
+> (`SITE_ADDRESS`, `VITE_API_URL`, `CORS_ORIGINS`). Nothing else needs editing.
+
+### Sizing
+- **Recommended:** a 2 vCPU / 8 GB VPS (Hostinger **KVM 2**). Handles Postgres +
+  pgvector, Redis, the API (4 workers), and the SPA build comfortably.
+- **Minimum:** 1 vCPU / 4 GB (KVM 1) — fine for light/demo load; the build is tight.
+- Pick the **Ubuntu 24.04 + Docker** template so Docker & Compose are preinstalled.
+  Enable the panel's weekly backups.
+
+### Steps
+
+**1. Point the domain at the VPS.** In your DNS, add an `A` record for
+`yourdomain.com` → the VPS IP. Wait for it to resolve before step 6 (Caddy needs
+it to issue the TLS cert).
+
+**2. Log in and lock the box down.**
+```bash
+ssh root@YOUR_VPS_IP
+adduser deploy && usermod -aG sudo deploy      # a non-root sudo user
+# (optional) copy your SSH key to `deploy`, then disable root/password SSH login
+ufw allow 22 && ufw allow 80 && ufw allow 443 && ufw enable
+```
+> Note: Docker-published ports can bypass `ufw`. Here that's fine — only `web`
+> publishes (80/443), and DB/Redis/API are bound to `127.0.0.1`. Keep it that way.
+
+**3. Install Docker** *(skip if you used the Docker template).*
+```bash
+curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker deploy
+```
+Log out/in so the group applies.
+
+**4. Get the code.**
+```bash
+git clone https://github.com/m3mrealestate409/RealEstate-AI.git
+cd RealEstate-AI
+```
+
+**5. Configure `.env`.**
+```bash
+cp .env.production.example .env
+# generate strong secrets:
+openssl rand -hex 32   # → paste as SECRET_KEY
+openssl rand -hex 24   # → paste as POSTGRES_PASSWORD (and into DATABASE_URL)
+openssl rand -hex 24   # → paste as REDIS_PASSWORD  (and into REDIS_URL)
+nano .env
+```
+In `.env`, set: `SECRET_KEY`, `POSTGRES_PASSWORD` (+ the same value inside
+`DATABASE_URL`), `REDIS_PASSWORD` (+ inside `REDIS_URL`), `GEMINI_API_KEY`,
+strong `SEED_ADMIN_PASSWORD` / `SEED_SUPER_ADMIN_PASSWORD` with real emails, and
+the three domain fields — **`SITE_ADDRESS=yourdomain.com`**,
+**`VITE_API_URL=https://yourdomain.com`**, **`CORS_ORIGINS=https://yourdomain.com`**.
+
+**6. Build & start.**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+Caddy fetches a Let's Encrypt cert automatically on first boot.
+
+**7. Verify & secure the first login.**
+```bash
+curl -s http://127.0.0.1:8001/health          # API up (loopback)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f web   # watch cert issuance
+```
+Open `https://yourdomain.com`, log in with the seeded super-admin, and **change
+both seeded passwords** from the UI.
+
+### If the domain changes later
+`VITE_API_URL` is baked into the SPA at **build time**, so after editing the
+domain in `.env` you must **rebuild the web image**:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build web
+```
+
+### Fresh vs. demo data
+A brand-new VPS starts with an empty database; the seeder creates only your
+admin/super-admin from `SEED_*`. (Your local dev DB has demo orgs/projects — those
+do **not** travel to the server. Use the super-admin **Import** feature to load a
+real project pack.)
+
 ## Production checklist
 
 The shipped compose file is convenient for local development. Before exposing the
@@ -67,14 +155,14 @@ by the application at boot.)
   mappings entirely — services already talk over the compose network.
 - [ ] Put **Redis behind a password** (`requirepass`) and reflect it in
   `REDIS_URL`.
-- [ ] Terminate TLS at a reverse proxy (nginx/Caddy/cloud LB) in front of the API;
-  serve the SPA and `widget.js` over HTTPS.
+- ✅ TLS terminated at the `web` (Caddy) edge with automatic HTTPS; the SPA and
+  `widget.js` are served over HTTPS. *Handled by the prod overlay.*
 - [ ] Note: Docker-published ports bypass host firewalls (iptables `FORWARD`
   chain) — rely on binding + a cloud security group, not just `ufw`.
 
 ### Application hardening
-- [ ] Run the API container as a non-root user.
-- [ ] Disable `--reload` in production (dev convenience only).
+- ✅ API container runs as a non-root user (`appuser`, via `gosu`). *Prod overlay.*
+- ✅ `--reload` is off in production (`entrypoint.prod.sh`, multi-worker). *Prod overlay.*
 - [ ] Consider disabling `/docs` publicly if you don't want the API surface listed.
 - [ ] Front the LLM keys server-side only (they already never reach the browser).
 

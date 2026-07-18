@@ -1,0 +1,21 @@
+# PropX Estate — production web edge (Caddy).
+#
+# {$SITE_ADDRESS} comes from the environment (set in .env). Examples:
+#   SITE_ADDRESS=yourdomain.com     -> Caddy gets a real Let's Encrypt cert (HTTPS)
+#   SITE_ADDRESS=:80                -> plain HTTP on port 80 (local smoke test only)
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# API + widget assets are proxied to the api container over the internal
+	# compose network. Everything else is the React SPA (served from /srv).
+	@api path /v1/* /static/* /health
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html   # SPA client-side routing fallback
+		file_server
+	}
+}

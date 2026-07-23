@@ -269,9 +269,12 @@ function DeleteModal({ o, onClose, onDone, onErr }) {
   const [counts, setCounts] = useState(null);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
+  // Shown INSIDE the dialog. Routing it to the page-level banner instead put it
+  // behind this modal, so a failed delete looked like nothing happened at all.
+  const [err, setErr] = useState(null);
 
   useEffect(() => {
-    api.saDeleteOrgPreview(o.id).then(setCounts).catch((e) => onErr(e.message));
+    api.saDeleteOrgPreview(o.id).then(setCounts).catch((e) => setErr(e.message));
   }, [o.id]);
 
   const matches = typed.trim() === o.name.trim();
@@ -279,12 +282,13 @@ function DeleteModal({ o, onClose, onDone, onErr }) {
   async function destroy() {
     if (!matches) return;
     setBusy(true);
+    setErr(null);
     try {
       const r = await api.saDeleteOrg(o.id, typed.trim());
       onDone();
       onClose();
       onErr(null, `Deleted ${r.name}. ${r.removed.payments_kept} payment record(s) were kept.`);
-    } catch (e) { onErr(e.message); setBusy(false); }
+    } catch (e) { setErr(e.message); setBusy(false); }
   }
 
   const rows = counts ? [
@@ -308,7 +312,8 @@ function DeleteModal({ o, onClose, onDone, onErr }) {
         </div>
 
         <div className="modal-body">
-          {!counts && <div className="muted">Checking what this company has…</div>}
+          {err && <div className="alert alert-error" style={{ marginTop: 0 }}>{err}</div>}
+          {!counts && !err && <div className="muted">Checking what this company has…</div>}
           {counts && (
             <>
               <div className="alert alert-error" style={{ marginTop: 0 }}>

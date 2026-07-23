@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     ApiKey, AuditLog, Builder, ChatSession, Document, Lead, Organization,
-    Payment, Project, QueryLog, Subscription, User,
+    Payment, Project, QueryLog, RagChunk, Subscription, User,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,9 +94,20 @@ def purge(db: Session, org: Organization) -> dict:
     removed["chats"] = wipe(ChatSession, ChatSession.organization_id == org_id)
     removed["leads"] = wipe(Lead, Lead.organization_id == org_id)
     removed["api_keys"] = wipe(ApiKey, ApiKey.organization_id == org_id)
-    # One delete takes the whole knowledge tree with it: amenities, towers,
-    # configurations, prices, payment plans, inventory, offers, documents and
-    # their RAG chunks are all ON DELETE CASCADE from projects.
+
+    # rag_chunks reaches projects TWICE: chunk -> document -> project (cascades)
+    # and chunk -> project directly (does NOT cascade). The direct link is what
+    # blocks the projects delete below, so the chunks go first and explicitly.
+    # ORM-level cascades don't help here — these are bulk SQL deletes.
+    project_ids = [
+        p for (p,) in db.query(Project.id).filter(Project.organization_id == org_id).all()
+    ]
+    if project_ids:
+        removed["rag_chunks"] = wipe(RagChunk, RagChunk.project_id.in_(project_ids))
+
+    # One delete now takes the rest of the knowledge tree with it: amenities,
+    # towers, configurations, prices, payment plans, inventory, offers and
+    # documents are all ON DELETE CASCADE from projects.
     removed["projects"] = wipe(Project, Project.organization_id == org_id)
     removed["builders"] = wipe(Builder, Builder.organization_id == org_id)
 

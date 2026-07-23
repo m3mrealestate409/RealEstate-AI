@@ -106,6 +106,17 @@ def test_purge_unlinks_payments_from_deleted_staff():
     assert src.index("Payment.recorded_by") < src.index("wipe(User")
 
 
+def test_purge_deletes_rag_chunks_before_projects():
+    """Regression: rag_chunks reaches projects twice — via document (cascades)
+    and via project_id directly (does NOT cascade). Only the document path was
+    handled, so deleting a tenant with indexed documents failed on
+    rag_chunks_project_id_fkey and rolled the whole purge back. Bulk SQL deletes
+    do not run ORM cascades, so the chunks must go first, explicitly."""
+    src = inspect.getsource(orgpurge.purge)
+    assert "wipe(RagChunk" in src
+    assert src.index("wipe(RagChunk") < src.index("wipe(Project")
+
+
 def test_purge_deletes_children_before_users_and_projects():
     """Only some FKs cascade in Postgres; the rest must be removed in order."""
     src = inspect.getsource(orgpurge.purge)

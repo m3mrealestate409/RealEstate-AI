@@ -2,6 +2,10 @@
 .env
 *.env.local
 
+# Local operator cheat-sheet: contains this deployment's live URL and machine
+# paths. Stays on the server/laptop, never in the public repo.
+COMMANDS.txt
+
 # Python
 __pycache__/
 *.py[cod]

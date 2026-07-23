@@ -97,6 +97,9 @@ def init_db() -> None:
         # existing subscriptions table).
         conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS requested_plan_id BIGINT"))
         conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ"))
+        # Tombstone marker for a permanently deleted tenant (its payment history
+        # is retained, so the row itself must survive).
+        conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ"))
         # A project slug is unique per COMPANY, not across the platform: two
         # builders may both sell a "Green Valley". The old global constraint let
         # one tenant block a name for everyone else — and made bulk-importing a

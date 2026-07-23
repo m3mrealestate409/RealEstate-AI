@@ -262,6 +262,91 @@ function PaymentDialog({ o, onClose, onDone, onErr }) {
   );
 }
 
+// Permanently deleting a tenant is the one action here with no undo, so the
+// dialog states exactly what dies (real counts, fetched from the server), what
+// survives (payment history), and makes you type the company name to proceed.
+function DeleteModal({ o, onClose, onDone, onErr }) {
+  const [counts, setCounts] = useState(null);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.saDeleteOrgPreview(o.id).then(setCounts).catch((e) => onErr(e.message));
+  }, [o.id]);
+
+  const matches = typed.trim() === o.name.trim();
+
+  async function destroy() {
+    if (!matches) return;
+    setBusy(true);
+    try {
+      const r = await api.saDeleteOrg(o.id, typed.trim());
+      onDone();
+      onClose();
+      onErr(null, `Deleted ${r.name}. ${r.removed.payments_kept} payment record(s) were kept.`);
+    } catch (e) { onErr(e.message); setBusy(false); }
+  }
+
+  const rows = counts ? [
+    ["Employees / logins", counts.users],
+    ["Projects (with all prices, plans, documents)", counts.projects],
+    ["Leads", counts.leads],
+    ["Chat conversations", counts.chats],
+    ["API keys (widget / CRM)", counts.api_keys],
+    ["Uploaded documents", counts.documents],
+  ] : [];
+
+  return (
+    <div className="modal-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" role="dialog" aria-label={`Delete ${o.name}`}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-title">Delete {o.name}</div>
+            <div className="muted small">This cannot be undone</div>
+          </div>
+          <button className="modal-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="modal-body">
+          {!counts && <div className="muted">Checking what this company has…</div>}
+          {counts && (
+            <>
+              <div className="alert alert-error" style={{ marginTop: 0 }}>
+                <b>Permanently deleted:</b>
+                <ul style={{ margin: "6px 0 0 18px" }}>
+                  {rows.map(([label, n]) => (
+                    <li key={label}>{label}: <b>{n}</b></li>
+                  ))}
+                </ul>
+              </div>
+              <div className="conn-hint">
+                <b>{counts.payments_kept} payment record(s) will be kept</b> — financial history is
+                never deleted. The company name stays on those receipts only.
+              </div>
+              <p className="muted small">
+                Just want to stop them using it? Close this and use <b>Disable</b> instead — that
+                blocks logins but keeps every bit of data, and can be undone.
+              </p>
+              <label className="field">
+                <span>Type <b>{o.name}</b> to confirm</span>
+                <input value={typed} onChange={(e) => setTyped(e.target.value)}
+                  placeholder={o.name} autoFocus />
+              </label>
+            </>
+          )}
+        </div>
+
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-danger" onClick={destroy} disabled={busy || !matches}>
+            {busy ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Onboarding: a new tenant whose assistant knows nothing is a bad first day.
 // Copies projects WITH their prices, plans and amenities (same pack code as the
 // file export), so the new company can answer questions straight away.
@@ -353,6 +438,7 @@ function Organizations() {
   const [plans, setPlans] = useState([]);
   const [msg, setMsg] = useState(null);
   const [paying, setPaying] = useState(null);   // the org whose payment dialog is open
+  const [deleting, setDeleting] = useState(null); // the org being permanently deleted
   const [f, setF] = useState({ name: "", slug: "", plan_id: "", admin_email: "", admin_password: "", admin_name: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const load = () => { api.saOrgs().then(setOrgs); api.saPlans().then(setPlans); };
@@ -412,6 +498,7 @@ function Organizations() {
             onPlan={(v) => changePlan(o.id, v)}
             onToggle={() => toggleActive(o)}
             onPay={() => setPaying(o)}
+            onDelete={() => setDeleting(o)}
             onStatus={(s) => setStatus(o, s)} />
         ))}
         {orgs.length === 0 && <div className="muted">No companies yet.</div>}
@@ -444,6 +531,10 @@ function Organizations() {
 
       {paying && (
         <PaymentDialog o={paying} onClose={() => setPaying(null)} onDone={load}
+          onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
+      )}
+      {deleting && (
+        <DeleteModal o={deleting} onClose={() => setDeleting(null)} onDone={load}
           onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
       )}
     </div>
@@ -500,7 +591,7 @@ function Meter({ used, cap, label }) {
   );
 }
 
-function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus }) {
+function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete }) {
   const [cls, label] = BILLING_CHIP[o.status] || BILLING_CHIP.none;
   const d = o.days_left;
   const paidTill = o.expires_at
@@ -557,6 +648,11 @@ function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus }) {
           onClick={onToggle}
           title="Disable the whole account — separate from billing">
           {o.is_active ? "Enabled" : "Disabled"}
+        </button>
+        {/* Last, and visually quietest: it is the only irreversible action here. */}
+        <button className="btn btn-sm btn-ghost tc-delete" onClick={onDelete}
+          title="Permanently delete this company and all its data (payments are kept)">
+          🗑 Delete
         </button>
       </div>
     </div>

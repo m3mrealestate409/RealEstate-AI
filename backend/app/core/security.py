@@ -97,6 +97,35 @@ def enforce_key_scope(user: User, request) -> None:
     )
 
 
+def org_block_reason(db: Session, user: User) -> str | None:
+    """Why this user's TENANT may not use the system, or None if it may.
+
+    Deactivating a company used to change nothing — the flag was stored and
+    displayed but never checked, so its staff kept working normally. Every
+    entry point (login, JWT, API key) now runs this, so suspending or deleting
+    a tenant takes effect everywhere at once.
+
+    The platform owner has no organization, so they are never blocked.
+    """
+    if user.is_super_admin or not user.organization_id:
+        return None
+
+    from app.models import Organization
+
+    org = db.get(Organization, user.organization_id)
+    if org is None or org.deleted_at is not None:
+        return "This company account has been deleted."
+    if not org.is_active:
+        return "This company account is deactivated. Please contact the platform administrator."
+    return None
+
+
+def assert_org_allowed(db: Session, user: User) -> None:
+    reason = org_block_reason(db, user)
+    if reason:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
+
+
 def hash_password(password: str) -> str:
     # bcrypt limits input to 72 bytes; truncate defensively.
     pw = password.encode("utf-8")[:72]
@@ -136,6 +165,9 @@ def get_current_user(
         # Mark the request as coming from an external channel (widget/CRM/etc.),
         # not a logged-in employee — used to auto-capture prospect phone numbers.
         user._via_api_key = True
+        # A suspended/deleted tenant's keys stop working too — otherwise its
+        # widget and CRM integration would keep running after suspension.
+        assert_org_allowed(db, user)
         enforce_key_scope(user, request)   # read-only keys can't modify anything
         return user
 
@@ -153,6 +185,9 @@ def get_current_user(
     user = db.query(User).filter(User.email == email, User.is_active.is_(True)).first()
     if user is None:
         raise cred_exc
+    # Checked on every request, not just at login: suspending a tenant must cut
+    # off sessions that are already signed in.
+    assert_org_allowed(db, user)
     return user
 
 

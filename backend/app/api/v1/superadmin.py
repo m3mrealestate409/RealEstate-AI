@@ -14,7 +14,7 @@ from app.core.audit import record_audit
 from app.core.security import hash_password, require_super_admin
 from app.database import get_db
 from app.models import Organization, Plan, Project, QueryLog, Subscription, User
-from app.services import billing, cache, notify, packs
+from app.services import billing, cache, notify, orgpurge, packs
 
 router = APIRouter(prefix="/v1/superadmin", tags=["superadmin"])
 
@@ -88,7 +88,10 @@ class OrgIn(BaseModel):
 @router.get("/organizations")
 def list_orgs(db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
     out = []
-    for org in db.query(Organization).order_by(Organization.created_at.desc()).all():
+    orgs = (db.query(Organization)
+              .filter(Organization.deleted_at.is_(None))   # tombstones stay hidden
+              .order_by(Organization.created_at.desc()).all())
+    for org in orgs:
         emp = db.query(func.count(User.id)).filter(
             User.organization_id == org.id, User.is_active.is_(True)
         ).scalar() or 0
@@ -166,6 +169,48 @@ def update_org(org_id: int, payload: OrgUpdate, db: Session = Depends(get_db),
                  after={k: str(v) for k, v in changes.items()})
     db.commit()
     return {"id": org.id, "updated": list(changes.keys())}
+
+
+# --------------------------- Deleting a tenant -----------------------------
+# Two levels, because they answer different problems:
+#   - Deactivate (PUT is_active=false) — reversible. Staff can't log in, the
+#     widget and API keys stop, but every byte of data is still there.
+#   - Delete (below) — irreversible. Wipes the tenant's data but KEEPS its
+#     payment history, so the org row survives as a tombstone.
+@router.get("/organizations/{org_id}/delete-preview")
+def delete_org_preview(org_id: int, db: Session = Depends(get_db),
+                       _: User = Depends(require_super_admin)):
+    """Exact counts of what a delete would destroy — so the confirmation dialog
+    states facts instead of a vague warning."""
+    org = db.get(Organization, org_id)
+    if not org or org.deleted_at is not None:
+        raise HTTPException(404, "Organization not found")
+    return {"id": org.id, "name": org.name, **orgpurge.preview(db, org)}
+
+
+class OrgDeleteIn(BaseModel):
+    # Must match the company name exactly. A destructive, irreversible action
+    # should not be one stray click away.
+    confirm_name: str
+
+
+@router.post("/organizations/{org_id}/delete")
+def delete_org(org_id: int, payload: OrgDeleteIn, db: Session = Depends(get_db),
+               admin: User = Depends(require_super_admin)):
+    org = db.get(Organization, org_id)
+    if not org or org.deleted_at is not None:
+        raise HTTPException(404, "Organization not found")
+    if payload.confirm_name.strip() != org.name.strip():
+        raise HTTPException(400, "The typed name does not match the company name.")
+
+    name = org.name
+    removed = orgpurge.purge(db, org)
+    # Logged against the platform owner, so it survives the tenant's own audit
+    # rows being deleted — this is the record that the company ever existed.
+    record_audit(db, user_id=admin.id, action="DELETE", entity="organizations",
+                 entity_id=org_id, before={"name": name}, after=removed)
+    db.commit()
+    return {"deleted": True, "name": name, "removed": removed}
 
 
 # ------------------------- Subscriptions ----------------------------------

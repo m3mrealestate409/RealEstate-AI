@@ -391,6 +391,9 @@ a { color: inherit; text-decoration: none; }
   padding-top: 10px; border-top: 1px solid var(--border); }
 .tc-access { margin-left: auto; font-size: 11px; }
 .tc-off { color: var(--red); }
+/* Deliberately understated until hovered — the only irreversible action here. */
+.tc-delete { font-size: 11px; color: var(--muted); }
+.tc-delete:hover { color: #c0392b; background: #fdecea; border-color: #f5c6c0; }
 
 /* ---- Team list ----
    Was a seven-column table whose last action read "Toggle" — which told you

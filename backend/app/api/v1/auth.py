@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.security import (
-    create_access_token, get_current_user, hash_password, verify_password,
+    assert_org_allowed, create_access_token, get_current_user, hash_password, verify_password,
 )
 from app.database import get_db
 from app.models import User
@@ -46,6 +46,10 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(),
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password"
         )
+    # Credentials are right, but the company itself may be suspended/deleted.
+    # Checked AFTER the password so it can never be used to probe which emails
+    # belong to a suspended tenant.
+    assert_org_allowed(db, user)
     ratelimit.login_reset(ip, form.username)  # successful login clears the (ip, account) counter
     token = create_access_token(subject=user.email, role=user.role)
     return TokenResponse(

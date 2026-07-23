@@ -214,6 +214,9 @@ export const api = {
   saOrgs: () => request("/v1/superadmin/organizations"),
   saCreateOrg: (data) => request("/v1/superadmin/organizations", { method: "POST", body: data }),
   saUpdateOrg: (id, data) => request(`/v1/superadmin/organizations/${id}`, { method: "PUT", body: data }),
+  saDeleteOrgPreview: (id) => request(`/v1/superadmin/organizations/${id}/delete-preview`),
+  saDeleteOrg: (id, confirm_name) =>
+    request(`/v1/superadmin/organizations/${id}/delete`, { method: "POST", body: { confirm_name } }),
   saSetSubscription: (id, data) =>
     request(`/v1/superadmin/organizations/${id}/subscription`, { method: "PUT", body: data }),
   saRequests: () => request("/v1/superadmin/requests"),

@@ -175,6 +175,11 @@ class Organization(Base):
     notify_provider: Mapped[str] = mapped_column(String, default="off")
     notify_config: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Set when the tenant is permanently deleted. Its operational data (users,
+    # projects, leads, chats) is destroyed, but this row survives as a tombstone
+    # so the retained payment records still point at a real company. A deleted
+    # org is hidden everywhere and can never be logged into.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     plan: Mapped["Plan"] = relationship(back_populates="organizations")
     subscription: Mapped["Subscription | None"] = relationship(

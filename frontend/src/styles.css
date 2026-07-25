@@ -618,8 +618,11 @@ a { color: inherit; text-decoration: none; }
 .queue-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .queue-name { font-weight: 600; flex: 1; min-width: 160px; }
 .queue-row select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; min-width: 180px; }
+.queue-title { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; min-width: 160px; flex: 1; }
 .queue-actions { display: flex; gap: 4px; margin-left: auto; }
 .queue-draft { margin-top: 6px; }
+.index-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.index-toggle input { width: 16px; height: 16px; }
 
 /* ---------- Tier limits box ---------- */
 .tier-limits-box { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px;

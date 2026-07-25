@@ -27,14 +27,16 @@ export default function Admin() {
     { id: "growth", label: "Growth", ico: "📈", tabs: [
       { id: "insights", label: "Insights" }, { id: "leads", label: "Leads" },
     ] },
-    { id: "projects", label: "Projects & Data", ico: "📦", tabs: [
-      { id: "project", label: "New Project" }, { id: "data", label: "Manage Data" },
-      { id: "builders", label: "Developers" }, { id: "doctypes", label: "Doc Types" },
-      { id: "import", label: "Import / Export" },
-    ] },
+    // One home for everything that fills the knowledge base — no more hopping
+    // between two categories to add a project and then its data.
     { id: "knowledge", label: "Knowledge", ico: "📚", tabs: [
-      { id: "import-ai", label: "AI Import" }, { id: "document", label: "Upload Brochure" },
+      { id: "builders", label: "Developers" },
+      { id: "project", label: "New Project" },
+      { id: "import-ai", label: "AI Import" },
+      { id: "data", label: "Manage Data" },
       { id: "documents", label: "Documents" },
+      { id: "doctypes", label: "Doc Types" },
+      { id: "import", label: "Import / Export" },
     ] },
     { id: "team", label: "Team", ico: "👥", tabs: [
       { id: "users", label: "Users" },
@@ -87,7 +89,6 @@ export default function Admin() {
       {tab === "import-ai" && <AiImport />}
       {tab === "project" && <NewProject />}
       {tab === "data" && <ManageData />}
-      {tab === "document" && <UploadDoc />}
       {tab === "documents" && <DocumentsList />}
       {tab === "builders" && <Builders />}
       {tab === "doctypes" && <DocTypes />}
@@ -192,14 +193,17 @@ function NewProject() {
   );
 }
 
-function UploadDoc() {
+// Manual document upload. Lives inside the Documents tab now — brochures come
+// through AI Import, so this is mainly for legal papers / floor / master plans.
+function UploadDoc({ onDone }) {
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
-  const [docType, setDocType] = useState("brochure");
+  const [docType, setDocType] = useState("legal");
   const [file, setFile] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [projects, setProjects] = useState([]);
+  const fileRef = useRef(null);
 
   useEffect(() => { api.projects().then(setProjects); }, []);
 
@@ -215,7 +219,10 @@ function UploadDoc() {
     fd.append("file", file);
     try {
       const res = await api.uploadDocument(fd);
-      setMsg({ ok: true, text: `Indexed "${res.title}" — ${res.chunks_indexed} chunks.` });
+      const ok = { ok: true, text: `Indexed "${res.title}" — ${res.chunks_indexed} chunks.` };
+      // Reset so the next upload starts clean; the list refreshes via onDone.
+      setTitle(""); setFile(null); if (fileRef.current) fileRef.current.value = "";
+      if (onDone) onDone(ok); else setMsg(ok);
     } catch (err) {
       setMsg({ ok: false, text: err.message });
     } finally {
@@ -224,7 +231,7 @@ function UploadDoc() {
   }
 
   return (
-    <form className="admin-form" onSubmit={submit}>
+    <form onSubmit={submit}>
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
       <div className="calc-fields">
         <label className="field"><span>Project</span>
@@ -236,11 +243,11 @@ function UploadDoc() {
         <label className="field"><span>Title</span><input value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
         <label className="field"><span>Type</span>
           <select value={docType} onChange={(e) => setDocType(e.target.value)}>
-            <option value="brochure">Brochure</option><option value="legal">Legal</option>
-            <option value="floor_plan">Floor Plan</option><option value="master_plan">Master Plan</option>
+            <option value="legal">Legal</option><option value="floor_plan">Floor Plan</option>
+            <option value="master_plan">Master Plan</option><option value="brochure">Brochure</option>
           </select>
         </label>
-        <label className="field"><span>PDF file</span><input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} required /></label>
+        <label className="field"><span>PDF file</span><input ref={fileRef} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} required /></label>
       </div>
       <button className="btn btn-primary" disabled={busy}>{busy ? "Indexing…" : "Upload & Index"}</button>
     </form>
@@ -254,6 +261,7 @@ function DocumentsList() {
   const [replacing, setReplacing] = useState(null); // doc id being replaced
   const load = () => api.listDocuments().then(setDocs);
   useEffect(() => { load(); }, []);
+  const onUploaded = (m) => { setMsg(m); load(); };
 
   async function reindex(id) {
     setBusy(id); setMsg(null);
@@ -281,6 +289,17 @@ function DocumentsList() {
   return (
     <div className="admin-form">
       {msg && <div className={`alert ${msg.ok ? "alert-ok" : "alert-error"}`}>{msg.text}</div>}
+
+      {/* Brochures usually arrive via AI Import; this is for any other PDF —
+          legal papers, floor plans, master plans. */}
+      <details className="seed-box" style={{ marginBottom: 16 }}>
+        <summary>➕ Upload a document (legal, floor plan, master plan…)</summary>
+        <p className="muted small" style={{ margin: "8px 0 12px" }}>
+          Tip: for a <b>brochure</b>, use <b>AI Import</b> instead — it extracts the data and indexes the PDF in one step.
+        </p>
+        <UploadDoc onDone={onUploaded} />
+      </details>
+
       <div className="table-wrap">
         <table className="data-table">
           <thead><tr><th>Title</th><th>Project</th><th>Type</th><th>Status</th><th>Chunks</th><th>Ver</th><th></th></tr></thead>

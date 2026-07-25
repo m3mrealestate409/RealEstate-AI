@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 
 // AI-assisted data entry — works for a SINGLE pdf or a BULK batch.
-// Flow: upload PDFs → assign each to a project → extract (draft, nothing saved)
-// → review/edit each → save. Reuses /extract and /apply per item.
+// Flow: upload PDFs → assign each to a project + title → extract (draft, nothing
+// saved) → review/edit each → Save & Index. One button now does BOTH: writes the
+// structured data to the project AND (optionally) files the same PDF as a
+// searchable brochure. That folds in the old separate "Upload Brochure" tab.
 export default function AiImport() {
   const [projects, setProjects] = useState([]);
-  const [items, setItems] = useState([]); // {id, file, name, projectId, draft, status, error, open}
+  const [items, setItems] = useState([]); // {id, file, name, title, index, projectId, draft, status, error, open}
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api.projects().then(setProjects); }, []);
@@ -14,7 +16,11 @@ export default function AiImport() {
   function addFiles(files) {
     const now = Date.now();
     const added = [...files].map((f, i) => ({
-      id: `${now}-${i}`, file: f, name: f.name, projectId: "",
+      id: `${now}-${i}`, file: f, name: f.name,
+      // Sensible default title = the file name without its extension.
+      title: (f.name || "").replace(/\.pdf$/i, ""),
+      index: true,                      // also add the PDF to the searchable brochure library
+      projectId: "",
       draft: null, status: "pending", error: null, open: false,
     }));
     setItems((prev) => [...prev, ...added]);
@@ -45,11 +51,32 @@ export default function AiImport() {
 
   async function saveOne(it) {
     if (!it.projectId) { patch(it.id, { error: "Choose a project first." }); return; }
+    if (it.index && !it.title.trim()) { patch(it.id, { error: "Give the brochure a title (or turn off indexing)." }); return; }
     patch(it.id, { status: "saving", error: null });
     try {
+      // 1) The structured data (towers, prices, amenities…) → the project.
       const r = await api.applyDraft(it.projectId, toPayload(it.draft));
       const s = r.applied;
-      patch(it.id, { status: "saved", open: false, savedMsg: `${s.fields} fields, ${s.towers} towers, ${s.configurations} configs, ${s.location_points} location, ${s.amenities} amenities${s.payment_plan ? ", plan" : ""}` });
+      let savedMsg = `${s.fields} fields, ${s.towers} towers, ${s.configurations} configs, ${s.location_points} location, ${s.amenities} amenities${s.payment_plan ? ", plan" : ""}`;
+
+      // 2) The same PDF → the searchable brochure library, so the assistant can
+      //    quote it. Optional (checkbox). A failure here must not lose step 1.
+      if (it.index) {
+        try {
+          const fd = new FormData();
+          fd.append("project_id", it.projectId);
+          fd.append("title", it.title.trim());
+          fd.append("doc_type", "brochure");
+          fd.append("file", it.file);
+          const d = await api.uploadDocument(fd);
+          savedMsg += ` · indexed (${d.chunks_indexed} chunks)`;
+        } catch (err) {
+          patch(it.id, { status: "saved", open: false, savedMsg,
+            error: `Data saved, but indexing the PDF failed: ${err.message}. You can add it later from Documents.` });
+          return;
+        }
+      }
+      patch(it.id, { status: "saved", open: false, error: null, savedMsg });
     } catch (err) {
       patch(it.id, { status: "error", error: err.message });
     }
@@ -61,7 +88,9 @@ export default function AiImport() {
     <div className="admin-form">
       <div className="settings-note">
         🪄 Upload one or many brochure PDFs. Each is read by AI into an <b>editable draft</b> —
-        assign it to a project, review (especially prices), then Save. <b>Nothing is stored until you Save.</b>
+        assign it to a project, give it a title, review (especially prices), then <b>Save &amp; Index</b>.
+        One step saves the extracted data <i>and</i> files the PDF as a searchable brochure.
+        <b>Nothing is stored until you Save.</b>
       </div>
 
       <label className="field">
@@ -84,6 +113,8 @@ export default function AiImport() {
                 <option value="">Assign to project…</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+              <input className="queue-title" value={it.title} disabled={it.status === "saved"}
+                onChange={(e) => patch(it.id, { title: e.target.value })} placeholder="Brochure title…" />
               <StatusTag status={it.status} savedMsg={it.savedMsg} />
               <div className="queue-actions">
                 {it.status === "pending" && <button className="btn btn-ghost" onClick={() => extractOne(it)}>Extract</button>}
@@ -97,8 +128,13 @@ export default function AiImport() {
             {it.open && it.draft && (
               <div className="queue-draft">
                 <DraftEditor draft={it.draft} setDraft={(fn) => patch(it.id, { draft: typeof fn === "function" ? fn(it.draft) : fn })} />
-                <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => saveOne(it)} disabled={it.status === "saving" || !it.projectId}>
-                  {it.status === "saving" ? "Saving…" : "✓ Save to project"}
+                <label className="index-toggle" style={{ marginTop: 12 }}>
+                  <input type="checkbox" checked={it.index}
+                    onChange={(e) => patch(it.id, { index: e.target.checked })} />
+                  <span>Also save this PDF as a searchable brochure (so the assistant can quote it)</span>
+                </label>
+                <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={() => saveOne(it)} disabled={it.status === "saving" || !it.projectId}>
+                  {it.status === "saving" ? "Saving…" : (it.index ? "✓ Save & Index" : "✓ Save to project")}
                 </button>
               </div>
             )}

@@ -14,7 +14,8 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB (brochures/master plans run large)
+MAX_UPLOAD_MB = MAX_UPLOAD_BYTES // (1024 * 1024)
 _ALLOWED_CONTENT_TYPES = {"application/pdf", "application/octet-stream", "", None}
 
 MAX_IMAGE_BYTES = 3 * 1024 * 1024  # 3 MB
@@ -89,7 +90,7 @@ def save_pdf_upload(file: UploadFile, upload_dir: str, prefix: str) -> str:
                     break
                 written += len(chunk)
                 if written > MAX_UPLOAD_BYTES:
-                    raise HTTPException(413, "File too large (max 25 MB).")
+                    raise HTTPException(413, f"File too large (max {MAX_UPLOAD_MB} MB).")
                 out.write(chunk)
     except HTTPException:
         if os.path.exists(dest):

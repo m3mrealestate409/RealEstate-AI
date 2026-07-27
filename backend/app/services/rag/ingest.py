@@ -54,24 +54,37 @@ def ingest_document(db: Session, document: Document) -> int:
     )
 
     new_version = (document.version or 1)
-    written = 0
+
+    # Collect every (page, chunk) first, then embed them all in ONE batched call.
+    # Embedding per-chunk sequentially made an 80-page brochure take minutes and
+    # time out; batching brings it down to seconds.
+    items: list[tuple[int, str]] = []
     for page_no, page_text in _extract_pages(document.file_path):
         for chunk in _chunk_text(page_text):
-            vector = embedder.embed_one(chunk)
-            db.add(
-                RagChunk(
-                    document_id=document.id,
-                    project_id=document.project_id,
-                    page=page_no,
-                    content=chunk,
-                    embedding=vector,
-                    version=new_version,
-                    is_active=True,
-                )
+            items.append((page_no, chunk))
+
+    if not items:
+        document.indexed_at = datetime.now(timezone.utc)
+        document.status = "completed"
+        db.commit()
+        return 0
+
+    vectors = embedder.embed([chunk for (_, chunk) in items])
+
+    for (page_no, chunk), vector in zip(items, vectors):
+        db.add(
+            RagChunk(
+                document_id=document.id,
+                project_id=document.project_id,
+                page=page_no,
+                content=chunk,
+                embedding=vector,
+                version=new_version,
+                is_active=True,
             )
-            written += 1
+        )
 
     document.indexed_at = datetime.now(timezone.utc)
     document.status = "completed"
     db.commit()
-    return written
+    return len(items)

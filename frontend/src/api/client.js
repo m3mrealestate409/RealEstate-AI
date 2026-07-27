@@ -26,11 +26,15 @@ export function getUser() {
 // leaves the fetch pending forever — the caller's `loading` flag never clears
 // and buttons (e.g. "Ask") stay disabled until a manual page reload.
 const REQUEST_TIMEOUT_MS = 45000;
+// AI extraction and PDF indexing legitimately take much longer than a normal
+// request (a big brochure = many pages to read + embed), so those calls pass a
+// longer timeout explicitly instead of aborting at 45s.
+export const LONG_TIMEOUT_MS = 300000; // 5 minutes
 
-async function request(path, { method = "GET", body, form, auth = true } = {}) {
+async function request(path, { method = "GET", body, form, auth = true, timeout = REQUEST_TIMEOUT_MS } = {}) {
   const headers = {};
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeout);
   const opts = { method, headers, signal: controller.signal };
 
   if (auth) {
@@ -151,7 +155,7 @@ export const api = {
   listAmenities: (projectId) => request(`/v1/admin/projects/${projectId}/amenities`),
   addAmenity: (projectId, data) => request(`/v1/admin/projects/${projectId}/amenities`, { method: "POST", body: data }),
   deleteAmenity: (id) => request(`/v1/admin/amenities/${id}`, { method: "DELETE" }),
-  uploadDocument: (formData) => request("/v1/admin/documents", { method: "POST", body: formData }),
+  uploadDocument: (formData) => request("/v1/admin/documents", { method: "POST", body: formData, timeout: LONG_TIMEOUT_MS }),
   audit: () => request("/v1/admin/audit"),
   health: () => request("/health", { auth: false }),
 
@@ -184,7 +188,7 @@ export const api = {
     request("/v1/admin/import/projects-csv", { method: "POST", body: formData }),
   importProjectsJson: (formData) =>
     request("/v1/admin/import/projects-json", { method: "POST", body: formData }),
-  extractDraft: (formData) => request("/v1/admin/extract", { method: "POST", body: formData }),
+  extractDraft: (formData) => request("/v1/admin/extract", { method: "POST", body: formData, timeout: LONG_TIMEOUT_MS }),
   applyDraft: (projectId, draft) => request(`/v1/admin/projects/${projectId}/apply`, { method: "POST", body: draft }),
 
   // User management (admin)
@@ -199,9 +203,9 @@ export const api = {
   // Knowledge / RAG monitoring
   knowledgeOverview: () => request("/v1/admin/knowledge/overview"),
   listDocuments: () => request("/v1/admin/knowledge/documents"),
-  reindexDocument: (id) => request(`/v1/admin/knowledge/documents/${id}/reindex`, { method: "POST" }),
+  reindexDocument: (id) => request(`/v1/admin/knowledge/documents/${id}/reindex`, { method: "POST", timeout: LONG_TIMEOUT_MS }),
   replaceDocument: (id, formData) =>
-    request(`/v1/admin/knowledge/documents/${id}/replace`, { method: "POST", body: formData }),
+    request(`/v1/admin/knowledge/documents/${id}/replace`, { method: "POST", body: formData, timeout: LONG_TIMEOUT_MS }),
   deleteDocument: (id) => request(`/v1/admin/knowledge/documents/${id}`, { method: "DELETE" }),
 
   // System health

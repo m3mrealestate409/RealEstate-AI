@@ -6,6 +6,10 @@
 # paths. Stays on the server/laptop, never in the public repo.
 COMMANDS.txt
 
+# Marketing/landing website — kept isolated from the RAG app and out of this
+# public repo. Gets its own (private) repo when it's ready to ship.
+marketing-site/
+
 # Python
 __pycache__/
 *.py[cod]

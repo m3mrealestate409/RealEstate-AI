@@ -17,6 +17,9 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
+      # Uvicorn workers. 4 was too heavy when the host also runs other stacks —
+      # each worker loads the whole app. 2 suits a 2-vCPU box and cuts memory.
+      WEB_CONCURRENCY: "2"
       # Set these in .env for production:
       #   SECRET_KEY=<64-char random>
       #   CORS_ORIGINS=https://yourdomain.com

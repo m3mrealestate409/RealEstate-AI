@@ -546,7 +546,10 @@ function LocationPoints({ projectId }) {
   const [points, setPoints] = useState([]);
   const [f, setF] = useState({ category: "nearby", name: "", distance: "" });
   const [msg, setMsg] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [edit, setEdit] = useState({ category: "nearby", name: "", distance: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const setE = (k, v) => setEdit((s) => ({ ...s, [k]: v }));
   const load = () => api.listLocation(projectId).then(setPoints);
   useEffect(() => { load(); }, [projectId]);
 
@@ -556,6 +559,17 @@ function LocationPoints({ projectId }) {
       await api.addLocation(projectId, { category: f.category, name: f.name, distance: f.distance || null });
       setF({ category: f.category, name: "", distance: "" });
       await load(); setMsg({ ok: true, text: "Location point added." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
+  function startEdit(p) { setEditId(p.id); setEdit({ category: p.category, name: p.name, distance: p.distance || "" }); }
+  async function saveEdit(p) {
+    setMsg(null);
+    try {
+      await api.updateLocation(p.id, {
+        category: edit.category, name: edit.name.trim(),
+        distance: edit.distance.trim() || null, notes: p.notes ?? null,
+      });
+      setEditId(null); await load(); setMsg({ ok: true, text: "Location point updated." });
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
   async function remove(id) { if (confirm("Delete this location point?")) { await api.deleteLocation(id); load(); } }
@@ -582,10 +596,29 @@ function LocationPoints({ projectId }) {
           <thead><tr><th>Category</th><th>Place</th><th>Distance</th><th></th></tr></thead>
           <tbody>
             {points.map((p) => (
-              <tr key={p.id}>
-                <td>{label(p.category)}</td><td>{p.name}</td><td>{p.distance || "—"}</td>
-                <td><button className="btn btn-ghost" onClick={() => remove(p.id)}>Delete</button></td>
-              </tr>
+              editId === p.id ? (
+                <tr key={p.id}>
+                  <td>
+                    <select value={edit.category} onChange={(e) => setE("category", e.target.value)} style={{ width: "100%" }}>
+                      {LOC_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </td>
+                  <td><input value={edit.name} onChange={(e) => setE("name", e.target.value)} style={{ width: "100%" }} /></td>
+                  <td><input placeholder="2 km / 10 min" value={edit.distance} onChange={(e) => setE("distance", e.target.value)} style={{ width: "100%" }} /></td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn btn-primary" onClick={() => saveEdit(p)} disabled={!edit.name.trim()}>Save</button>{" "}
+                    <button className="btn btn-ghost" onClick={() => setEditId(null)}>Cancel</button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={p.id}>
+                  <td>{label(p.category)}</td><td>{p.name}</td><td>{p.distance || "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn btn-ghost" onClick={() => startEdit(p)}>Edit</button>{" "}
+                    <button className="btn btn-ghost" onClick={() => remove(p.id)}>Delete</button>
+                  </td>
+                </tr>
+              )
             ))}
             {points.length === 0 && <tr><td colSpan="4" className="muted">No location points yet.</td></tr>}
           </tbody>

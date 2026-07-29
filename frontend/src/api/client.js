@@ -150,6 +150,7 @@ export const api = {
   deleteTower: (towerId) => request(`/v1/admin/towers/${towerId}`, { method: "DELETE" }),
   listLocation: (projectId) => request(`/v1/admin/projects/${projectId}/location`),
   addLocation: (projectId, data) => request(`/v1/admin/projects/${projectId}/location`, { method: "POST", body: data }),
+  updateLocation: (id, data) => request(`/v1/admin/location/${id}`, { method: "PUT", body: data }),
   deleteLocation: (id) => request(`/v1/admin/location/${id}`, { method: "DELETE" }),
   projectAmenities: (id) => request(`/v1/projects/${id}/amenities`),
   listAmenities: (projectId) => request(`/v1/admin/projects/${projectId}/amenities`),

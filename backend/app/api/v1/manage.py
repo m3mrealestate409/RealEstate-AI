@@ -382,6 +382,23 @@ def add_location(project_id: int, payload: LocationPointIn, db: Session = Depend
     return lp
 
 
+@router.put("/location/{point_id}", response_model=LocationPointOut)
+def update_location(point_id: int, payload: LocationPointIn, db: Session = Depends(get_db),
+                    admin: User = Depends(require_role("admin"))):
+    lp = db.get(LocationPoint, point_id)
+    if not lp:
+        raise HTTPException(404, "Location point not found")
+    get_scoped_project(db, lp.project_id, admin)
+    for k, v in payload.model_dump().items():
+        setattr(lp, k, v)
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="location_points",
+                 entity_id=point_id, after=payload.model_dump())
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    db.refresh(lp)
+    return lp
+
+
 @router.delete("/location/{point_id}")
 def delete_location(point_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
     lp = db.get(LocationPoint, point_id)

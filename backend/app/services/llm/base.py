@@ -36,6 +36,7 @@ class LLMProvider(ABC):
         messages: list[Message],
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        response_json: bool = False,
     ) -> LLMResponse:
         """Return a completion. Implementations must never raise on missing
         keys at import time — only when actually called without config."""

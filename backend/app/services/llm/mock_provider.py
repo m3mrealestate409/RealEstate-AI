@@ -19,6 +19,7 @@ class MockLLMProvider(LLMProvider):
         messages: list[Message],
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        response_json: bool = False,
     ) -> LLMResponse:
         user_turn = next(
             (m.content for m in reversed(messages) if m.role == "user"), ""

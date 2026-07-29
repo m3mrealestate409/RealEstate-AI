@@ -28,6 +28,7 @@ class GeminiLLMProvider(LLMProvider):
         messages: list[Message],
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        response_json: bool = False,
     ) -> LLMResponse:
         model = self._genai.GenerativeModel(
             self._model_name, system_instruction=system
@@ -38,13 +39,14 @@ class GeminiLLMProvider(LLMProvider):
             role = "model" if m.role == "assistant" else "user"
             contents.append({"role": role, "parts": [m.content]})
 
-        resp = model.generate_content(
-            contents,
-            generation_config={
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
-            },
-        )
+        gen_config = {"temperature": temperature, "max_output_tokens": max_tokens}
+        # JSON mode: constrain the model to emit syntactically valid JSON. Without
+        # it, the model occasionally returns malformed JSON (a missing comma, a
+        # number with thousands-separators) that breaks parsing.
+        if response_json:
+            gen_config["response_mime_type"] = "application/json"
+
+        resp = model.generate_content(contents, generation_config=gen_config)
         return LLMResponse(text=_extract_text(resp), provider=self.name, model=self._model_name)
 
 

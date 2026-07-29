@@ -9,6 +9,7 @@ prompt forbids inventing figures; unknown values come back null.
 from __future__ import annotations
 
 import json
+import re
 
 from app.services.llm import get_llm_provider
 from app.services.llm.base import Message
@@ -50,7 +51,13 @@ def _parse_json(text: str) -> dict:
     i, j = t.find("{"), t.rfind("}")
     if i >= 0 and j > i:
         t = t[i : j + 1]
-    return json.loads(t)
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError:
+        # Safety net for the rare malformed output: drop trailing commas before
+        # a closing } or ] (the most common LLM JSON slip). JSON mode makes this
+        # rare, but a fallback beats surfacing a raw parse error to the user.
+        return json.loads(re.sub(r",\s*([}\]])", r"\1", t))
 
 
 def _normalize(d: dict) -> dict:
@@ -84,8 +91,11 @@ def extract_fields(pdf_text: str) -> dict:
         resp = provider.complete(
             system=SYSTEM,
             messages=[Message(role="user", content=prompt)],
-            max_tokens=2048,
+            # A data-dense sales sheet (many configs/amenities/location points)
+            # can exceed 2048 tokens and get truncated mid-JSON — give it room.
+            max_tokens=8192,
             temperature=0.0,
+            response_json=True,   # force valid JSON from the model
         )
         return {"draft": _normalize(_parse_json(resp.text))}
     except Exception as exc:

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client.js";
 
@@ -6,19 +6,26 @@ export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const seq = useRef(0);
 
-  async function load(search) {
-    setLoading(true);
-    try {
-      setProjects(await api.projects(search));
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  // Live search: re-query as the user types. Debounced (250ms) so we don't hit
+  // the API on every keystroke; a sequence token drops stale/out-of-order
+  // responses so fast typing can never leave the wrong results on screen.
   useEffect(() => {
-    load();
-  }, []);
+    const mySeq = ++seq.current;
+    const handle = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await api.projects(q);
+        if (mySeq === seq.current) setProjects(res);
+      } catch {
+        /* transient error — keep the results already on screen */
+      } finally {
+        if (mySeq === seq.current) setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [q]);
 
   return (
     <div className="page">
@@ -27,18 +34,17 @@ export default function Projects() {
         <p className="muted">Live structured data — every field is the source of truth.</p>
       </div>
 
-      <form
-        className="search-bar"
-        onSubmit={(e) => {
-          e.preventDefault();
-          load(q);
-        }}
-      >
-        <input placeholder="Search projects…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button className="btn">Search</button>
+      {/* Live search — no button needed; results filter as you type. */}
+      <form className="search-bar" onSubmit={(e) => e.preventDefault()}>
+        <input
+          placeholder="Search projects…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoFocus
+        />
       </form>
 
-      {loading ? (
+      {loading && projects.length === 0 ? (
         <div className="muted">Loading…</div>
       ) : (
         <div className="project-grid">

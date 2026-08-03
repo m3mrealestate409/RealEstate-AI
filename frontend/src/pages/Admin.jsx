@@ -113,7 +113,7 @@ const RISE_OPTIONS = ["High Rise", "Mid Rise", "Low Rise"];
 const BLANK_PROJECT = {
   name: "", slug: "", builder_id: "", city: "", locality: "", project_status: "Under Construction",
   project_type: "Residential", land_parcel: "", green_area: "",
-  rise_type: "", launch_date: "", launch_price: "",
+  rise_type: "", launch_date: "", launch_price: "", possession_date: "",
 };
 
 // builder_id comes from a <select> as a string; the API wants int|null.
@@ -125,6 +125,7 @@ function cleanProject(f) {
     rise_type: f.rise_type || null,
     launch_date: f.launch_date || null,
     launch_price: f.launch_price === "" || f.launch_price == null ? null : Number(f.launch_price),
+    possession_date: f.possession_date || null,
   };
 }
 
@@ -162,6 +163,7 @@ function ProjectFields({ f, set }) {
         </select>
       </label>
       <label className="field"><span>Launch date</span><input type="date" value={f.launch_date || ""} onChange={(e) => set("launch_date", e.target.value)} /></label>
+      <label className="field"><span>Possession date</span><input type="date" value={f.possession_date || ""} onChange={(e) => set("possession_date", e.target.value)} /></label>
       <label className="field"><span>Launch price (₹/sq ft)</span><input type="number" placeholder="e.g. 7500" value={f.launch_price ?? ""} onChange={(e) => set("launch_price", e.target.value)} /></label>
     </div>
   );
@@ -464,7 +466,7 @@ function EditProjectDetails({ projectId }) {
     project_type: p.project_type || "Residential",
     land_parcel: p.land_parcel || "", green_area: p.green_area || "",
     rise_type: p.rise_type || "", launch_date: p.launch_date || "",
-    launch_price: p.launch_price ?? "",
+    launch_price: p.launch_price ?? "", possession_date: p.possession_date || "",
   })); }, [projectId]);
 
   if (!f) return <div className="muted">Loading…</div>;

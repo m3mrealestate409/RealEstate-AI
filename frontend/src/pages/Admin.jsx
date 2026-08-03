@@ -494,7 +494,10 @@ function Towers({ projectId }) {
   const [towers, setTowers] = useState([]);
   const [f, setF] = useState({ name: "", floors: "", height: "", units_per_floor: "" });
   const [msg, setMsg] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [edit, setEdit] = useState({ name: "", floors: "", height: "", units_per_floor: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const setE = (k, v) => setEdit((s) => ({ ...s, [k]: v }));
   const load = () => api.listTowers(projectId).then(setTowers);
   useEffect(() => { load(); }, [projectId]);
 
@@ -512,6 +515,16 @@ function Towers({ projectId }) {
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
   async function remove(id) { if (confirm("Delete this tower?")) { await api.deleteTower(id); load(); } }
+  function startEdit(t) { setEditId(t.id); setEdit({ name: t.name, floors: t.floors ?? "", height: t.height || "", units_per_floor: t.units_per_floor ?? "" }); }
+  async function saveEdit(t) {
+    setMsg(null);
+    const body = { name: edit.name.trim(), height: edit.height.trim() || null };
+    for (const k of ["floors", "units_per_floor"]) body[k] = edit[k] === "" ? null : Number(edit[k]);
+    try {
+      await api.updateTower(t.id, body);
+      setEditId(null); await load(); setMsg({ ok: true, text: "Tower updated." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
 
   return (
     <div className="admin-form">
@@ -530,10 +543,26 @@ function Towers({ projectId }) {
           <thead><tr><th>Tower</th><th>Floors</th><th>Height</th><th>Units/floor</th><th></th></tr></thead>
           <tbody>
             {towers.map((t) => (
-              <tr key={t.id}>
-                <td>{t.name}</td><td>{t.floors ?? "—"}</td><td>{t.height || "—"}</td><td>{t.units_per_floor ?? "—"}</td>
-                <td><button className="btn btn-ghost" onClick={() => remove(t.id)}>Delete</button></td>
-              </tr>
+              editId === t.id ? (
+                <tr key={t.id}>
+                  <td><input value={edit.name} onChange={(e) => setE("name", e.target.value)} style={{ width: "100%" }} /></td>
+                  <td><input type="number" value={edit.floors} onChange={(e) => setE("floors", e.target.value)} style={{ width: 80 }} /></td>
+                  <td><input value={edit.height} onChange={(e) => setE("height", e.target.value)} style={{ width: "100%" }} /></td>
+                  <td><input type="number" value={edit.units_per_floor} onChange={(e) => setE("units_per_floor", e.target.value)} style={{ width: 80 }} /></td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn btn-primary" onClick={() => saveEdit(t)} disabled={!edit.name.trim()}>Save</button>{" "}
+                    <button className="btn btn-ghost" onClick={() => setEditId(null)}>Cancel</button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={t.id}>
+                  <td>{t.name}</td><td>{t.floors ?? "—"}</td><td>{t.height || "—"}</td><td>{t.units_per_floor ?? "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn btn-ghost" onClick={() => startEdit(t)}>Edit</button>{" "}
+                    <button className="btn btn-ghost" onClick={() => remove(t.id)}>Delete</button>
+                  </td>
+                </tr>
+              )
             ))}
             {towers.length === 0 && <tr><td colSpan="5" className="muted">No towers yet.</td></tr>}
           </tbody>
@@ -635,7 +664,10 @@ function Amenities({ projectId }) {
   const [rows, setRows] = useState([]);
   const [f, setF] = useState({ name: "", category: "" });
   const [msg, setMsg] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [edit, setEdit] = useState({ name: "", category: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const setE = (k, v) => setEdit((s) => ({ ...s, [k]: v }));
   const load = () => api.listAmenities(projectId).then(setRows);
   useEffect(() => { load(); }, [projectId]);
 
@@ -648,6 +680,14 @@ function Amenities({ projectId }) {
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
   async function remove(id) { if (confirm("Delete this amenity?")) { await api.deleteAmenity(id); load(); } }
+  function startEdit(a) { setEditId(a.id); setEdit({ name: a.name, category: a.category || "" }); }
+  async function saveEdit(a) {
+    setMsg(null);
+    try {
+      await api.updateAmenity(a.id, { name: edit.name.trim(), category: edit.category.trim() || null });
+      setEditId(null); await load(); setMsg({ ok: true, text: "Amenity updated." });
+    } catch (err) { setMsg({ ok: false, text: err.message }); }
+  }
 
   return (
     <div className="admin-form">
@@ -668,10 +708,24 @@ function Amenities({ projectId }) {
           <thead><tr><th>Amenity</th><th>Category</th><th></th></tr></thead>
           <tbody>
             {rows.map((a) => (
-              <tr key={a.id}>
-                <td>{a.name}</td><td>{a.category || "—"}</td>
-                <td><button className="btn btn-ghost" onClick={() => remove(a.id)}>Delete</button></td>
-              </tr>
+              editId === a.id ? (
+                <tr key={a.id}>
+                  <td><input value={edit.name} onChange={(e) => setE("name", e.target.value)} style={{ width: "100%" }} /></td>
+                  <td><input value={edit.category} onChange={(e) => setE("category", e.target.value)} placeholder="Sports / Leisure…" style={{ width: "100%" }} /></td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn btn-primary" onClick={() => saveEdit(a)} disabled={!edit.name.trim()}>Save</button>{" "}
+                    <button className="btn btn-ghost" onClick={() => setEditId(null)}>Cancel</button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={a.id}>
+                  <td>{a.name}</td><td>{a.category || "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn btn-ghost" onClick={() => startEdit(a)}>Edit</button>{" "}
+                    <button className="btn btn-ghost" onClick={() => remove(a.id)}>Delete</button>
+                  </td>
+                </tr>
+              )
             ))}
             {rows.length === 0 && <tr><td colSpan="3" className="muted">No amenities yet.</td></tr>}
           </tbody>

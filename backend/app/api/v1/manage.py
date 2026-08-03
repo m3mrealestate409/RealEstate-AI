@@ -347,6 +347,23 @@ def add_tower(project_id: int, payload: TowerIn, db: Session = Depends(get_db),
     return tower
 
 
+@router.put("/towers/{tower_id}", response_model=TowerOut)
+def update_tower(tower_id: int, payload: TowerIn, db: Session = Depends(get_db),
+                 admin: User = Depends(require_role("admin"))):
+    tower = db.get(Tower, tower_id)
+    if not tower:
+        raise HTTPException(404, "Tower not found")
+    get_scoped_project(db, tower.project_id, admin)
+    for k, v in payload.model_dump().items():
+        setattr(tower, k, v)
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="towers",
+                 entity_id=tower_id, after=payload.model_dump())
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    db.refresh(tower)
+    return tower
+
+
 @router.delete("/towers/{tower_id}")
 def delete_tower(tower_id: int, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
     tower = db.get(Tower, tower_id)
@@ -438,6 +455,22 @@ def add_amenity(project_id: int, payload: AmenityIn, db: Session = Depends(get_d
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="amenities",
                  entity_id=a.id, after=payload.model_dump())
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"id": a.id, "name": a.name, "category": a.category}
+
+
+@router.put("/amenities/{amenity_id}")
+def update_amenity(amenity_id: int, payload: AmenityIn, db: Session = Depends(get_db),
+                   admin: User = Depends(require_role("admin"))):
+    a = db.get(Amenity, amenity_id)
+    if not a:
+        raise HTTPException(404, "Amenity not found")
+    get_scoped_project(db, a.project_id, admin)
+    a.name = payload.name
+    a.category = payload.category
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="amenities",
+                 entity_id=amenity_id, after=payload.model_dump())
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"id": a.id, "name": a.name, "category": a.category}

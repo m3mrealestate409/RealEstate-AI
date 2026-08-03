@@ -240,6 +240,12 @@ a { color: inherit; text-decoration: none; }
 .int-guide-wrap { border-top: 1px solid var(--border); padding-top: 16px; }
 .int-guide-wrap h3 { margin: 0 0 14px; }
 .int-guide { display: flex; flex-direction: column; gap: 16px; }
+.wa-opts { display: flex; gap: 12px; flex-wrap: wrap; }
+.wa-opt { display: flex; align-items: center; gap: 12px; text-align: left; border: 1.5px solid var(--border); border-radius: 12px; padding: 14px 16px; background: #fff; cursor: pointer; min-width: 220px; flex: 1; transition: border-color .15s, box-shadow .15s; }
+.wa-opt.on { border-color: #6b46ff; box-shadow: 0 0 0 3px rgba(107, 70, 255, .14); }
+.wa-opt .wa-ico { font-size: 24px; }
+.wa-opt .wa-txt { display: flex; flex-direction: column; }
+.wa-opt b { font-size: 14px; }
 .int-step { display: flex; gap: 12px; }
 .int-step-n { flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--primary); color: #fff;
   font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }

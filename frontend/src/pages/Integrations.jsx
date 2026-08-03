@@ -286,12 +286,15 @@ export function NotificationSettings() {
 }
 
 function WordPressGuide() {
+  const [launcher, setLauncher] = useState("bubble");
   const snippet =
     `<script src="${API_BASE}/static/widget.js"\n` +
     `        data-api-url="${API_BASE}"\n` +
     `        data-api-key="YOUR_API_KEY"\n` +
     `        data-title="Ask about our projects"\n` +
-    `        data-accent="#6b46ff"></script>`;
+    `        data-accent="#6b46ff"` +
+    (launcher === "searchbar" ? `\n        data-launcher="searchbar"` : "") +
+    `></script>`;
   return (
     <div className="int-guide">
       <Step n="1" title="Create an API key">
@@ -303,12 +306,25 @@ function WordPressGuide() {
       <Step n="2" title="Install a snippet plugin in WordPress">
         <p className="muted">In WordPress admin → Plugins → add <b>“WPCode”</b> or <b>“Insert Headers and Footers”</b> (free).</p>
       </Step>
-      <Step n="3" title="Paste this script (Footer / site-wide)">
-        <p className="muted">Replace <code>YOUR_API_KEY</code> with the key from step 1.</p>
+      <Step n="3" title="Choose the widget's look">
+        <div className="wa-opts">
+          {[
+            { key: "bubble", ico: "💬", name: "Chat bubble", sub: "A round chat button, bottom-right" },
+            { key: "searchbar", ico: "🔍", name: "Search bar", sub: "A “What are you looking for?” bar" },
+          ].map((o) => (
+            <button type="button" key={o.key} className={`wa-opt ${launcher === o.key ? "on" : ""}`} onClick={() => setLauncher(o.key)}>
+              <span className="wa-ico">{o.ico}</span>
+              <span className="wa-txt"><b>{o.name}</b><span className="muted small">{o.sub}</span></span>
+            </button>
+          ))}
+        </div>
+      </Step>
+      <Step n="4" title="Paste this script (Footer / site-wide)">
+        <p className="muted">Replace <code>YOUR_API_KEY</code> with the key from step 1. (The snippet below matches your chosen look.)</p>
         <CodeBlock code={snippet} />
       </Step>
-      <Step n="4" title="Save → open any page">
-        <p className="muted">A chat bubble appears at the bottom-right. Click it and ask a question. Done ✅</p>
+      <Step n="5" title="Save → open any page">
+        <p className="muted">Your chosen launcher appears at the bottom-right. Click it and ask a question. Done ✅</p>
       </Step>
       <div className="int-note">
         Customise with <code>data-title</code> (header text) and <code>data-accent</code> (brand colour).

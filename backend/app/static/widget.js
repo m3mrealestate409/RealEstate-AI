@@ -18,6 +18,10 @@
   var API_KEY = (s && s.getAttribute("data-api-key")) || "";
   var TITLE = (s && s.getAttribute("data-title")) || "Ask about our projects";
   var ACCENT = (s && s.getAttribute("data-accent")) || "#6b46ff";
+  // Launcher style: "bubble" (round chat icon, default) or "searchbar" (a
+  // "What are you looking for?" search-bar that opens the same chat panel).
+  var LAUNCHER = ((s && s.getAttribute("data-launcher")) || "bubble").toLowerCase();
+  var SEARCH_PH = (s && s.getAttribute("data-search-text")) || "What are you looking for?";
   // A session id is a bearer capability (the live-chat poll returns a session's
   // agent messages by id), so it must be UNGUESSABLE. The old
   // Math.random().slice(2,10) gave ~8 weak chars that an attacker could
@@ -52,6 +56,13 @@
     "background:" + ACCENT + ";color:#fff;border:none;cursor:pointer;font-size:26px;box-shadow:0 8px 24px rgba(0,0,0,.22);" +
     "z-index:2147483000;display:flex;align-items:center;justify-content:center;transition:transform .15s}" +
     ".px-btn:hover{transform:scale(1.06)}" +
+    ".px-search{position:fixed;right:22px;bottom:22px;z-index:2147483000;display:flex;align-items:center;gap:10px;" +
+    "background:#fff;border:1.6px solid " + ACCENT + ";border-radius:30px;padding:12px 18px;cursor:pointer;" +
+    "min-width:236px;max-width:calc(100vw - 44px);box-shadow:0 8px 24px rgba(0,0,0,.16);transition:transform .15s;" +
+    "font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}" +
+    ".px-search:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(0,0,0,.2)}" +
+    ".px-search-txt{flex:1;color:#8a8f9c;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+    ".px-search-ico{width:24px;height:24px;flex-shrink:0;background:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='" + encodeURIComponent(ACCENT) + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\") center/22px no-repeat}" +
     ".px-panel{position:fixed;right:22px;bottom:92px;width:370px;max-width:calc(100vw - 44px);height:540px;" +
     "max-height:calc(100vh - 130px);background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.28);" +
     "z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}" +
@@ -115,8 +126,17 @@
   // svg rules can't override/hide them.
   var BG_CHAT = ACCENT + " url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E\") center/26px no-repeat";
   var BG_CLOSE = ACCENT + " url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E\") center/22px no-repeat";
-  var btn = document.createElement("button");
-  btn.className = "px-btn"; btn.title = TITLE; btn.style.background = BG_CHAT;
+  var btn;
+  if (LAUNCHER === "searchbar") {
+    btn = document.createElement("div");
+    btn.className = "px-search";
+    btn.setAttribute("role", "button"); btn.setAttribute("tabindex", "0");
+    btn.innerHTML = '<span class="px-search-txt"></span><span class="px-search-ico"></span>';
+    btn.querySelector(".px-search-txt").textContent = SEARCH_PH;
+  } else {
+    btn = document.createElement("button");
+    btn.className = "px-btn"; btn.title = TITLE; btn.style.background = BG_CHAT;
+  }
   var panel = document.createElement("div"); panel.className = "px-panel";
   panel.innerHTML =
     '<div class="px-head">' +
@@ -159,13 +179,15 @@
   btn.onclick = function () {
     teaser.classList.remove("show");
     var open = panel.classList.toggle("open");
-    btn.style.background = open ? BG_CLOSE : BG_CHAT;
+    if (LAUNCHER !== "searchbar") btn.style.background = open ? BG_CLOSE : BG_CHAT;
     if (open) {
       if (!msgs.dataset.greeted) { addBot(GREETING); msgs.dataset.greeted = "1"; }
       input.focus();
     }
   };
-  panel.querySelector("[data-close]").onclick = function () { panel.classList.remove("open"); btn.style.background = BG_CHAT; };
+  // Keyboard access for the searchbar launcher (it's a div, not a <button>).
+  btn.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.onclick(); } });
+  panel.querySelector("[data-close]").onclick = function () { panel.classList.remove("open"); if (LAUNCHER !== "searchbar") btn.style.background = BG_CHAT; };
   teaser.querySelector(".px-teaser-txt").onclick = function () { teaser.classList.remove("show"); btn.onclick(); };
   teaser.querySelector(".px-teaser-x").onclick = function (e) { e.stopPropagation(); teaser.classList.remove("show"); try { sessionStorage.setItem("pxTeaser", "0"); } catch (x) {} };
   sendBtn.onclick = send;

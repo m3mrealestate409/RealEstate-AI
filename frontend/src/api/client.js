@@ -182,10 +182,14 @@ export const api = {
     request(`/v1/admin/configurations/${configId}/price`, { method: "PUT", body: data }),
   updateInventory: (configId, data) =>
     request(`/v1/admin/configurations/${configId}/inventory`, { method: "PUT", body: data }),
+  updateConfiguration: (configId, data) =>
+    request(`/v1/admin/configurations/${configId}`, { method: "PUT", body: data }),
   addPaymentPlan: (projectId, data) =>
     request(`/v1/admin/projects/${projectId}/payment-plans`, { method: "POST", body: data }),
   listPaymentPlans: (projectId) =>
     request(`/v1/admin/projects/${projectId}/payment-plans`),
+  updatePaymentPlan: (planId, data) =>
+    request(`/v1/admin/payment-plans/${planId}`, { method: "PUT", body: data }),
   deletePaymentPlan: (planId) =>
     request(`/v1/admin/payment-plans/${planId}`, { method: "DELETE" }),
   importProjectsCsv: (formData) =>

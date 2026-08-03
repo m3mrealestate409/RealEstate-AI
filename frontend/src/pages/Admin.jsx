@@ -835,6 +835,8 @@ function EditConfigs({ projectId }) {
 function EditConfigRow({ config, plans = [], onDone }) {
   const [avail, setAvail] = useState(config.inventory?.available_units ?? "");
   const [saving, setSaving] = useState(false);
+  const [type, setType] = useState(config.type || "");
+  const [size, setSize] = useState(config.size ?? "");
 
   // Which price we're editing: "" = base, else a payment_plan_id (as string).
   const [target, setTarget] = useState("");
@@ -872,9 +874,18 @@ function EditConfigRow({ config, plans = [], onDone }) {
     } catch (e) { onDone({ ok: false, text: e.message }); }
     finally { setSaving(false); }
   }
+  async function saveDetails() {
+    setSaving(true);
+    try {
+      await api.updateConfiguration(config.id, { type: type.trim(), super_area: size === "" ? null : Number(size) });
+      onDone({ ok: true, text: `Configuration details updated (${type.trim()}).` });
+    } catch (e) { onDone({ ok: false, text: e.message }); }
+    finally { setSaving(false); }
+  }
 
   const priceChanged = String(price) !== String(priceFor(target));
   const stockChanged = String(avail) !== String(config.inventory?.available_units ?? "");
+  const detailsChanged = type.trim() !== (config.type || "") || String(size) !== String(config.size ?? "");
 
   return (
     <div className="edit-config-row">
@@ -893,6 +904,14 @@ function EditConfigRow({ config, plans = [], onDone }) {
       )}
 
       <div className="ecr-fields">
+        <div className="ecr-field">
+          <label>Type &amp; size (sq ft)</label>
+          <div className="ecr-inline">
+            <input value={type} onChange={(e) => setType(e.target.value)} placeholder="3BHK" style={{ width: 90 }} />
+            <input type="number" value={size} onChange={(e) => setSize(e.target.value)} placeholder="size" style={{ width: 90 }} />
+            <button className="btn" disabled={!detailsChanged || saving || !type.trim()} onClick={saveDetails}>Update</button>
+          </div>
+        </div>
         <div className="ecr-field">
           <label>Price ({config.current_price?.price_unit || "per_sqft"})</label>
           <div className="ecr-inline">
@@ -958,6 +977,7 @@ function AddPlan({ projectId }) {
   const [milestones, setMilestones] = useState([{ label: "On Booking", percent: 10 }, { label: "On Possession", percent: 90 }]);
   const [msg, setMsg] = useState(null);
   const [plans, setPlans] = useState([]);
+  const [editingId, setEditingId] = useState(null);   // null = add mode; else the plan being edited
 
   const loadPlans = () => api.listPaymentPlans(projectId).then(setPlans).catch(() => setPlans([]));
   useEffect(() => { loadPlans(); }, [projectId]);
@@ -965,15 +985,29 @@ function AddPlan({ projectId }) {
   const total = milestones.reduce((s, m) => s + Number(m.percent || 0), 0);
   function setM(i, k, v) { setMilestones((s) => s.map((m, j) => (j === i ? { ...m, [k]: v } : m))); }
 
+  function resetForm() {
+    setEditingId(null); setName(""); setDesc("");
+    setMilestones([{ label: "On Booking", percent: 10 }, { label: "On Possession", percent: 90 }]);
+  }
+  function startEdit(p) {
+    setEditingId(p.id); setName(p.name); setDesc(p.description || "");
+    setMilestones((p.milestones || []).map((m) => ({ label: m.label, percent: m.percent })));
+    setMsg(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   async function submit(e) {
     e.preventDefault();
     setMsg(null);
+    const body = {
+      name, description: desc,
+      milestones: milestones.map((m) => ({ label: m.label, percent: Number(m.percent) })),
+    };
     try {
-      const r = await api.addPaymentPlan(projectId, {
-        name, description: desc,
-        milestones: milestones.map((m) => ({ label: m.label, percent: Number(m.percent) })),
-      });
+      const r = editingId
+        ? await api.updatePaymentPlan(editingId, body)
+        : await api.addPaymentPlan(projectId, body);
       setMsg({ ok: true, text: r.message });
+      resetForm();
       loadPlans();
     } catch (err) { setMsg({ ok: false, text: err.message }); }
   }
@@ -998,7 +1032,10 @@ function AddPlan({ projectId }) {
           {plans.map((p) => (
             <div className="existing-plan-row" key={p.id}>
               <span>{p.name}</span>
-              <button type="button" className="btn btn-ghost btn-danger" onClick={() => removePlan(p)}>Delete</button>
+              <span style={{ display: "flex", gap: 4 }}>
+                <button type="button" className="btn btn-ghost" onClick={() => startEdit(p)}>Edit</button>
+                <button type="button" className="btn btn-ghost btn-danger" onClick={() => removePlan(p)}>Delete</button>
+              </span>
             </div>
           ))}
         </div>
@@ -1018,7 +1055,10 @@ function AddPlan({ projectId }) {
         <button type="button" className="btn" onClick={() => setMilestones((s) => [...s, { label: "", percent: 0 }])}>+ Milestone</button>
         <span className={total === 100 ? "conf-badge conf-high" : "conf-badge conf-mid"}>Total: {total}%</span>
       </div>
-      <button className="btn btn-primary" disabled={total !== 100}>Add payment plan</button>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <button className="btn btn-primary" disabled={total !== 100}>{editingId ? "Update payment plan" : "Add payment plan"}</button>
+        {editingId && <button type="button" className="btn btn-ghost" onClick={resetForm}>Cancel edit</button>}
+      </div>
     </form>
   );
 }

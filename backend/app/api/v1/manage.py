@@ -259,7 +259,13 @@ def list_payment_plans(
         .order_by(PaymentPlan.name)
         .all()
     )
-    return [{"id": p.id, "name": p.name} for p in plans]
+    return [
+        {
+            "id": p.id, "name": p.name, "description": p.description,
+            "milestones": [{"label": m.label, "percent": float(m.percent)} for m in p.milestones],
+        }
+        for p in plans
+    ]
 
 
 @router.post("/projects/{project_id}/payment-plans", status_code=201)
@@ -282,6 +288,33 @@ def add_payment_plan(
     db.commit()
     cache.bump_org(admin.organization_id)
     return {"payment_plan_id": pp.id, "message": f"Added payment plan '{payload.name}'."}
+
+
+@router.put("/payment-plans/{plan_id}")
+def update_payment_plan(
+    plan_id: int, payload: PaymentPlanIn,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    pp = db.get(PaymentPlan, plan_id)
+    if not pp:
+        raise HTTPException(404, "Payment plan not found")
+    get_scoped_project(db, pp.project_id, admin)
+    total = sum(m.percent for m in payload.milestones)
+    if round(total, 2) != 100.0:
+        raise HTTPException(422, f"Milestone percents must sum to 100 (got {total}).")
+
+    pp.name = payload.name
+    pp.description = payload.description
+    # Replace the milestones wholesale (simplest correct edit for a small list).
+    db.query(PaymentPlanMilestone).filter(PaymentPlanMilestone.payment_plan_id == pp.id).delete()
+    db.flush()
+    for i, m in enumerate(payload.milestones):
+        db.add(PaymentPlanMilestone(payment_plan_id=pp.id, sequence=i, label=m.label, percent=m.percent))
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="payment_plans",
+                 entity_id=pp.id, after=payload.model_dump(mode="json"))
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"payment_plan_id": pp.id, "message": f"Updated payment plan '{payload.name}'."}
 
 
 @router.delete("/payment-plans/{plan_id}")
@@ -308,6 +341,31 @@ def delete_payment_plan(
     if removed_prices:
         msg += f" {removed_prices} plan-specific price(s) removed (those configs revert to base price)."
     return {"deleted": plan_id, "removed_plan_prices": removed_prices, "message": msg}
+
+
+class ConfigDetailsIn(BaseModel):
+    type: str
+    super_area: float | None = None
+
+
+@router.put("/configurations/{config_id}")
+def update_configuration(
+    config_id: int, payload: ConfigDetailsIn,
+    db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+):
+    """Edit a configuration's own details (type + size). Price and inventory have
+    their own dedicated endpoints (they're versioned/audited separately)."""
+    cfg = db.get(Configuration, config_id)
+    if not cfg:
+        raise HTTPException(404, "Configuration not found")
+    get_scoped_project(db, cfg.project_id, admin)
+    cfg.type = payload.type
+    cfg.super_area = payload.super_area
+    record_audit(db, user_id=admin.id, action="UPDATE", entity="configurations",
+                 entity_id=config_id, after=payload.model_dump(mode="json"))
+    db.commit()
+    cache.bump_org(admin.organization_id)
+    return {"id": cfg.id, "type": cfg.type, "size": float(cfg.super_area) if cfg.super_area else None}
 
 
 @router.delete("/configurations/{config_id}")

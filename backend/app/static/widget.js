@@ -62,6 +62,8 @@
     "font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}" +
     ".px-search:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(0,0,0,.2)}" +
     ".px-search-txt{flex:1;color:#8a8f9c;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+    ".px-search-txt::after{content:'';display:inline-block;width:1px;height:1.05em;background:#9096a3;margin-left:1px;vertical-align:-2px;animation:pxcaret 1s step-end infinite}" +
+    "@keyframes pxcaret{50%{opacity:0}}" +
     ".px-search-ico{width:24px;height:24px;flex-shrink:0;background:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='" + encodeURIComponent(ACCENT) + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\") center/22px no-repeat}" +
     ".px-panel{position:fixed;right:22px;bottom:92px;width:370px;max-width:calc(100vw - 44px);height:540px;" +
     "max-height:calc(100vh - 130px);background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.28);" +
@@ -132,7 +134,29 @@
     btn.className = "px-search";
     btn.setAttribute("role", "button"); btn.setAttribute("tabindex", "0");
     btn.innerHTML = '<span class="px-search-txt"></span><span class="px-search-ico"></span>';
-    btn.querySelector(".px-search-txt").textContent = SEARCH_PH;
+    var pxTxt = btn.querySelector(".px-search-txt");
+    var pxReduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (pxReduce) {
+      pxTxt.textContent = SEARCH_PH;   // accessibility: no motion → static text
+    } else {
+      // Typewriter loop: type the whole line, hold 2s, vanish 0.5s, repeat.
+      (function () {
+        var i = 0;
+        function tick() {
+          pxTxt.textContent = SEARCH_PH.slice(0, i);
+          if (i < SEARCH_PH.length) {
+            i++;
+            setTimeout(tick, 62);            // ~per-character typing speed
+          } else {
+            setTimeout(function () {          // full line shown → hold 2s
+              pxTxt.textContent = "";          // disappear
+              setTimeout(function () { i = 0; tick(); }, 500);  // gone 0.5s → retype
+            }, 2000);
+          }
+        }
+        tick();
+      })();
+    }
   } else {
     btn = document.createElement("button");
     btn.className = "px-btn"; btn.title = TITLE; btn.style.background = BG_CHAT;

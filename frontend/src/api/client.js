@@ -135,6 +135,7 @@ export const api = {
   projectTowers: (id) => request(`/v1/projects/${id}/towers`),
   projectLocation: (id) => request(`/v1/projects/${id}/location`),
   brochureInfo: (id) => request(`/v1/projects/${id}/brochure/info`),
+  sitePlanInfo: (id) => request(`/v1/projects/${id}/site-plan/info`),
   costSheetInfo: (id) => request(`/v1/projects/${id}/cost-sheet/info`),
   listCostSheets: (id) => request(`/v1/projects/${id}/cost-sheets`),
   uploadCostSheet: (projectId, formData) =>

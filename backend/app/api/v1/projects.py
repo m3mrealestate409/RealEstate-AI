@@ -117,6 +117,16 @@ def view_brochure(project_id: int, db: Session = Depends(get_db), user: User = D
     return _doc_file(db, project_id, "brochure", user, "brochure")
 
 
+@router.get("/{project_id}/site-plan/info")
+def site_plan_info(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _doc_info(db, project_id, "site_plan", user)
+
+
+@router.get("/{project_id}/site-plan")
+def view_site_plan(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _doc_file(db, project_id, "site_plan", user, "site plan")
+
+
 @router.get("/{project_id}/cost-sheet/info")
 def cost_sheet_info(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return _doc_info(db, project_id, "cost_sheet", user)

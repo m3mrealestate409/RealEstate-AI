@@ -18,6 +18,7 @@ export default function ProjectDetail() {
   const [location, setLocation] = useState([]);
   const [amenities, setAmenities] = useState(null); // {found, grouped, amenities}
   const [brochure, setBrochure] = useState(null);   // {available, title, version}
+  const [sitePlan, setSitePlan] = useState(null);   // {available, title, version}
   const [costSheets, setCostSheets] = useState([]); // [{id, title, uploaded_at}]
   const [selectedSheet, setSelectedSheet] = useState(""); // selected cost sheet id
   const [showLaunch, setShowLaunch] = useState(false);   // eye toggle for launch price
@@ -31,6 +32,7 @@ export default function ProjectDetail() {
     api.projectPaymentPlan(id).then(setPlan);
     api.projectInventory(id).then(setInv);
     api.brochureInfo(id).then(setBrochure).catch(() => setBrochure({ available: false }));
+    api.sitePlanInfo(id).then(setSitePlan).catch(() => setSitePlan({ available: false }));
     api.listCostSheets(id).then((list) => {
       setCostSheets(list);
       if (list[0]) setSelectedSheet(String(list[0].id));
@@ -116,7 +118,7 @@ export default function ProjectDetail() {
       )}
         </div>
 
-        {(brochure?.available || costSheets.length > 0) && (
+        {(brochure?.available || sitePlan?.available || costSheets.length > 0) && (
           <div className="detail-header-docs">
         <div className="doc-panel">
           {brochure?.available && (
@@ -130,6 +132,22 @@ export default function ProjectDetail() {
                   onClick={() => openPdf(`/v1/projects/${id}/brochure`, brochure.title || "Brochure")}>View</button>
                 <button className="share-btn" disabled={sharing} title="Share on WhatsApp" aria-label="Share on WhatsApp"
                   onClick={() => sharePdf(`/v1/projects/${id}/brochure`, `${project.name} Brochure.pdf`, `Hi! Please find the ${project.name} brochure attached.`)}>
+                  <Icon name="share" size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+          {sitePlan?.available && (
+            <div className="doc-row">
+              <div className="doc-row-main">
+                <span className="doc-ico">🗺️</span>
+                <span className="doc-name">Site Plan</span>
+              </div>
+              <div className="doc-row-actions">
+                <button className="btn btn-sm" disabled={loadingPdf}
+                  onClick={() => openPdf(`/v1/projects/${id}/site-plan`, sitePlan.title || "Site Plan")}>View</button>
+                <button className="share-btn" disabled={sharing} title="Share on WhatsApp" aria-label="Share on WhatsApp"
+                  onClick={() => sharePdf(`/v1/projects/${id}/site-plan`, `${project.name} Site Plan.pdf`, `Hi! Please find the ${project.name} site plan attached.`)}>
                   <Icon name="share" size={16} />
                 </button>
               </div>

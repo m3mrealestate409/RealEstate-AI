@@ -246,7 +246,8 @@ function UploadDoc({ onDone }) {
         <label className="field"><span>Type</span>
           <select value={docType} onChange={(e) => setDocType(e.target.value)}>
             <option value="legal">Legal</option><option value="floor_plan">Floor Plan</option>
-            <option value="master_plan">Master Plan</option><option value="brochure">Brochure</option>
+            <option value="master_plan">Master Plan</option><option value="site_plan">Site Plan</option>
+            <option value="brochure">Brochure</option>
           </select>
         </label>
         <label className="field"><span>PDF file</span><input ref={fileRef} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} required /></label>

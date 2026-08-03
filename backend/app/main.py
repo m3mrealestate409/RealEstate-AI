@@ -43,15 +43,19 @@ app = FastAPI(
     version=__version__,
 )
 
-# CORS — allow all origins only in debug/dev; in production use an explicit
-# allow-list from CORS_ORIGINS (comma-separated). Wildcard origins are never
-# combined with credentials in production.
-if settings.app_debug:
-    _cors_origins = ["*"]
-    _allow_credentials = False  # "*" + credentials is invalid / unsafe
-else:
-    _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-    _allow_credentials = True
+# CORS. Every request authenticates with an *explicit* header — the admin app
+# sends `Authorization: Bearer <jwt>`, the embeddable widget sends `X-API-Key` —
+# and never with cookies. With no ambient (cookie) credentials, an origin
+# allow-list buys almost no security: a third-party page still cannot read a
+# user's token or a tenant's API key. It does, however, break the widget, which
+# is meant to be embedded on *arbitrary* customer websites whose origins we
+# cannot know in advance — a strict allow-list makes every such embed fail its
+# CORS preflight ("Failed to fetch"). So we allow any origin with credentialed
+# mode off ("*" + credentials is invalid anyway). The admin app is same-origin
+# with the API behind the web edge, so this only affects cross-origin widget
+# calls, which are gated by the per-tenant API key, not by origin.
+_cors_origins = ["*"]
+_allow_credentials = False
 
 app.add_middleware(
     CORSMiddleware,

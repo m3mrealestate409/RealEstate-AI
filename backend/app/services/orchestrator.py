@@ -198,6 +198,35 @@ def _confidence_for_rag(chunks) -> float:
     return round(min(0.95, max(c.similarity for c in chunks)), 2)
 
 
+def _org_project_names(db: Session, org_id: int | None) -> list[str]:
+    """All project names for an org (every project for super-admin), sorted —
+    used to offer 'ask me about X, Y, Z' suggestions on a miss."""
+    from app.models import Project
+
+    pq = db.query(Project).order_by(Project.name)
+    if org_id is not None:
+        pq = pq.filter(Project.organization_id == org_id)
+    return [p.name for p in pq.all()]
+
+
+def _sales_handoff(names: list[str], project_name: str | None = None) -> str:
+    """Warm deflection for the PUBLIC widget when we don't hold the asked-for
+    fact. It beats the two bad alternatives on a live site: an unverified
+    general-knowledge essay (sounds authoritative, may mislead a real buyer) and
+    a cold 'not available' (a dead end). Instead we hand the visitor to the sales
+    team and invite a callback — the miss becomes a lead. Deterministic text: no
+    LLM, so nothing is invented."""
+    head = (f"I don't have the exact details for **{project_name}** on hand"
+            if project_name else "I don't have those exact details on hand")
+    msg = (head + " — but our sales team can share the full, up-to-date "
+           "information with you. Leave your number and they'll call you back "
+           "shortly. 📞")
+    if names:
+        msg += ("\n\nMeanwhile, feel free to ask me about " + ", ".join(names[:3])
+                + " — price, payment plan, amenities, or possession.")
+    return msg
+
+
 def handle_query(db: Session, query: str, session_id: str | None, user=None, source: str = "app") -> dict:
     t0 = time.time()
     session_id = session_id or "anonymous"
@@ -308,32 +337,36 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
     # previous project's data (§8), but we CAN offer an unverified general-
     # knowledge answer + suggest the known projects.
     if ir.unknown_project:
-        from app.models import Project
-
-        pq = db.query(Project).order_by(Project.name)
-        if org_id is not None:
-            pq = pq.filter(Project.organization_id == org_id)
-        names = [p.name for p in pq.all()]
-        fb = None if billing_off else _internet_fallback(query, persona, history=prior_dialogue)
-        if fb:
+        names = _org_project_names(db, org_id)
+        if src == "widget":
+            # Public website chat: hand off to sales + invite a callback rather
+            # than an unverified general-knowledge essay or a cold "not available".
             env = _envelope(
-                blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
-                citations=[], handlers=["internet"], session_id=session_id,
-                not_available=False, confidence=0.3, intent=ir, suggestions=names[:4],
-            )
-            env["unverified"] = True
-            if user is not None:
-                quota.consume_quota(user, today, org_id)
-        else:
-            block = renderer.paragraph_block(
-                "Result",
-                "Information not available in the current knowledge base. "
-                + (f"Did you mean: {', '.join(names)}?" if names else ""),
-            )
-            env = _envelope(
-                blocks=[block], citations=[], handlers=["none"], session_id=session_id,
+                blocks=[renderer.paragraph_block("", _sales_handoff(names))],
+                citations=[], handlers=["assistant"], session_id=session_id,
                 not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
             )
+        else:
+            fb = None if billing_off else _internet_fallback(query, persona, history=prior_dialogue)
+            if fb:
+                env = _envelope(
+                    blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
+                    citations=[], handlers=["internet"], session_id=session_id,
+                    not_available=False, confidence=0.3, intent=ir, suggestions=names[:4],
+                )
+                env["unverified"] = True
+                if user is not None:
+                    quota.consume_quota(user, today, org_id)
+            else:
+                block = renderer.paragraph_block(
+                    "Result",
+                    "Information not available in the current knowledge base. "
+                    + (f"Did you mean: {', '.join(names)}?" if names else ""),
+                )
+                env = _envelope(
+                    blocks=[block], citations=[], handlers=["none"], session_id=session_id,
+                    not_available=True, confidence=0.0, intent=ir, suggestions=names[:4],
+                )
         env["suggest_callback"] = bool(wants_cb or env.get("not_available"))
         _log_query(db, session_id=session_id, query=query, ir=ir, envelope=env,
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
@@ -528,29 +561,43 @@ def handle_query(db: Session, query: str, session_id: str | None, user=None, sou
                    latency_ms=int((time.time() - t0) * 1000), org_id=org_id, user_id=user_id, source=src)
         return env
     if not blocks:
-        # Nothing in the company knowledge base — fall back to the LLM's general
-        # knowledge, clearly flagged as UNVERIFIED (red badge in the UI).
-        fb = _internet_fallback(query, persona, history=prior_dialogue) if not ir.unknown_project else None
-        if fb:
+        if src == "widget":
+            # Public website chat: when the knowledge base has nothing, never show
+            # an unverified general-knowledge essay or a cold "not available".
+            # Hand off to the sales team and invite a callback — the dead-end
+            # question becomes a lead. (Deterministic text, no LLM.)
+            names = _org_project_names(db, org_id)
+            pname = name_of(ir.project_ids[0]) if ir.project_ids else None
             env = _envelope(
-                blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
-                citations=[], handlers=["internet"], session_id=session_id,
-                not_available=False, confidence=0.3, intent=ir, suggestions=_suggestions(ir),
+                blocks=[renderer.paragraph_block("", _sales_handoff(names, pname))],
+                citations=[], handlers=["assistant"], session_id=session_id,
+                not_available=True, confidence=0.0, intent=ir,
+                suggestions=names[:4] or _suggestions(ir),
             )
-            env["unverified"] = True
-            if user is not None:
-                quota.consume_quota(user, today, org_id)  # it's a real LLM call
         else:
-            env = _envelope(
-                blocks=[renderer.not_available_block()],
-                citations=[],
-                handlers=_handlers_used(ir),
-                session_id=session_id,
-                not_available=True,
-                confidence=0.0,
-                intent=ir,
-                suggestions=_suggestions(ir),
-            )
+            # Internal app / other channels: fall back to the LLM's general
+            # knowledge, clearly flagged as UNVERIFIED (red badge in the UI).
+            fb = _internet_fallback(query, persona, history=prior_dialogue) if not ir.unknown_project else None
+            if fb:
+                env = _envelope(
+                    blocks=[renderer.paragraph_block("Answer (general knowledge)", fb)],
+                    citations=[], handlers=["internet"], session_id=session_id,
+                    not_available=False, confidence=0.3, intent=ir, suggestions=_suggestions(ir),
+                )
+                env["unverified"] = True
+                if user is not None:
+                    quota.consume_quota(user, today, org_id)  # it's a real LLM call
+            else:
+                env = _envelope(
+                    blocks=[renderer.not_available_block()],
+                    citations=[],
+                    handlers=_handlers_used(ir),
+                    session_id=session_id,
+                    not_available=True,
+                    confidence=0.0,
+                    intent=ir,
+                    suggestions=_suggestions(ir),
+                )
     else:
         overall_conf = round(sum(confidences) / len(confidences), 2) if confidences else 0.0
         env = _envelope(

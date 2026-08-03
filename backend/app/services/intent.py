@@ -24,14 +24,19 @@ from app.models import Project
 # Intent -> which handler answers it (drives the Golden-Rule router).
 INTENT_KEYWORDS: dict[str, list[str]] = {
     # --- Database (SQL-first) ---
-    "price": ["price", "cost", "rate", "kitne ka", "kitna", "daam", "keemat"],
+    # "kitna" (how much / how many) is deliberately NOT here: on its own it is a
+    # generic quantity word that attaches to ANY attribute ("kitna land parcel",
+    # "kitne floors", "kitna area"). Treating it as a price signal hijacked those
+    # questions into the price table. "kitne ka" (for how much money) stays.
+    "price": ["price", "cost", "rate", "kitne ka", "daam", "keemat", "bsp", "per sq ft", "per sqft"],
     "payment_plan": ["payment plan", "payment", "installment", "emi plan", "10:80", "clp", "subvention", "plan"],
     "possession": ["possession", "handover", "ready", "kab milega", "delivery"],
     "inventory": ["inventory", "available", "units left", "stock", "availability", "bacha"],
     "builder": ["builder", "developer", "who is building", "kaun bana"],
     "status": ["status", "rera", "launch date", "launched", "under construction", "delivered"],
     "offer": ["offer", "discount", "scheme", "deal"],
-    "overview": ["land parcel", "land area", "acre", "towers", "tower", "floors", "height",
+    "overview": ["land parcel", "landparcel", "land area", "land size", "plot area", "plot size",
+                 "zameen", "acre", "towers", "tower", "floors", "height",
                  "green area", "open area", "residential", "commercial", "industrial",
                  "project type", "details", "how many towers"],
     "location": ["location", "nearby", "near by", "surrounding", "surroundings", "around",
@@ -70,6 +75,7 @@ _STOPWORDS = {
     "for", "in", "on", "at", "and", "or", "me", "my", "to", "with", "about", "tell",
     "give", "want", "need", "please", "show", "get", "current", "latest", "this",
     "ka", "ke", "ki", "kya", "hai", "ha", "batao", "bata", "kaunsa", "konsa", "mujhe",
+    "kitna", "kitne", "kitni",  # generic "how much / how many" — never a project name
     "cr", "crore", "lakh", "lac", "rupees", "rs", "under", "villa", "plot",
 }
 

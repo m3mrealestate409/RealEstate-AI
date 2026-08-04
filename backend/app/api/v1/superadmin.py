@@ -213,6 +213,53 @@ def delete_org(org_id: int, payload: OrgDeleteIn, db: Session = Depends(get_db),
     return {"deleted": True, "name": name, "removed": removed}
 
 
+# --------------------- Tenant logins / password reset ---------------------
+# When a tenant's admin forgets their password, the platform owner sets a new
+# one here — the old password is a one-way hash and can never be shown, only
+# overwritten. Restricted to tenant users: a platform owner's own login is
+# never resettable through this path.
+@router.get("/organizations/{org_id}/users")
+def org_users(org_id: int, db: Session = Depends(get_db), _: User = Depends(require_super_admin)):
+    org = db.get(Organization, org_id)
+    if not org or org.deleted_at is not None:
+        raise HTTPException(404, "Organization not found")
+    users = (
+        db.query(User)
+        .filter(User.organization_id == org_id)
+        .order_by(User.role, User.email)
+        .all()
+    )
+    return [
+        {"id": u.id, "name": u.name, "email": u.email, "role": u.role, "is_active": u.is_active}
+        for u in users
+    ]
+
+
+class SetPasswordIn(BaseModel):
+    new_password: str
+
+
+@router.post("/users/{user_id}/set-password")
+def set_user_password(user_id: int, payload: SetPasswordIn, db: Session = Depends(get_db),
+                      admin: User = Depends(require_super_admin)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    # Tenant logins only — never let the platform owner reset another owner's.
+    if user.is_super_admin or user.organization_id is None:
+        raise HTTPException(403, "This account's password can't be reset here.")
+    pw = (payload.new_password or "").strip()
+    if len(pw) < 8:
+        raise HTTPException(422, "Password must be at least 8 characters.")
+    user.password_hash = hash_password(pw)
+    db.flush()
+    # Audit the ACT (who reset whose login) — never the password itself.
+    record_audit(db, user_id=admin.id, action="RESET_PASSWORD", entity="users",
+                 entity_id=user.id, after={"email": user.email, "org_id": user.organization_id})
+    db.commit()
+    return {"ok": True, "email": user.email}
+
+
 # ------------------------- Subscriptions ----------------------------------
 # Phase 1 is billed by hand: money arrives by bank transfer / UPI and the
 # platform owner records it here. No provider, no webhooks, no card on file.

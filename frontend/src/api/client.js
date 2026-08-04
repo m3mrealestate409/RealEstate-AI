@@ -233,6 +233,9 @@ export const api = {
     request(`/v1/superadmin/organizations/${id}/subscription`, { method: "PUT", body: data }),
   saRequests: () => request("/v1/superadmin/requests"),
   saOrgProjects: (id) => request(`/v1/superadmin/organizations/${id}/projects`),
+  saOrgUsers: (id) => request(`/v1/superadmin/organizations/${id}/users`),
+  saSetUserPassword: (userId, newPassword) =>
+    request(`/v1/superadmin/users/${userId}/set-password`, { method: "POST", body: { new_password: newPassword } }),
   saSeedProjects: (id, source_org_id, project_ids) =>
     request(`/v1/superadmin/organizations/${id}/seed-projects`,
       { method: "POST", body: { source_org_id, project_ids } }),

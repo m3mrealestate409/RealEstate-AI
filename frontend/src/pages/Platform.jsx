@@ -352,6 +352,105 @@ function DeleteModal({ o, onClose, onDone, onErr }) {
   );
 }
 
+// Platform owner sets a new password for a tenant login (their admin forgot it).
+// The old password is a one-way hash — never shown, only overwritten.
+function ResetPasswordModal({ o, onClose, onDone, onErr }) {
+  const [users, setUsers] = useState(null);
+  const [userId, setUserId] = useState("");
+  const [pw, setPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    api.saOrgUsers(o.id).then((list) => {
+      setUsers(list);
+      const admin = list.find((u) => u.role === "admin") || list[0];
+      if (admin) setUserId(String(admin.id));
+    }).catch((e) => setErr(e.message));
+  }, [o.id]);
+
+  const selected = users?.find((u) => String(u.id) === String(userId));
+  const valid = pw.trim().length >= 8 && !!userId;
+
+  async function save() {
+    if (!valid) { setErr("Password must be at least 8 characters."); return; }
+    setErr(null);
+    setBusy(true);
+    try {
+      const r = await api.saSetUserPassword(userId, pw.trim());
+      if (onDone) onDone();
+      onErr(null, `New password set for ${r.email}. Share it with them — they can log in right away.`);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" role="dialog" aria-label={`Reset password — ${o.name}`}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-title">Reset password — {o.name}</div>
+            <div className="muted small">Set a brand-new password for a login here</div>
+          </div>
+          <button className="modal-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="modal-body">
+          {err && <div className="alert alert-error" style={{ marginTop: 0 }}>{err}</div>}
+          {users == null && !err && <div className="muted">Loading accounts…</div>}
+          {users && users.length === 0 && <div className="muted">This company has no login accounts.</div>}
+          {users && users.length > 0 && (
+            <>
+              <label className="field">
+                <span>Account</span>
+                <select value={userId} onChange={(e) => setUserId(e.target.value)}>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email} — {u.role}{u.is_active ? "" : " (disabled)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>New password</span>
+                <div style={{ position: "relative" }}>
+                  <input type={showPw ? "text" : "password"} value={pw}
+                    onChange={(e) => setPw(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && valid && !busy) save(); }}
+                    autoComplete="new-password" placeholder="At least 8 characters"
+                    style={{ width: "100%", paddingRight: 60 }} autoFocus />
+                  <button type="button" onClick={() => setShowPw((v) => !v)}
+                    style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                      background: "none", border: "none", color: "#6b7280", cursor: "pointer",
+                      fontSize: 13, fontWeight: 600, padding: "4px 8px" }}>
+                    {showPw ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </label>
+              <p className="muted small">
+                Immediately replaces {selected ? <b>{selected.email}</b> : "the account"}'s password.
+                Tell them the new one — they can change it after logging in.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy || !valid}>
+            {busy ? "Setting…" : "Set password"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Onboarding: a new tenant whose assistant knows nothing is a bad first day.
 // Copies projects WITH their prices, plans and amenities (same pack code as the
 // file export), so the new company can answer questions straight away.
@@ -444,6 +543,7 @@ function Organizations() {
   const [msg, setMsg] = useState(null);
   const [paying, setPaying] = useState(null);   // the org whose payment dialog is open
   const [deleting, setDeleting] = useState(null); // the org being permanently deleted
+  const [resetting, setResetting] = useState(null); // the org whose password-reset dialog is open
   const [f, setF] = useState({ name: "", slug: "", plan_id: "", admin_email: "", admin_password: "", admin_name: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const load = () => { api.saOrgs().then(setOrgs); api.saPlans().then(setPlans); };
@@ -504,6 +604,7 @@ function Organizations() {
             onToggle={() => toggleActive(o)}
             onPay={() => setPaying(o)}
             onDelete={() => setDeleting(o)}
+            onResetPw={() => setResetting(o)}
             onStatus={(s) => setStatus(o, s)} />
         ))}
         {orgs.length === 0 && <div className="muted">No companies yet.</div>}
@@ -540,6 +641,10 @@ function Organizations() {
       )}
       {deleting && (
         <DeleteModal o={deleting} onClose={() => setDeleting(null)} onDone={load}
+          onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
+      )}
+      {resetting && (
+        <ResetPasswordModal o={resetting} onClose={() => setResetting(null)} onDone={load}
           onErr={(err, ok) => setMsg(err ? { ok: false, text: err } : { ok: true, text: ok })} />
       )}
     </div>
@@ -596,7 +701,7 @@ function Meter({ used, cap, label }) {
   );
 }
 
-function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete }) {
+function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete, onResetPw }) {
   const [cls, label] = BILLING_CHIP[o.status] || BILLING_CHIP.none;
   const d = o.days_left;
   const paidTill = o.expires_at
@@ -653,6 +758,10 @@ function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete }) {
           onClick={onToggle}
           title="Disable the whole account — separate from billing">
           {o.is_active ? "Enabled" : "Disabled"}
+        </button>
+        <button className="btn btn-sm btn-ghost" onClick={onResetPw}
+          title="Set a new password for this company's login (if their admin forgot it)">
+          🔑 Password
         </button>
         {/* Last, and visually quietest: it is the only irreversible action here. */}
         <button className="btn btn-sm btn-ghost tc-delete" onClick={onDelete}

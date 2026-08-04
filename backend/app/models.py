@@ -250,6 +250,7 @@ class Project(Base):
     launch_date: Mapped[date | None] = mapped_column(Date)
     launch_price: Mapped[float | None] = mapped_column(Numeric) # launch/base sale price (₹/sq ft)
     possession_date: Mapped[date | None] = mapped_column(Date)
+    presentation_url: Mapped[str | None] = mapped_column(String)  # YouTube link to a presentation video
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

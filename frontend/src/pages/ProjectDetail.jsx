@@ -8,6 +8,25 @@ function money(n) {
   return n == null ? "—" : Number(n).toLocaleString("en-IN");
 }
 
+// Turn any common YouTube URL (watch?v=, youtu.be/, /embed/, /shorts/) into an
+// embeddable player URL. Returns null if it isn't a recognisable YouTube link,
+// so the caller can fall back to just opening the raw URL in a new tab.
+function youtubeEmbed(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url.trim());
+    let vid = "";
+    if (u.hostname.includes("youtu.be")) vid = u.pathname.slice(1);
+    else if (u.pathname.startsWith("/embed/")) vid = u.pathname.split("/embed/")[1];
+    else if (u.pathname.startsWith("/shorts/")) vid = u.pathname.split("/shorts/")[1];
+    else vid = u.searchParams.get("v") || "";
+    vid = (vid || "").split(/[/?&]/)[0];
+    return /^[\w-]{6,}$/.test(vid) ? `https://www.youtube.com/embed/${vid}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ProjectDetail() {
   const { id } = useParams();
   const [project, setProject] = useState(null);
@@ -25,6 +44,7 @@ export default function ProjectDetail() {
   const [pdfUrl, setPdfUrl] = useState(null);        // object URL when viewing
   const [pdfTitle, setPdfTitle] = useState("");
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(null);   // YouTube embed URL when watching the presentation
 
   useEffect(() => {
     api.project(id).then(setProject);
@@ -81,6 +101,14 @@ export default function ProjectDetail() {
   function closeBrochure() {
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
+  }
+
+  // Play the presentation. A recognised YouTube link opens in an in-app player
+  // (works on mobile + desktop); anything else just opens in a new tab.
+  function openVideo(url) {
+    const embed = youtubeEmbed(url);
+    if (embed) setVideoUrl(embed);
+    else window.open(url, "_blank", "noopener");
   }
 
   // Share a PDF to WhatsApp (and other apps). On mobile the actual file is shared
@@ -143,7 +171,7 @@ export default function ProjectDetail() {
       )}
         </div>
 
-        {(brochure?.available || sitePlan?.available || costSheets.length > 0) && (
+        {(brochure?.available || sitePlan?.available || costSheets.length > 0 || project.presentation_url) && (
           <div className="detail-header-docs">
         <div className="doc-panel">
           {brochure?.available && (
@@ -205,6 +233,17 @@ export default function ProjectDetail() {
               </div>
             </div>
           )}
+          {project.presentation_url && (
+            <div className="doc-row">
+              <div className="doc-row-main">
+                <span className="doc-ico">🎥</span>
+                <span className="doc-name">Presentation</span>
+              </div>
+              <div className="doc-row-actions">
+                <button className="btn btn-sm" onClick={() => openVideo(project.presentation_url)}>Watch</button>
+              </div>
+            </div>
+          )}
         </div>
           </div>
         )}
@@ -256,6 +295,26 @@ export default function ProjectDetail() {
       {loadingPdf && !pdfUrl && (
         <div className="pdf-overlay">
           <div className="pdf-loading"><span className="pdf-spinner" /> Loading {pdfTitle || "document"}…</div>
+        </div>
+      )}
+
+      {videoUrl && (
+        <div className="pdf-overlay" onClick={() => setVideoUrl(null)}>
+          <div className="video-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pdf-modal-head">
+              <span>{project.name} — Presentation</span>
+              <button className="btn btn-ghost" onClick={() => setVideoUrl(null)}>✕ Close</button>
+            </div>
+            <div className="video-frame-wrap">
+              <iframe
+                className="video-frame"
+                src={`${videoUrl}?rel=0&autoplay=1&playsinline=1`}
+                title="Presentation"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
         </div>
       )}
 

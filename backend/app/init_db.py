@@ -56,6 +56,8 @@ def init_db() -> None:
         # Rise type + launch price (shown on the project page).
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS rise_type TEXT"))
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS launch_price NUMERIC"))
+        # Presentation video — a YouTube link shown as a button on the project page.
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS presentation_url TEXT"))
         # Editable chat-widget greeting + org-wide assistant persona.
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_greeting TEXT"))
         conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS assistant_persona TEXT"))

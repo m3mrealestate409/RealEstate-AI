@@ -605,6 +605,11 @@ a { color: inherit; text-decoration: none; }
 .pdf-spinner { width: 18px; height: 18px; border: 2px solid var(--border);
   border-top-color: var(--primary); border-radius: 50%; animation: pdfspin .7s linear infinite; }
 @keyframes pdfspin { to { transform: rotate(360deg); } }
+/* Presentation video (YouTube) modal — responsive 16:9 player. */
+.video-modal { background: var(--surface); border-radius: 14px; width: min(920px, 96vw);
+  overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.video-frame-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.video-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .pdf-modal { background: var(--surface); border-radius: 14px; width: min(900px, 96vw); height: 90vh;
   display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
 .pdf-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;

@@ -114,6 +114,7 @@ class ProjectCreate(BaseModel):
     launch_date: date | None = None
     launch_price: float | None = None
     possession_date: date | None = None
+    presentation_url: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -130,6 +131,7 @@ class ProjectUpdate(BaseModel):
     launch_date: date | None = None
     launch_price: float | None = None
     possession_date: date | None = None
+    presentation_url: str | None = None
 
 
 class ProjectOut(BaseModel):
@@ -148,6 +150,7 @@ class ProjectOut(BaseModel):
     launch_date: date | None = None
     launch_price: float | None = None
     possession_date: date | None
+    presentation_url: str | None = None
 
     class Config:
         from_attributes = True

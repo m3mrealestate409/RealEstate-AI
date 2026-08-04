@@ -1,5 +1,6 @@
 // Thin API client. All requests go through the backend (API-first, §13).
 // The token is kept in localStorage and attached as a Bearer header.
+import { useEffect, useState } from "react";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
@@ -15,11 +16,43 @@ export function setSession(token, user) {
 export function clearSession() {
   localStorage.removeItem("token");
   localStorage.removeItem("user");
+  localStorage.removeItem("viewingOrg");  // don't carry a super-admin's tenant view into a new session
 }
 
 export function getUser() {
   const raw = localStorage.getItem("user");
   return raw ? JSON.parse(raw) : null;
+}
+
+// --- "Viewing as" tenant (super-admin only) ---------------------------------
+// A super-admin can open ONE company's console view from the Platform page. We
+// remember which one here and attach it as `X-As-Org` on every request, so the
+// Knowledge / Projects / Ask reads come back scoped to that tenant instead of
+// all tenants mixed together. The backend only honours the header for super-admins.
+export function getViewingOrg() {
+  try { return JSON.parse(localStorage.getItem("viewingOrg") || "null"); }
+  catch { return null; }
+}
+
+export function setViewingOrg(org) {
+  if (org && org.id) localStorage.setItem("viewingOrg", JSON.stringify({ id: org.id, name: org.name }));
+  else localStorage.removeItem("viewingOrg");
+  window.dispatchEvent(new Event("viewingorg"));  // let the banner + page gates react
+}
+
+// Re-render a component when the viewing tenant changes.
+export function useViewingOrg() {
+  const [vo, setVo] = useState(getViewingOrg());
+  useEffect(() => {
+    const sync = () => setVo(getViewingOrg());
+    window.addEventListener("viewingorg", sync);
+    window.addEventListener("storage", sync);  // other tabs / windows
+    return () => {
+      window.removeEventListener("viewingorg", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+  return vo;
 }
 
 // Give every request a hard timeout. Without this, a hung/restarting backend
@@ -40,6 +73,10 @@ async function request(path, { method = "GET", body, form, auth = true, timeout 
   if (auth) {
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    // Super-admin viewing one company → scope console reads to it (the backend
+    // ignores this header for tenant users, so it can't cross tenants).
+    const vo = getViewingOrg();
+    if (vo && vo.id) headers["X-As-Org"] = String(vo.id);
   }
 
   if (form) {

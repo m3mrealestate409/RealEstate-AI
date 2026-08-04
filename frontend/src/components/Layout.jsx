@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { api } from "../api/client.js";
+import { api, setViewingOrg, useViewingOrg } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { BrandMark } from "./Logo.jsx";
 import Icon from "./Icons.jsx";
+
+// A super-admin who has opened a company's view sees this persistent banner, so
+// they always know which tenant's data they're looking at — and can leave it.
+function ViewingBanner() {
+  const viewing = useViewingOrg();
+  if (!viewing) return null;
+  return (
+    <div className="viewing-banner">
+      <span>👁 Viewing <b>{viewing.name}</b>'s data — Ask, Projects &amp; Knowledge are scoped to this company.</span>
+      <button className="btn btn-sm btn-ghost" onClick={() => setViewingOrg(null)}>Exit</button>
+    </div>
+  );
+}
 
 // Platform-owner alerts. Lives in the shell rather than on the Platform page,
 // because the whole point is to be seen from wherever you happen to be — a
@@ -163,6 +176,7 @@ export default function Layout() {
       </aside>
 
       <main className="content">
+        <ViewingBanner />
         <Outlet />
       </main>
     </div>

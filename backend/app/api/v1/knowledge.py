@@ -8,13 +8,13 @@ confirm a brochure actually got indexed (or re-index / delete it).
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import require_role
-from app.core.tenancy import get_scoped_project, org_scope_id
+from app.core.tenancy import apply_viewing_tenant, get_scoped_project, org_scope_id
 from app.core.uploads import save_pdf_upload
 from app.database import get_db
 from app.models import Document, Project, RagChunk, User
@@ -27,7 +27,8 @@ router = APIRouter(prefix="/v1/admin/knowledge", tags=["knowledge"])
 
 
 @router.get("/overview")
-def overview(db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
+def overview(request: Request, db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
+    apply_viewing_tenant(request, user)  # super-admin viewing one tenant → scope to it
     org_id = org_scope_id(user)
 
     def doc_q():
@@ -82,7 +83,8 @@ def overview(db: Session = Depends(get_db), user: User = Depends(require_role("m
 
 
 @router.get("/documents")
-def list_documents(db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
+def list_documents(request: Request, db: Session = Depends(get_db), user: User = Depends(require_role("manager"))):
+    apply_viewing_tenant(request, user)
     org_id = org_scope_id(user)
     rows_q = db.query(Document, Project.name).join(Project, Project.id == Document.project_id)
     if org_id is not None:
@@ -129,9 +131,10 @@ def reindex_document(
 
 
 @router.post("/reindex-all")
-def reindex_all(db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+def reindex_all(request: Request, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
     """Re-embed every document with the CURRENT embedding provider. Run this
     after switching embeddings (e.g. mock → Gemini) so all chunks match."""
+    apply_viewing_tenant(request, admin)
     org_id = org_scope_id(admin)
     dq = db.query(Document).join(Project, Project.id == Document.project_id).filter(Document.file_path.isnot(None))
     if org_id is not None:

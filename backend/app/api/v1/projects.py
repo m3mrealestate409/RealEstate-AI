@@ -1,12 +1,12 @@
 """Read endpoints for projects and their structured facts (org-scoped)."""
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
-from app.core.tenancy import get_scoped_project, scope_by_org
+from app.core.tenancy import apply_viewing_tenant, get_scoped_project, scope_by_org
 from app.database import get_db
 from app.models import Document, LocationPoint, Project, Tower, User
 from app.schemas import LocationPointOut, ProjectOut, TowerOut
@@ -50,10 +50,12 @@ def _doc_file(db: Session, project_id: int, doc_type: str, user: User, label: st
 
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
+    request: Request,
     q: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    apply_viewing_tenant(request, user)  # super-admin viewing one tenant → scope to it
     query = scope_by_org(db.query(Project), Project, user)
     if q:
         query = query.filter(Project.name.ilike(f"%{q}%"))

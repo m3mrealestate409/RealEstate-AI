@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client.js";
+import { useNavigate } from "react-router-dom";
+import { api, setViewingOrg } from "../api/client.js";
 
 // Super-admin only. Manage tenant organizations and subscription plans.
 export default function Platform() {
@@ -544,6 +545,7 @@ function Organizations() {
   const [paying, setPaying] = useState(null);   // the org whose payment dialog is open
   const [deleting, setDeleting] = useState(null); // the org being permanently deleted
   const [resetting, setResetting] = useState(null); // the org whose password-reset dialog is open
+  const navigate = useNavigate();
   const [f, setF] = useState({ name: "", slug: "", plan_id: "", admin_email: "", admin_password: "", admin_name: "" });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const load = () => { api.saOrgs().then(setOrgs); api.saPlans().then(setPlans); };
@@ -605,6 +607,7 @@ function Organizations() {
             onPay={() => setPaying(o)}
             onDelete={() => setDeleting(o)}
             onResetPw={() => setResetting(o)}
+            onView={() => { setViewingOrg(o); navigate("/knowledge"); }}
             onStatus={(s) => setStatus(o, s)} />
         ))}
         {orgs.length === 0 && <div className="muted">No companies yet.</div>}
@@ -701,7 +704,7 @@ function Meter({ used, cap, label }) {
   );
 }
 
-function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete, onResetPw }) {
+function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete, onResetPw, onView }) {
   const [cls, label] = BILLING_CHIP[o.status] || BILLING_CHIP.none;
   const d = o.days_left;
   const paidTill = o.expires_at
@@ -750,6 +753,10 @@ function TenantCard({ o, plans, onPlan, onToggle, onPay, onStatus, onDelete, onR
       {o.note && <div className="tc-note" title={o.note}>{o.note}</div>}
 
       <div className="tc-actions">
+        <button className="btn btn-sm" onClick={onView}
+          title="Open this company's Ask, Projects & Knowledge (scoped to it)">
+          👁 View data
+        </button>
         <button className="btn btn-sm btn-primary" onClick={onPay}>💰 Record payment</button>
         {o.status === "suspended"
           ? <button className="btn btn-sm" onClick={() => onStatus("trialing")}>Start trial</button>

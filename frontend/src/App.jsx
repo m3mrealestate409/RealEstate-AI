@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Knowledge from "./pages/Knowledge.jsx";
 import Billing from "./pages/Billing.jsx";
 import Platform from "./pages/Platform.jsx";
+import TenantGate from "./components/TenantGate.jsx";
 
 function Protected({ children }) {
   const { user } = useAuth();
@@ -31,12 +32,12 @@ export default function App() {
           </Protected>
         }
       >
-        <Route index element={<Query />} />
-        <Route path="projects" element={<Projects />} />
+        <Route index element={<TenantGate><Query /></TenantGate>} />
+        <Route path="projects" element={<TenantGate><Projects /></TenantGate>} />
         <Route path="projects/:id" element={<ProjectDetail />} />
         <Route path="calculators" element={<Calculators />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="knowledge" element={<Knowledge />} />
+        <Route path="knowledge" element={<TenantGate><Knowledge /></TenantGate>} />
         {/* System Health moved into Admin → System; billing came the other way. */}
         <Route path="system" element={<Navigate to="/admin" replace />} />
         <Route path="billing" element={<Billing />} />

@@ -3,7 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
-from app.core.tenancy import org_scope_id
+from app.core.tenancy import apply_viewing_tenant, org_scope_id
 from app.database import get_db
 from app.models import Organization, User
 from app.schemas import QueryRequest, QueryResponse
@@ -52,6 +52,9 @@ def query(
     `format` to "blocks" (default), "text", or "voice" — `answer_text` is a
     ready-to-use plain-text answer for CRM/WhatsApp/voice consumers.
     """
+    # Super-admin who has opened one company's console view → scope this query to
+    # that tenant. No-op for tenant users and API-key / widget callers.
+    apply_viewing_tenant(request, user)
     via_key = getattr(user, "_via_api_key", False)
     # Resolve the calling channel. A JWT is always the web app (staff). For an
     # API key, the KEY decides (set by the admin when creating it) — the caller

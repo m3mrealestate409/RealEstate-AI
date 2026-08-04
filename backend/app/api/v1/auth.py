@@ -1,6 +1,7 @@
 """Authentication endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.security import (
@@ -29,20 +30,25 @@ def _client_ip(request: Request) -> str:
 @router.post("/login", response_model=TokenResponse)
 def login(request: Request, form: OAuth2PasswordRequestForm = Depends(),
           db: Session = Depends(get_db)):
-    # OAuth2 form uses `username`; we treat it as email.
+    # OAuth2 form uses `username`; we treat it as email. Normalise it — trim and
+    # lower-case — so the SAME account still logs in from a phone whose keyboard
+    # appended a space or auto-capitalised a letter the desktop never added.
+    # (Email is matched case-insensitively via func.lower below; existing rows
+    # need no migration.)
     ip = _client_ip(request)
+    email = (form.username or "").strip().lower()
     # Brute-force / credential-stuffing throttle: too many recent FAILED attempts
     # from this IP or against this account → refuse before touching the DB.
-    if not ratelimit.login_allowed(ip, form.username):
+    if not ratelimit.login_allowed(ip, email):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please wait a few minutes and try again.",
         )
-    user = db.query(User).filter(User.email == form.username, User.is_active.is_(True)).first()
+    user = db.query(User).filter(func.lower(User.email) == email, User.is_active.is_(True)).first()
     # Constant time: always run exactly one bcrypt compare, real user or not.
     ok = verify_password(form.password, user.password_hash if user else _DUMMY_HASH)
     if not user or not ok:
-        ratelimit.login_register_failure(ip, form.username)
+        ratelimit.login_register_failure(ip, email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password"
         )
@@ -50,7 +56,7 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(),
     # Checked AFTER the password so it can never be used to probe which emails
     # belong to a suspended tenant.
     assert_org_allowed(db, user)
-    ratelimit.login_reset(ip, form.username)  # successful login clears the (ip, account) counter
+    ratelimit.login_reset(ip, email)  # successful login clears the (ip, account) counter
     token = create_access_token(subject=user.email, role=user.role)
     return TokenResponse(
         access_token=token, role=user.role, name=user.name,

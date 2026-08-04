@@ -42,13 +42,38 @@ export default function ProjectDetail() {
     api.projectAmenities(id).then(setAmenities).catch(() => setAmenities(null));
   }, [id]);
 
+  // View a protected PDF. The route needs a Bearer header, so we fetch the file
+  // as a blob first (a plain link/iframe can't send the token). Desktop shows it
+  // in the in-app modal below. On touch devices we instead open it in a NEW TAB,
+  // because iOS Safari renders a blob: PDF inside an <iframe> BLANK once the file
+  // grows past a few hundred KB — which is exactly why the big brochure / site
+  // plan wouldn't open on mobile while the tiny cost sheet did. In a new tab iOS
+  // uses its native PDF viewer, which handles any size. The tab is opened
+  // synchronously inside the tap so iOS doesn't block it as a popup.
   async function openPdf(path, title) {
+    const nativeTab =
+      window.matchMedia("(pointer: coarse)").matches ||
+      window.matchMedia("(max-width: 860px)").matches;
+    let win = null;
+    if (nativeTab) {
+      win = window.open("", "_blank");
+      if (win) win.document.write("<!doctype html><title>Loading…</title>" +
+        "<body style='font:16px sans-serif;padding:24px;color:#333'>Loading… please wait.");
+    }
     setLoadingPdf(true);
+    setPdfTitle(title);
     try {
-      setPdfTitle(title);
-      setPdfUrl(await fetchBlobUrl(path));
+      const url = await fetchBlobUrl(path);
+      if (nativeTab) {
+        if (win) win.location = url;
+        else window.location.href = url; // popup blocked → fall back to same tab
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        setPdfUrl(url);
+      }
     } catch (e) {
-      alert(e.message);
+      if (win) win.close();
+      alert(e.message || "Could not open the file");
     } finally {
       setLoadingPdf(false);
     }
@@ -225,6 +250,12 @@ export default function ProjectDetail() {
             </div>
             <iframe className="pdf-frame" src={pdfUrl} title="Brochure" />
           </div>
+        </div>
+      )}
+
+      {loadingPdf && !pdfUrl && (
+        <div className="pdf-overlay">
+          <div className="pdf-loading"><span className="pdf-spinner" /> Loading {pdfTitle || "document"}…</div>
         </div>
       )}
 

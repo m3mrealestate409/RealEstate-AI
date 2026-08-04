@@ -75,7 +75,7 @@ a { color: inherit; text-decoration: none; }
 .brand-mark.lg { width: 56px; height: 56px; font-size: 20px; margin: 0 auto; border-radius: 16px; }
 
 /* ---------- App shell ---------- */
-.app-shell { display: grid; grid-template-columns: 256px 1fr; height: 100vh; }
+.app-shell { display: grid; grid-template-columns: 256px minmax(0, 1fr); height: 100vh; }
 /* Premium dark rail: a deep indigo gradient with a soft violet glow up top.
    Reads as a high-end console against the light content area. All text colours
    inside the sidebar are overridden below for contrast on the dark surface. */
@@ -141,7 +141,7 @@ a { color: inherit; text-decoration: none; }
 .role-manager { background: var(--amber-soft); color: var(--amber); }
 .role-sales { background: var(--green-soft); color: var(--green); }
 
-.content { overflow-y: auto; padding: 30px 36px; }
+.content { overflow-y: auto; padding: 30px 36px; min-width: 0; }
 .page, .query-page { max-width: 980px; margin: 0 auto; }
 .page-head { margin-bottom: 22px; }
 .page-head h2 { font-size: 24px; letter-spacing: -.02em; }
@@ -735,7 +735,7 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 860px) {
   .dash-cols { grid-template-columns: 1fr; }
-  .app-shell { grid-template-columns: 1fr; }
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
 
   .mobile-topbar {
     display: flex; align-items: center; gap: 10px;
@@ -759,8 +759,18 @@ a { color: inherit; text-decoration: none; }
   .drawer-close { display: inline-flex; position: absolute; top: -2px; right: 0;
     background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; }
 
-  .content { padding: 72px 16px 24px; }
+  .content { padding: 72px 16px 24px; overflow-x: hidden; }
   .query-page { height: auto; }
+  /* iOS Safari zooms the WHOLE page when a focused input's font is under 16px,
+     which then leaves the next screen looking zoomed-in and cut off. Pin form
+     controls to 16px on mobile so focusing a field never triggers that zoom. */
+  input, select, textarea { font-size: 16px; }
+  /* Inputs given a sub-16px size via a class would still zoom (their selector
+     out-specifies the bare `input` rule above). Re-assert 16px for each — equal
+     specificity, but later in the cascade, so these win. The one deliberately
+     large input (.plan-price-in, 22px) is intentionally left untouched. */
+  .field input, .field select, .field textarea,
+  .search-bar input, .composer-input, .team-ctl select, .plan-row input { font-size: 16px; }
 }
 
 /* ---- Insights (analytics) ---- */

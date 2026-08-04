@@ -5,12 +5,12 @@ All mutations require 'admin' role and are audit-logged (Constitution §19).
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import require_role
-from app.core.tenancy import get_scoped_project
+from app.core.tenancy import apply_viewing_tenant, get_scoped_project, org_scope_id
 from app.core.uploads import save_pdf_upload
 from app.database import get_db
 from app.models import Builder, Document, Project, User
@@ -34,20 +34,25 @@ def _check_builder(db, builder_id, admin) -> None:
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
 def create_project(
+    request: Request,
     payload: ProjectCreate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_role("admin")),
 ):
-    # Scoped to this company: another tenant owning the slug is none of our
-    # business, and must not stop this one using it.
+    # A super-admin creates into the tenant they've opened (Platform → View data);
+    # a tenant admin into their own org. Slug uniqueness is per-org.
+    apply_viewing_tenant(request, admin)
+    oid = org_scope_id(admin)
+    if admin.is_super_admin and oid is None:
+        raise HTTPException(400, "Open a company first (Platform → View data), then create its project.")
     if (
         db.query(Project)
-        .filter(Project.slug == payload.slug, Project.organization_id == admin.organization_id)
+        .filter(Project.slug == payload.slug, Project.organization_id == oid)
         .first()
     ):
         raise HTTPException(409, "slug already exists")
     _check_builder(db, payload.builder_id, admin)
-    project = Project(**payload.model_dump(), organization_id=admin.organization_id)
+    project = Project(**payload.model_dump(), organization_id=oid)
     db.add(project)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="projects",

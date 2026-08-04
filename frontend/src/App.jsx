@@ -43,7 +43,7 @@ export default function App() {
         <Route path="billing" element={<Billing />} />
         <Route path="platform" element={<Platform />} />
         <Route path="live" element={<LiveChat />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="admin" element={<TenantGate><Admin /></TenantGate>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

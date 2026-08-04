@@ -8,7 +8,7 @@ import io
 import json
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import or_
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import require_role
-from app.core.tenancy import get_scoped_project
+from app.core.tenancy import apply_viewing_tenant, get_scoped_project, org_scope_id
 from app.database import get_db
 from app.services import cache, packs
 from app.models import (
@@ -554,10 +554,12 @@ class BuilderIn(BaseModel):
 
 
 @router.get("/builders")
-def list_builders(db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+def list_builders(request: Request, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))):
+    apply_viewing_tenant(request, admin)  # super-admin viewing one tenant → its developers only
+    oid = org_scope_id(admin)
     bq = db.query(Builder)
-    if not admin.is_super_admin and admin.organization_id:
-        bq = bq.filter(Builder.organization_id == admin.organization_id)
+    if oid is not None:
+        bq = bq.filter(Builder.organization_id == oid)
     return [
         {"id": b.id, "name": b.name, "rera_id": b.rera_id,
          "projects": db.query(Project).filter(Project.builder_id == b.id).count()}
@@ -567,9 +569,14 @@ def list_builders(db: Session = Depends(get_db), admin: User = Depends(require_r
 
 @router.post("/builders", status_code=201)
 def create_builder(
-    payload: BuilderIn, db: Session = Depends(get_db), admin: User = Depends(require_role("admin"))
+    request: Request, payload: BuilderIn, db: Session = Depends(get_db),
+    admin: User = Depends(require_role("admin")),
 ):
-    b = Builder(name=payload.name, rera_id=payload.rera_id, organization_id=admin.organization_id)
+    apply_viewing_tenant(request, admin)
+    oid = org_scope_id(admin)
+    if admin.is_super_admin and oid is None:
+        raise HTTPException(400, "Open a company first (Platform → View data), then add its developer.")
+    b = Builder(name=payload.name, rera_id=payload.rera_id, organization_id=oid)
     db.add(b)
     db.flush()
     record_audit(db, user_id=admin.id, action="CREATE", entity="builders",

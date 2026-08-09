@@ -145,6 +145,14 @@ def _guard_seed_passwords() -> None:
             "Refusing to seed default credentials in production. Set strong values for: "
             + ", ".join(weak)
         )
+    # A leftover TEMPLATE value ('<koi strong password>', 'change me') is not an
+    # exact default so it slips the check above, yet it's clearly not a real
+    # password. Warn loudly (don't hard-fail a running deployment) so the operator
+    # sets a strong value AND rotates the account.
+    for name, val in (("SEED_ADMIN_PASSWORD", settings.seed_admin_password),
+                      ("SEED_SUPER_ADMIN_PASSWORD", settings.seed_super_admin_password)):
+        if val and val not in _DEFAULT_PASSWORDS and (("<" in val) or (">" in val) or any(c.isspace() for c in val)):
+            logger.warning("%s looks like a leftover placeholder — set a strong unique value and rotate the account.", name)
 
 
 def seed() -> None:

@@ -96,7 +96,7 @@ def query(
         livechat.touch_seen(db, cs)  # visitor is clearly online right now
         # First message of a new visitor → fire a "new chat" notification
         # (best-effort, in the background so the reply isn't delayed).
-        if created and org_id is not None:
+        if created and org_id is not None and ratelimit.daily_event_allowed(org_id, "newchat", 500):
             org = db.get(Organization, org_id)
             if org and (org.notify_provider or "off") != "off":
                 msg = notify.build_new_chat_message(payload.query, payload.page_url)

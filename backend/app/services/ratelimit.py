@@ -13,6 +13,7 @@ backed and fail-OPEN (an infra hiccup must never block real visitors):
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date
 
 from app.config import settings
@@ -38,22 +39,31 @@ DAILY_CAPS = {"widget": DAILY_LLM_CAP}
 DAILY_CAP_DEFAULT = 2000       # crm / whatsapp / voice / api
 
 _redis = None
-_redis_tried = False
+_redis_next_try = 0.0  # monotonic time of the next reconnect attempt
 
 
 def _get_redis():
-    global _redis, _redis_tried
-    if not _redis_tried:
-        _redis_tried = True
-        try:
-            import redis
+    """Cached Redis client. Reconnects at most every 30s while it's down — so a
+    slow Redis at boot (or a transient outage) never leaves the limits OFF
+    forever, and recovery is automatic. Logs at ERROR so a monitored deployment
+    can alarm on 'limits not enforced'. Fail-open (returns None) when unreachable."""
+    global _redis, _redis_next_try
+    if _redis is not None:
+        return _redis
+    now = time.monotonic()
+    if now < _redis_next_try:
+        return None
+    _redis_next_try = now + 30
+    try:
+        import redis
 
-            _redis = redis.Redis.from_url(settings.redis_url, decode_responses=True)
-            _redis.ping()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Rate limit: Redis unavailable (%s); limits not enforced.", exc)
-            _redis = None
-    return _redis
+        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        r.ping()
+        _redis = r
+        return _redis
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Rate limit: Redis UNAVAILABLE (%s) — abuse limits are NOT enforced until it recovers.", exc)
+        return None
 
 
 def _hit(r, key: str, limit: int, window: int) -> tuple[bool, int]:
@@ -137,6 +147,24 @@ def daily_consume(org_id: int | None, source: str = "widget") -> None:
         logger.warning("daily_consume failed (%s).", exc)
 
 
+def daily_event_allowed(org_id: int | None, event: str, cap: int) -> bool:
+    """Per-org, per-day ceiling on a discrete abuse-prone event (new-chat
+    notifications, public lead inserts) — bounds notification-flood / DB-growth
+    abuse from a widget key that rotates session ids past the per-session limit.
+    Increments and returns whether still under `cap`. Fail-open on infra error."""
+    r = _get_redis()
+    if r is None or not org_id:
+        return True
+    try:
+        key = f"rl:evt:{org_id}:{event}:{date.today().isoformat()}"
+        c = r.incr(key)
+        if c == 1:
+            r.expire(key, 60 * 60 * 24)
+        return c <= cap
+    except Exception:  # noqa: BLE001
+        return True
+
+
 # --- Login brute-force protection -----------------------------------------
 # Counts FAILED logins per IP and per (IP, account) within a window.
 #
@@ -150,10 +178,20 @@ def daily_consume(org_id: int | None, source: str = "widget") -> None:
 LOGIN_WINDOW = 900          # 15 minutes
 LOGIN_IP_MAX = 30           # failed logins per IP per window (across all accounts)
 LOGIN_ACCOUNT_MAX = 8       # failed logins per (IP, account) per window
+# Backstop that a spoofed X-Forwarded-For CANNOT rotate away: cap failures per
+# ACCOUNT across ALL source IPs. Set high enough that a fumbling real user won't
+# trip it, low enough to kill bulk credential-guessing; cleared on success. This
+# is the IP-independent brake the (IP, account) pairing deliberately lacked, and
+# the reason the XFF-spoofing bypass no longer yields unlimited guesses.
+LOGIN_EMAIL_MAX = 50
 
 
 def _acct_key(ip: str | None, email: str | None) -> str:
     return f"login:acct:{ip}:{(email or '').lower()}"
+
+
+def _email_key(email: str | None) -> str:
+    return f"login:email:{(email or '').lower()}"
 
 
 def login_allowed(ip: str | None, email: str | None) -> bool:
@@ -163,7 +201,9 @@ def login_allowed(ip: str | None, email: str | None) -> bool:
     try:
         ip_fails = int(r.get(f"login:ip:{ip}") or 0)
         pair_fails = int(r.get(_acct_key(ip, email)) or 0)
-        return ip_fails < LOGIN_IP_MAX and pair_fails < LOGIN_ACCOUNT_MAX
+        email_fails = int(r.get(_email_key(email)) or 0)
+        return (ip_fails < LOGIN_IP_MAX and pair_fails < LOGIN_ACCOUNT_MAX
+                and email_fails < LOGIN_EMAIL_MAX)
     except Exception:  # noqa: BLE001
         return True
 
@@ -173,7 +213,7 @@ def login_register_failure(ip: str | None, email: str | None) -> None:
     if r is None:
         return
     try:
-        for key in (f"login:ip:{ip}", _acct_key(ip, email)):
+        for key in (f"login:ip:{ip}", _acct_key(ip, email), _email_key(email)):
             if r.incr(key) == 1:
                 r.expire(key, LOGIN_WINDOW)
     except Exception:  # noqa: BLE001
@@ -186,6 +226,6 @@ def login_reset(ip: str | None, email: str | None) -> None:
     if r is None:
         return
     try:
-        r.delete(_acct_key(ip, email))
+        r.delete(_acct_key(ip, email), _email_key(email))
     except Exception:  # noqa: BLE001
         pass

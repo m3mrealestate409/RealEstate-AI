@@ -7,6 +7,7 @@ AI-assisted data entry (admin only).
 The draft is always reviewed/edited by a human before `apply` writes anything,
 so the SQL source of truth stays human-verified (Constitution §5, §8).
 """
+import os
 import tempfile
 from datetime import date
 
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import record_audit
 from app.core.security import require_role
 from app.core.tenancy import get_scoped_project
+from app.core.uploads import MAX_UPLOAD_BYTES, MAX_UPLOAD_MB
 from app.database import get_db
 from app.models import (
     Amenity,
@@ -51,20 +53,37 @@ def extract_draft(
     admin: User = Depends(require_role("admin")),
 ):
     """Read a brochure PDF and return an editable draft (nothing is saved)."""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(file.file.read())
-        tmp_path = tmp.name
+    # Stream to a temp file with a hard size cap (never buffer an unbounded upload
+    # in RAM), and ALWAYS remove the temp file afterwards — even on the happy path.
+    tmp_path = None
     try:
-        text = _pdf_text(tmp_path)
-    except Exception as exc:
-        raise HTTPException(422, f"Could not read PDF: {exc}")
-    if not text.strip():
-        raise HTTPException(422, "No extractable text in this PDF (scanned image?).")
-
-    result = extract.extract_fields(text)
-    if "error" in result:
-        raise HTTPException(502, result["error"])
-    return result  # {"draft": {...}}
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp_path = tmp.name
+            written = 0
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, f"File too large (max {MAX_UPLOAD_MB} MB).")
+                tmp.write(chunk)
+        try:
+            pdf_text = _pdf_text(tmp_path)
+        except Exception as exc:
+            raise HTTPException(422, f"Could not read PDF: {exc}")
+        if not pdf_text.strip():
+            raise HTTPException(422, "No extractable text in this PDF (scanned image?).")
+        result = extract.extract_fields(pdf_text)
+        if "error" in result:
+            raise HTTPException(502, result["error"])
+        return result  # {"draft": {...}}
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 # ---- Apply a reviewed draft to SQL ----------------------------------------

@@ -24,9 +24,16 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me"
     access_token_expire_minutes: int = 480
     algorithm: str = "HS256"
-    # Comma-separated allowed browser origins in production (CORS). Ignored in
-    # debug mode (which allows all origins for local dev).
+    # NOTE: currently UNUSED. main.py serves a wildcard CORS ('*', credentials
+    # off) because the embeddable widget must load from arbitrary customer
+    # origins, and auth is header-only (no cookies) so a wildcard grants no
+    # abusable authority. Kept only so a stray CORS_ORIGINS in .env/compose is
+    # ignored rather than erroring — setting it has no effect.
     cors_origins: str = ""
+    # The SSRF guard on outbound webhooks is ALWAYS on (a mis-set APP_ENV must
+    # not silently disable it). Set true ONLY for local dev against a localhost /
+    # host.docker.internal CRM/webhook.
+    ssrf_allow_private: bool = False
 
     # --- Database ---
     database_url: str = (

@@ -123,7 +123,14 @@ def org_used_today(org_id: int, day: str) -> int:
 
 
 def consume_quota(user: User, day: str, org_id: int | None = None) -> None:
-    """Increment the user's (and company's) counter for an expensive query."""
+    """Increment the user's (and company's) counter for an expensive query.
+
+    NEVER counts an API-key / widget caller against the EMPLOYEE quota — those
+    channels are metered separately (ratelimit.daily_*). Otherwise an anonymous
+    widget visitor (e.g. sending greetings) could pump the org's shared quota
+    counter until every real employee is told 'company quota used up'."""
+    if getattr(user, "_via_api_key", False):
+        return
     r = _get_redis()
     if r is None:
         return

@@ -41,6 +41,12 @@ app = FastAPI(
     title="Chaahat Homes — AI Knowledge Engine",
     description="Hybrid real-estate knowledge engine (SQL + Calc + RAG + LLM).",
     version=__version__,
+    # Don't expose the interactive schema / full endpoint enumeration in
+    # production. (Live it's already unreachable — Caddy doesn't proxy /docs —
+    # but this removes the surface entirely, including a base-compose run.)
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 # CORS. Every request authenticates with an *explicit* header — the admin app

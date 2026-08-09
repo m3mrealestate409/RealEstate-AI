@@ -1,5 +1,6 @@
 """Read endpoints for projects and their structured facts (org-scoped)."""
 import os
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -13,6 +14,12 @@ from app.schemas import LocationPointOut, ProjectOut, TowerOut
 from app.services import database_service as dbsvc
 
 router = APIRouter(prefix="/v1/projects", tags=["projects"])
+
+
+def _safe_filename(name: str) -> str:
+    """Strip CR/LF/quote/backslash so a doc title can't inject an HTTP response
+    header or break out of the Content-Disposition filename token."""
+    return re.sub(r'[\r\n"\\]+', " ", (name or "")).strip() or "file"
 
 
 def _latest_doc(db: Session, project_id: int, doc_type: str) -> Document | None:
@@ -44,7 +51,7 @@ def _doc_file(db: Session, project_id: int, doc_type: str, user: User, label: st
         raise HTTPException(404, f"No {label} available for this project")
     return FileResponse(
         doc.file_path, media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{(doc.title or label)}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="{_safe_filename(doc.title or label)}.pdf"'},
     )
 
 
@@ -166,5 +173,5 @@ def view_cost_sheet_by_id(
         raise HTTPException(404, "Cost sheet not found")
     return FileResponse(
         doc.file_path, media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{(doc.title or "cost sheet")}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="{_safe_filename(doc.title or "cost sheet")}.pdf"'},
     )

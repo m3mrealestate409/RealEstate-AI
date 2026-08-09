@@ -1,13 +1,13 @@
 """User management (org admin). Create sales/manager accounts within the org,
 enforce the plan's employee cap, toggle active. Scoped to the caller's org."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.audit import record_audit
 from app.core.security import hash_password, require_role
-from app.core.tenancy import scope_by_org
+from app.core.tenancy import apply_viewing_tenant, org_scope_id, scope_by_org
 from app.database import get_db
 from app.models import Organization, User
 from app.schemas import UserOut
@@ -44,7 +44,8 @@ def list_users(db: Session = Depends(get_db), admin: User = Depends(require_role
 
 @router.post("", response_model=UserOut, status_code=201)
 def create_user(
-    payload: UserCreate, db: Session = Depends(get_db), admin: User = Depends(require_role("admin")),
+    request: Request, payload: UserCreate, db: Session = Depends(get_db),
+    admin: User = Depends(require_role("admin")),
 ):
     allowed = ROLES if admin.is_super_admin else ORG_ROLES
     if payload.role not in allowed:
@@ -57,6 +58,15 @@ def create_user(
         raise HTTPException(422, f"role must be one of {allowed}")
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(409, "email already exists")
+
+    # Resolve the org this user belongs to: a tenant admin → their own org; a
+    # super-admin → the tenant they've opened (Platform → View data). Refuse if
+    # none is open, so we never mint an org-less account that org_scope_id would
+    # otherwise treat as "see every tenant".
+    apply_viewing_tenant(request, admin)
+    oid = org_scope_id(admin)
+    if oid is None:
+        raise HTTPException(400, "Open a company first (Platform → View data), then add its user.")
 
     # Enforce the plan's employee cap (super-admins are exempt). The cap comes
     # from billing, not the plan directly, so payment state is resolved in one
@@ -88,7 +98,7 @@ def create_user(
     user = User(
         email=payload.email, name=payload.name, role=payload.role, tier=tier,
         password_hash=hash_password(payload.password),
-        organization_id=admin.organization_id,
+        organization_id=oid,
     )
     db.add(user)
     db.flush()

@@ -7,8 +7,8 @@ the server at internal addresses (169.254.169.254, 127.0.0.1, 10.0.0.0/8,
 host.docker.internal, …) and use the server as a proxy into the private network.
 
 `assert_public_url` is pure and always validates (unit-testable). `guard_outbound`
-applies it only in production, so local development can still reach
-host.docker.internal / localhost CRMs.
+enforces it ALWAYS; the only opt-out is the explicit SSRF_ALLOW_PRIVATE flag, so
+local dev can still reach host.docker.internal / localhost CRMs on purpose.
 """
 from __future__ import annotations
 
@@ -36,7 +36,14 @@ def _addresses(host: str, port: int) -> list[str]:
 
 
 def _is_public(ip: ipaddress._BaseAddress) -> bool:
-    """False for every category an attacker would pivot through."""
+    """False for every category an attacker would pivot through. IPv6 forms that
+    embed an IPv4 address (6to4 2002::/16, ::ffff: mapped) are unwrapped and the
+    inner v4 re-checked, so a literal like [2002:7f00:1::] cannot smuggle an
+    internal 127.0.0.1 past the pure category test."""
+    if isinstance(ip, ipaddress.IPv6Address):
+        embedded = ip.sixtofour or ip.ipv4_mapped
+        if embedded is not None:
+            return _is_public(embedded)
     return not (ip.is_private or ip.is_loopback or ip.is_link_local
                 or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
 
@@ -66,10 +73,11 @@ def is_public_url(url: str) -> bool:
 
 
 def guard_outbound(url: str) -> None:
-    """Enforce the SSRF guard in production; a no-op in dev so localhost /
-    host.docker.internal CRMs keep working for local testing. Raises
+    """Enforce the SSRF guard ALWAYS — a mis-set APP_ENV must never silently
+    disable it. The only opt-out is the explicit SSRF_ALLOW_PRIVATE flag, for
+    local dev against a localhost / host.docker.internal CRM. Raises
     BlockedURLError when blocked."""
-    if settings.is_production:
+    if not settings.ssrf_allow_private:
         assert_public_url(url)
 
 
@@ -96,8 +104,8 @@ def safe_post(url: str, **kwargs) -> httpx.Response:
 
     In dev this is a plain post so localhost / host.docker.internal CRMs work.
     """
-    if not settings.is_production:
-        return httpx.post(url, **kwargs)
+    if settings.ssrf_allow_private:
+        return httpx.post(url, **kwargs)  # explicit dev opt-out only
 
     parsed = urlparse((url or "").strip())
     if parsed.scheme not in _ALLOWED_SCHEMES:

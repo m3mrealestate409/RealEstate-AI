@@ -63,6 +63,10 @@ def capture_lead(
         if not ok:
             raise HTTPException(429, "Too many requests. Please wait a moment.",
                                 headers={"Retry-After": str(retry)})
+        # Per-org daily ceiling on public lead inserts — bounds DB-growth abuse
+        # from a rotating widget key. Legit lead volume never approaches this.
+        if not ratelimit.daily_event_allowed(org_id, "lead", 1000):
+            return {"ok": True, "id": None}
     lead = Lead(
         organization_id=org_id,
         name=(payload.name or "").strip() or None,

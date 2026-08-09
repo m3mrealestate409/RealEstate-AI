@@ -33,7 +33,7 @@ def build_new_chat_message(first_message: str, page_url: str | None) -> str:
     if first_message:
         lines.append("Visitor: " + first_message.strip()[:300])
     if page_url:
-        lines.append("Page: " + page_url)
+        lines.append("Page: " + page_url.strip()[:200])  # cap: attacker-controlled, keep alerts small
     lines.append("")
     lines.append("Open the Live Chat console to reply / take over.")
     return "\n".join(lines)

@@ -51,7 +51,10 @@ services:
       # Empty REDIS_PASSWORD (dev) → no AUTH sent; set it in prod for authed access.
       REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
     ports:
-      - "8001:8000"   # host 8001 (8000 used by another local stack); internal stays 8000
+      # Loopback-only, like db/redis — a base-only `docker compose up` must not
+      # expose the raw API (and its docs) on the host's public/LAN interfaces.
+      # The prod overlay keeps this 127.0.0.1 bind; the public edge is Caddy.
+      - "127.0.0.1:8001:8000"
     depends_on:
       db:
         condition: service_healthy
